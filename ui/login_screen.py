@@ -45,8 +45,9 @@ class LoginScreen(QWidget):
         """Read security_mode and auth_hash from the database."""
         ok, settings = get_system_settings(self.db_path)
         if ok and settings:
-            self.security_mode = str(settings.get("security_mode", "pin")).lower()
-            self.auth_hash = str(settings.get("auth_hash", "") or "")
+            mode = settings.get("security_mode") or "pin"
+            self.security_mode = str(mode).strip().lower()
+            self.auth_hash = str(settings.get("auth_hash") or "")
 
     # ── UI ───────────────────────────────────────────────────────────
 
@@ -144,12 +145,15 @@ class LoginScreen(QWidget):
             return
 
         if not self.auth_hash:
-            # No hash stored — treat as first-run edge case
-            QMessageBox.critical(
-                self, "Configuration Error",
-                "No authentication hash found in system settings.\n"
-                "Please re-run the setup wizard.",
+            # No hash stored — allow entry and log a warning
+            log_event(
+                user="Admin",
+                category="Security",
+                description="Login allowed (no auth_hash configured — run setup wizard)",
+                status="Success",
+                db_path=self.db_path,
             )
+            self.login_successful.emit()
             return
 
         if verify_credential(user_input, self.auth_hash):
