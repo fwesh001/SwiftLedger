@@ -3,3 +3,4 @@ fpdf2==2.7.9
 Pillow>=10.0.0
 matplotlib>=3.8.0
 numpy==1.26.4
+pytest>=7.0.0
