@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from database.db_init import init_db, save_settings, log_event
 from security import hash_credential
+from ui.reports_page import generate_and_open_user_guide
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -429,11 +430,18 @@ class FirstRunWizard(QWizard):
                 db_path=self.db_path
             )
 
+            # Generate and auto-open the Quick Start Manual
+            try:
+                generate_and_open_user_guide(settings_data)
+            except Exception:
+                pass  # Non-critical; don't block setup completion
+
             # Show success message
             QMessageBox.information(
                 self,
                 "Setup Complete",
                 "SwiftLedger has been initialized successfully!\n"
+                "Your Quick Start Manual has been opened.\n"
                 "You can now launch the main application."
             )
 
