@@ -4,7 +4,7 @@ Handles CRUD operations for members, savings, loans, and repayment schedules.
 """
 
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 from typing import Dict, List, Tuple, Optional
 
 
@@ -147,14 +147,38 @@ def get_system_settings(db_path: str) -> Tuple[bool, Optional[Dict]]:
 
     The simplified schema does not store loan settings, so defaults are returned.
     """
-    return True, {
+    defaults = {
         'min_monthly_saving': 0.0,
         'max_loan_amount': 0.0,
         'default_interest_rate': 12.0,
         'loan_multiplier': 2.0,
         'default_duration': 24,
+        'show_charts': 0,
         'updated_at': None,
     }
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM system_settings ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+
+        if not row:
+            return True, defaults
+
+        settings = defaults.copy()
+        settings.update(dict(row))
+        return True, settings
+
+    except sqlite3.DatabaseError:
+        return True, defaults
+    except Exception:
+        return True, defaults
+    finally:
+        if conn:
+            conn.close()
 
 
 def calculate_repayment_schedule(principal: float, annual_rate: float, duration_months: int = 24) -> List[Dict]:
@@ -323,12 +347,13 @@ def apply_for_loan(
         final_interest_rate = float(interest_rate) if interest_rate is not None else float(settings.get('default_interest_rate', 12.0))
         final_duration = int(duration) if duration is not None else int(settings.get('default_duration', 24))
 
+        due_date = (date.today() + timedelta(days=30 * final_duration)).isoformat()
         cursor.execute(
             """
-            INSERT INTO loans (member_id, principal, interest_rate, duration_months, status)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO loans (member_id, principal, interest_rate, duration_months, status, due_date)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (member_id, principal, final_interest_rate, final_duration, 'Active'),
+            (member_id, principal, final_interest_rate, final_duration, 'Active', due_date),
         )
 
         cursor.execute(
@@ -379,6 +404,41 @@ def get_member_loans(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
             ORDER BY loan_id DESC
             """,
             (member_id,),
+        )
+
+        rows = cursor.fetchall()
+        return True, [dict(row) for row in rows]
+
+    except sqlite3.DatabaseError:
+        return False, []
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
+
+
+def check_overdue_loans(db_path: str) -> Tuple[bool, List[Dict]]:
+    """
+    Return overdue loans (due_date < today and not Paid).
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT l.loan_id, l.member_id, l.principal, l.due_date, l.status,
+                   m.staff_number, m.full_name
+            FROM loans l
+            JOIN members m ON m.member_id = l.member_id
+            WHERE l.due_date IS NOT NULL
+              AND DATE(l.due_date) < DATE('now')
+              AND l.status != 'Paid'
+            ORDER BY l.due_date ASC
+            """
         )
 
         rows = cursor.fetchall()
