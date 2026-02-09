@@ -1,13 +1,19 @@
-# assets — Static Resources 🎨
+```markdown
+# assets — Static Resources
 
-This folder holds static assets used by the SwiftLedger application.
+This folder holds static resources used by SwiftLedger: styles, icons, and optional branding images.
 
-## What’s inside
-- `styles.qss` — The central QSS stylesheet implementing the high-contrast dark theme for the entire app (buttons, inputs, tables, dialogs, tooltips, etc.).
-- (Placeholder) `icons/` — Recommended location for application icons, SVGs, and logos.
-- (Placeholder) `images/` — Recommended location for raster assets if needed.
+Contents
+- `styles.qss` — central QSS stylesheet used by the app. Modify here for app-wide theme changes.
+- `icons/` (recommended) — store SVG icons used by UI elements.
+- `images/` (recommended) — place raster images or organization logos here if required.
 
-## Guidelines
-- Keep all style-related changes in `styles.qss` to ensure consistent theming across the app.
-- Store small, single-purpose icons as SVG for scalability.
-- Large binary assets should be avoided in the repo; instead, store them in an asset server or LFS when required.
+PDF fonts & Unicode
+- When generating PDFs, the default built-in PDF fonts are limited to Latin-1. For Unicode (e.g., currency symbols or non-Latin text) install a Unicode TTF such as DejaVu Sans and register it with fpdf2 if you want those characters in generated PDFs.
+
+Guidelines
+- Keep icons as SVG for scalability.
+- Avoid committing very large binary files; prefer external storage or Git LFS for large logos.
+- Keep style customizations centralized in `styles.qss` for consistent theming.
+
+```
