@@ -90,7 +90,9 @@ def initialize_database(db_path: str = "swiftledger.db") -> sqlite3.Connection:
             setting_id INTEGER PRIMARY KEY CHECK (setting_id = 1),
             min_monthly_saving REAL DEFAULT 0.0,
             max_loan_amount REAL DEFAULT 0.0,
-            default_interest_rate REAL DEFAULT 0.0,
+            default_interest_rate REAL DEFAULT 12.0,
+            loan_multiplier REAL DEFAULT 2.0,
+            default_duration INTEGER DEFAULT 24,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
@@ -99,8 +101,8 @@ def initialize_database(db_path: str = "swiftledger.db") -> sqlite3.Connection:
     cursor.execute("SELECT COUNT(*) FROM SystemSettings;")
     if cursor.fetchone()[0] == 0:
         cursor.execute("""
-            INSERT INTO SystemSettings (setting_id, min_monthly_saving, max_loan_amount, default_interest_rate)
-            VALUES (1, 0.0, 0.0, 0.0);
+            INSERT INTO SystemSettings (setting_id, min_monthly_saving, max_loan_amount, default_interest_rate, loan_multiplier, default_duration)
+            VALUES (1, 0.0, 0.0, 12.0, 2.0, 24);
         """)
     
     # Commit changes
