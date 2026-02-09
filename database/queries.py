@@ -318,6 +318,19 @@ def apply_for_loan(
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+
+        final_interest_rate = float(interest_rate) if interest_rate is not None else float(settings.get('default_interest_rate', 12.0))
+        final_duration = int(duration) if duration is not None else int(settings.get('default_duration', 24))
+
+        cursor.execute(
+            """
+            INSERT INTO loans (member_id, principal, interest_rate, duration_months, status)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (member_id, principal, final_interest_rate, final_duration, 'Active'),
+        )
+
         cursor.execute(
             """
             UPDATE members
@@ -350,9 +363,34 @@ def apply_for_loan(
 
 def get_member_loans(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
     """
-    Return an empty list for loans history in the simplified schema.
+    Retrieve active loans for a member.
     """
-    return True, []
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT loan_id, principal, interest_rate, status, date_issued
+            FROM loans
+            WHERE member_id = ?
+            ORDER BY loan_id DESC
+            """,
+            (member_id,),
+        )
+
+        rows = cursor.fetchall()
+        return True, [dict(row) for row in rows]
+
+    except sqlite3.DatabaseError:
+        return False, []
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
 
 
 
