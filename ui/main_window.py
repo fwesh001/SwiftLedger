@@ -5,9 +5,9 @@ Contains the sidebar navigation and stacked widget for multiple pages.
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame,
-    QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout,
+    QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout, QGridLayout,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox,
-    QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog, QListWidget
+    QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog, QListWidget, QScrollArea
 )
 from PySide6.QtCore import Qt, QSize, QEvent, QTimer
 from PySide6.QtGui import QFont
@@ -50,9 +50,17 @@ class DashboardPage(QWidget):
     # ── UI construction ─────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(20)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        content = QWidget()
+        main_layout = QVBoxLayout(content)
+        main_layout.setContentsMargins(24, 24, 24, 24)
+        main_layout.setSpacing(22)
 
         # Title row
         header_row = QHBoxLayout()
@@ -76,9 +84,10 @@ class DashboardPage(QWidget):
         header_row.addWidget(self.btn_refresh)
         main_layout.addLayout(header_row)
 
-        # ── Stat cards row ──────────────────────────────────────────
-        cards_layout = QHBoxLayout()
-        cards_layout.setSpacing(16)
+        # ── Stat cards grid ────────────────────────────────────────
+        cards_layout = QGridLayout()
+        cards_layout.setHorizontalSpacing(16)
+        cards_layout.setVerticalSpacing(16)
 
         self.card_members = self._create_stat_card(
             "👥  Total Members", "0", self.CARD_COLOURS['members']
@@ -93,11 +102,10 @@ class DashboardPage(QWidget):
             "📈  Projected Interest", "₦0.00", self.CARD_COLOURS['interest']
         )
 
-        for card, _, _ in [
-            self.card_members, self.card_savings,
-            self.card_loans, self.card_interest
-        ]:
-            cards_layout.addWidget(card)
+        cards_layout.addWidget(self.card_members[0], 0, 0)
+        cards_layout.addWidget(self.card_savings[0], 0, 1)
+        cards_layout.addWidget(self.card_loans[0], 1, 0)
+        cards_layout.addWidget(self.card_interest[0], 1, 1)
 
         main_layout.addLayout(cards_layout)
 
@@ -155,6 +163,7 @@ class DashboardPage(QWidget):
         help_group = QGroupBox("Quick Start Guide")
         help_group.setFont(QFont("Arial", 12))
         help_layout = QVBoxLayout(help_group)
+        help_layout.setSpacing(6)
         help_items = [
             "1. Register members on the Members page (Staff Number + Name).",
             "2. Post savings via the Savings page (Lodgment / Deduction).",
@@ -178,6 +187,9 @@ class DashboardPage(QWidget):
 
         main_layout.addStretch()
 
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
     # ── Widget factories ────────────────────────────────────────────
 
     def _create_stat_card(
@@ -185,7 +197,7 @@ class DashboardPage(QWidget):
     ) -> tuple:
         """Return (QFrame card, QLabel title, QLabel value)."""
         card = QFrame()
-        card.setMinimumHeight(120)
+        card.setMinimumHeight(110)
         card.setStyleSheet(
             f"QFrame {{ background-color: #2b2b2b; border-left: 4px solid {accent}; "
             f"border-radius: 8px; padding: 14px; }}"
