@@ -46,7 +46,8 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             logo_path     TEXT,
             security_mode TEXT,
             auth_hash     TEXT,
-            timeout_minutes INTEGER DEFAULT 10
+            timeout_minutes INTEGER DEFAULT 10,
+            show_charts   INTEGER DEFAULT 0
         );
     """)
 
@@ -109,10 +110,27 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             interest_rate   REAL NOT NULL,
             duration_months INTEGER NOT NULL,
             status          TEXT NOT NULL DEFAULT 'Active',
+            due_date        DATETIME,
             date_issued     DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(member_id) REFERENCES members(member_id)
         );
     """)
+
+    cursor.execute("PRAGMA table_info(system_settings);")
+    settings_columns = {row[1] for row in cursor.fetchall()}
+    if "show_charts" not in settings_columns:
+        cursor.execute("ALTER TABLE system_settings ADD COLUMN show_charts INTEGER DEFAULT 0;")
+
+    cursor.execute("PRAGMA table_info(loans);")
+    loan_columns = {row[1] for row in cursor.fetchall()}
+    if "status" not in loan_columns:
+        cursor.execute("ALTER TABLE loans ADD COLUMN status TEXT DEFAULT 'Active';")
+    if "duration_months" not in loan_columns:
+        cursor.execute("ALTER TABLE loans ADD COLUMN duration_months INTEGER DEFAULT 24;")
+    if "due_date" not in loan_columns:
+        cursor.execute("ALTER TABLE loans ADD COLUMN due_date DATETIME;")
+
+    cursor.execute("UPDATE loans SET due_date = date_issued WHERE due_date IS NULL;")
 
     conn.commit()
     return conn
