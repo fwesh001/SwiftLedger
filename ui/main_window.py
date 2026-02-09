@@ -1154,6 +1154,7 @@ class MainWindow(QMainWindow):
         
         # Set default page
         self.stacked_widget.setCurrentIndex(0)
+        self.dashboard_page.refresh_dashboard()
     
     def navigate_to_page(self, page_index: int) -> None:
         """Navigate to a specific page in the stacked widget."""
