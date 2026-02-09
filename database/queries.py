@@ -179,6 +179,113 @@ def get_member_by_staff_number(db_path: str, staff_number: str) -> Tuple[bool, O
         return False, None
 
 
+def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tuple[bool, str]:
+    """
+    Add a new savings record for a member.
+    
+    Args:
+        db_path: Path to the SQLite database file.
+        member_id: The ID of the member (foreign key).
+        amount: The savings amount (positive number).
+        category: Either 'Deduction' or 'Lodgment'.
+    
+    Returns:
+        A tuple (success: bool, message: str)
+    """
+    
+    try:
+        # Validate inputs
+        if category not in ['Deduction', 'Lodgment']:
+            return False, f"Invalid category '{category}'. Must be 'Deduction' or 'Lodgment'."
+        
+        if amount <= 0:
+            return False, "Amount must be a positive number."
+        
+        if not isinstance(member_id, int) or member_id <= 0:
+            return False, "Invalid member ID."
+        
+        # Connect to database
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Enable foreign keys
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        
+        # Insert new savings record
+        cursor.execute("""
+            INSERT INTO Savings (member_id, amount, date, type)
+            VALUES (?, ?, ?, ?)
+        """, (
+            member_id,
+            amount,
+            str(date.today()),
+            category
+        ))
+        
+        # Get the inserted savings record ID
+        savings_id = cursor.lastrowid
+        
+        # Commit changes
+        conn.commit()
+        conn.close()
+        
+        return True, f"Savings record (ID: {savings_id}) added successfully. Amount: {amount}, Category: {category}"
+    
+    except sqlite3.IntegrityError as e:
+        if "FOREIGN KEY constraint failed" in str(e):
+            return False, f"Error: Member ID {member_id} does not exist."
+        else:
+            return False, f"Integrity error: {str(e)}"
+    
+    except sqlite3.DatabaseError as e:
+        return False, f"Database error: {str(e)}"
+    
+    except Exception as e:
+        return False, f"Unexpected error: {str(e)}"
+
+
+def get_member_savings(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
+    """
+    Retrieve all savings records for a specific member.
+    
+    Args:
+        db_path: Path to the SQLite database file.
+        member_id: The ID of the member.
+    
+    Returns:
+        A tuple (success: bool, savings: List[Dict])
+        Each savings dict contains: savings_id, member_id, amount, date, type, created_at
+    """
+    
+    try:
+        # Connect to database
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+        cursor = conn.cursor()
+        
+        # Fetch all savings records for the member, ordered by date (newest first)
+        cursor.execute("""
+            SELECT savings_id, member_id, amount, date, type, created_at
+            FROM Savings
+            WHERE member_id = ?
+            ORDER BY date DESC
+        """, (member_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Convert to list of dictionaries
+        savings = [dict(row) for row in rows]
+        
+        return True, savings
+    
+    except sqlite3.DatabaseError as e:
+        return False, []
+    
+    except Exception as e:
+        return False, []
+
+
 if __name__ == "__main__":
     # Example usage
     db_path = "swiftledger.db"
