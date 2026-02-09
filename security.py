@@ -99,51 +99,55 @@ def check_system_auth() -> bool:
         return False
 
     try:
-        # Load the Authz (Authorization) and Credential Provider libraries
-        # WinLogonUI.dll provides access to the Windows logon UI
-        authz = ctypes.CDLL("authz.dll")
-
-        # Attempt to call the credential provider dialog
-        # This opens the Windows Security dialog where user can authenticate
-        # with Windows Hello, PIN, or password
         credential_provider = ctypes.CDLL("credui.dll")
 
-        # Define the CredUIPromptForCredentials function signature
-        # This function displays the standard Windows credential dialog
+        class CREDUI_INFO(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.DWORD),
+                ("hwndParent", wintypes.HWND),
+                ("pszMessageText", wintypes.LPCWSTR),
+                ("pszCaptionText", wintypes.LPCWSTR),
+                ("hbmBanner", wintypes.HANDLE),
+            ]
+
         CredUIPromptForCredentials = credential_provider.CredUIPromptForCredentialsW
         CredUIPromptForCredentials.argtypes = [
-            wintypes.HWND,
+            ctypes.POINTER(CREDUI_INFO),
             wintypes.LPCWSTR,
-            wintypes.LPCWSTR,
+            ctypes.c_void_p,
             wintypes.DWORD,
-            ctypes.POINTER(wintypes.WCHAR * 512),
-            wintypes.DWORD,
-            ctypes.POINTER(wintypes.WCHAR * 512),
+            wintypes.LPWSTR,
+            wintypes.ULONG,
+            wintypes.LPWSTR,
+            wintypes.ULONG,
             ctypes.POINTER(wintypes.BOOL),
             wintypes.DWORD,
         ]
 
-        # Prepare buffers for username and password
         max_user_len = 512
         max_pass_len = 512
         username_buffer = ctypes.create_unicode_buffer(max_user_len)
         password_buffer = ctypes.create_unicode_buffer(max_pass_len)
         save_cred = wintypes.BOOL(False)
 
-        # Display the credential dialog
-        # Target name: "SwiftLedger"
-        # Message: Prompt for user
+        ui_info = CREDUI_INFO()
+        ui_info.cbSize = ctypes.sizeof(CREDUI_INFO)
+        ui_info.hwndParent = None
+        ui_info.pszMessageText = "Please authenticate to continue"
+        ui_info.pszCaptionText = "SwiftLedger"
+        ui_info.hbmBanner = None
+
         result = CredUIPromptForCredentials(
-            None,  # No parent window (HWND = NULL)
-            ctypes.c_wchar_p("SwiftLedger"),  # Target name
-            ctypes.c_wchar_p("Please authenticate to continue"),  # Message
-            0,  # Flags
-            username_buffer,  # Username buffer
+            ctypes.byref(ui_info),
+            "SwiftLedger",
+            None,
+            0,
+            username_buffer,
             max_user_len,
-            password_buffer,  # Password buffer
+            password_buffer,
             max_pass_len,
-            ctypes.byref(save_cred),  # Save credentials
-            0,  # dwFlags (no special flags)
+            ctypes.byref(save_cred),
+            0,
         )
 
         # CREDUI_E_SUCCESS = 0 (authentication succeeded)
