@@ -750,11 +750,11 @@ def generate_and_open_user_guide(society_data: Dict[str, str]) -> Optional[str]:
         "If you have feature requests, encounter any issues, or simply want to share your "
         "experience, please don't hesitate to reach out.\n\n"
         "Warm regards,\n"
-        "Zabdiel\n"
+        "ZABDIEL\n"
         "Lead Developer, SwiftLedger\n\n"
         "Contact & Support\n"
-        "Email: zabdieldesmond@gmail.com\n"
-        "GitHub: github.com/zabdiel\n"
+        "Email: zabdieldfwesh001@gmail.com\n"
+        "GitHub: github.com/fwesh001\n"
     )
     _body(letter)
     _footer()
