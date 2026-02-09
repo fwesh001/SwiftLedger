@@ -1430,10 +1430,10 @@ class MainWindow(QMainWindow):
         """Navigate to a specific page in the stacked widget."""
         self.stacked_widget.setCurrentIndex(page_index)
         self.update_button_styles(page_index)
-        # Auto-refresh dashboard whenever it becomes visible
+        # Auto-refresh certain pages on navigation
         if page_index == 0:
             self.dashboard_page.refresh_dashboard()
-        elif page_index == 4:
+        elif page_index == 5:
             self.audit_page.refresh_logs()
     
     def update_button_styles(self, active_index: int) -> None:
@@ -1444,6 +1444,7 @@ class MainWindow(QMainWindow):
             self.btn_members,
             self.btn_savings,
             self.btn_loans,
+            self.btn_reports,
             self.btn_audit,
             self.btn_settings,
             self.btn_about,
