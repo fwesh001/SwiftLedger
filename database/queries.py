@@ -357,6 +357,8 @@ def generate_repayment_schedule(
     Generate a repayment schedule for a loan without persisting to a table.
     """
     try:
+        schedule = calculate_repayment_schedule(principal, interest_rate, months)
+        return True, schedule
     except Exception as e:
         _safe_log_event(
             user="Admin",
@@ -366,9 +368,6 @@ def generate_repayment_schedule(
             db_path=db_path,
         )
         return False, []
-
-    schedule = calculate_repayment_schedule(principal, interest_rate, months)
-    return True, schedule
 
 
 def apply_for_loan(
