@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.queries import (
     add_member, get_all_members, get_member_by_staff_number,
-    add_saving, get_total_savings, get_system_settings,
+    add_saving, get_total_savings, get_member_savings, get_system_settings,
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
     get_society_stats
 )
@@ -569,7 +569,27 @@ class SavingsPage(QWidget):
                 QMessageBox.critical(self, "Error", "Failed to load savings data.")
                 return
 
+            history_ok, history = get_member_savings(self.db_path, self.current_member_id)
+            if not history_ok:
+                QMessageBox.critical(self, "Error", "Failed to load savings history.")
+                return
+
             self.table_savings.setRowCount(0)
+            for row_idx, item in enumerate(history):
+                self.table_savings.insertRow(row_idx)
+
+                date_item = QTableWidgetItem(str(item.get('trans_date', '')))
+                type_item = QTableWidgetItem(str(item.get('trans_type', '')))
+                amount_item = QTableWidgetItem(f"₦{float(item.get('amount', 0.0)):,.2f}")
+                balance_item = QTableWidgetItem(f"₦{float(item.get('running_balance', 0.0)):,.2f}")
+                id_item = QTableWidgetItem(str(item.get('id', '')))
+
+                self.table_savings.setItem(row_idx, 0, date_item)
+                self.table_savings.setItem(row_idx, 1, type_item)
+                self.table_savings.setItem(row_idx, 2, amount_item)
+                self.table_savings.setItem(row_idx, 3, balance_item)
+                self.table_savings.setItem(row_idx, 4, id_item)
+
             self.label_total_savings.setText(f"Total Savings: ₦{total_savings:,.2f}")
 
         except Exception as e:
