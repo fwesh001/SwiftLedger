@@ -121,8 +121,8 @@ class MembersPage(QWidget):
         self.table_members.setHorizontalHeaderLabels([
             "Staff Number", "Full Name", "Department", "Date Joined", "Status"
         ])
-        self.table_members.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table_members.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table_members.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_members.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_members.horizontalHeader().setStretchLastSection(True)
         main_layout.addWidget(self.table_members)
         
