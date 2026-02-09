@@ -1,6 +1,6 @@
 """
 Settings / Preferences page for SwiftLedger.
-Lets the user toggle charts, set auto-lock timeout, and save to system_settings.
+Lets the user toggle charts, alerts, theme, text scale, auto-lock timeout.
 """
 
 import sys
@@ -9,9 +9,9 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QCheckBox, QSlider, QMessageBox,
-    QSpinBox,
+    QSpinBox, QComboBox, QScrollArea, QFrame,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -20,7 +20,10 @@ from database.queries import get_system_settings
 
 
 class SettingsPage(QWidget):
-    """Preferences panel — charts toggle, auto-lock timeout, and Apply button."""
+    """Preferences panel — theme, text scale, charts, alerts, timeout."""
+
+    # Emitted after the user clicks Apply so MainWindow can re-theme live
+    settings_changed = Signal()
 
     def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
@@ -31,7 +34,15 @@ class SettingsPage(QWidget):
     # ── UI ───────────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        main = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        content = QWidget()
+        main = QVBoxLayout(content)
         main.setContentsMargins(20, 20, 20, 20)
         main.setSpacing(20)
 
@@ -42,19 +53,60 @@ class SettingsPage(QWidget):
         title.setFont(tf)
         main.addWidget(title)
 
-        # ── Preferences group ───────────────────────────────────────
-        pref_group = QGroupBox("Preferences")
-        pref_group.setFont(QFont("Arial", 12))
-        form = QFormLayout(pref_group)
-        form.setContentsMargins(14, 20, 14, 14)
-        form.setSpacing(16)
+        # ── Appearance group ────────────────────────────────────────
+        appear_group = QGroupBox("Appearance")
+        appear_group.setFont(QFont("Arial", 12))
+        appear_form = QFormLayout(appear_group)
+        appear_form.setContentsMargins(14, 20, 14, 14)
+        appear_form.setSpacing(16)
 
-        # Show charts toggle
+        # Theme
+        self.combo_theme = QComboBox()
+        self.combo_theme.addItems(["Dark", "Light"])
+        self.combo_theme.setFont(QFont("Arial", 11))
+        appear_form.addRow("Theme:", self.combo_theme)
+
+        # Text scale
+        scale_row = QHBoxLayout()
+        self.slider_scale = QSlider(Qt.Orientation.Horizontal)
+        self.slider_scale.setRange(80, 150)
+        self.slider_scale.setValue(100)
+        self.slider_scale.setTickInterval(10)
+        self.slider_scale.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.slider_scale.valueChanged.connect(self._sync_scale_display)
+
+        self.lbl_scale = QLabel("100 %")
+        self.lbl_scale.setMinimumWidth(50)
+        scale_row.addWidget(self.slider_scale)
+        scale_row.addWidget(self.lbl_scale)
+        appear_form.addRow("Text Scale:", scale_row)
+
+        main.addWidget(appear_group)
+
+        # ── Feature Toggles group ───────────────────────────────────
+        toggle_group = QGroupBox("Feature Toggles")
+        toggle_group.setFont(QFont("Arial", 12))
+        toggle_form = QFormLayout(toggle_group)
+        toggle_form.setContentsMargins(14, 20, 14, 14)
+        toggle_form.setSpacing(16)
+
         self.chk_charts = QCheckBox("Show Financial Charts on Dashboard")
         self.chk_charts.setFont(QFont("Arial", 11))
-        form.addRow(self.chk_charts)
+        toggle_form.addRow(self.chk_charts)
 
-        # Auto-lock timeout
+        self.chk_alerts = QCheckBox("Show Automated Loan Alerts on Dashboard")
+        self.chk_alerts.setFont(QFont("Arial", 11))
+        toggle_form.addRow(self.chk_alerts)
+
+        main.addWidget(toggle_group)
+
+        # ── Security group ──────────────────────────────────────────
+        sec_group = QGroupBox("Security")
+        sec_group.setFont(QFont("Arial", 12))
+        sec_form = QFormLayout(sec_group)
+        sec_form.setContentsMargins(14, 20, 14, 14)
+        sec_form.setSpacing(16)
+
         timeout_row = QHBoxLayout()
         self.slider_timeout = QSlider(Qt.Orientation.Horizontal)
         self.slider_timeout.setRange(1, 60)
@@ -72,9 +124,8 @@ class SettingsPage(QWidget):
         timeout_row.addWidget(self.slider_timeout)
         timeout_row.addWidget(self.spin_timeout)
 
-        form.addRow("Auto-Lock Timeout:", timeout_row)
-
-        main.addWidget(pref_group)
+        sec_form.addRow("Auto-Lock Timeout:", timeout_row)
+        main.addWidget(sec_group)
 
         # ── Apply button ────────────────────────────────────────────
         btn_row = QHBoxLayout()
@@ -96,8 +147,13 @@ class SettingsPage(QWidget):
 
         main.addLayout(btn_row)
         main.addStretch()
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
 
     # ── Sync helpers ─────────────────────────────────────────────────
+
+    def _sync_scale_display(self, value: int) -> None:
+        self.lbl_scale.setText(f"{value} %")
 
     def _sync_timeout_display(self, value: int) -> None:
         self.spin_timeout.blockSignals(True)
@@ -117,6 +173,16 @@ class SettingsPage(QWidget):
             return
 
         self.chk_charts.setChecked(bool(settings.get('show_charts', 0)))
+        self.chk_alerts.setChecked(bool(settings.get('show_alerts', 1)))
+
+        theme = str(settings.get('theme', 'dark')).capitalize()
+        idx = self.combo_theme.findText(theme)
+        if idx >= 0:
+            self.combo_theme.setCurrentIndex(idx)
+
+        scale_pct = int(float(settings.get('text_scale', 1.0)) * 100)
+        self.slider_scale.setValue(max(80, min(150, scale_pct)))
+        self.lbl_scale.setText(f"{self.slider_scale.value()} %")
 
         timeout = int(settings.get('timeout_minutes', 10))
         self.slider_timeout.setValue(timeout)
@@ -125,6 +191,9 @@ class SettingsPage(QWidget):
     def _apply_settings(self) -> None:
         data = {
             'show_charts': 1 if self.chk_charts.isChecked() else 0,
+            'show_alerts': 1 if self.chk_alerts.isChecked() else 0,
+            'theme': self.combo_theme.currentText().lower(),
+            'text_scale': round(self.slider_scale.value() / 100.0, 2),
             'timeout_minutes': self.spin_timeout.value(),
         }
 
@@ -134,12 +203,14 @@ class SettingsPage(QWidget):
                 user="Admin",
                 category="Settings",
                 description=(
-                    f"Preferences updated (charts={data['show_charts']}, "
-                    f"timeout_minutes={data['timeout_minutes']})"
+                    f"Preferences updated (theme={data['theme']}, "
+                    f"scale={data['text_scale']}, charts={data['show_charts']}, "
+                    f"alerts={data['show_alerts']}, timeout={data['timeout_minutes']})"
                 ),
                 status="Success",
                 db_path=self.db_path,
             )
+            self.settings_changed.emit()
             QMessageBox.information(self, "Saved", "Settings applied successfully.")
         except Exception as e:
             log_event(
