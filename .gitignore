@@ -6,3 +6,4 @@ __pycache__/
 *.db
 .vscode/
 notes.md
+TESTING.md
