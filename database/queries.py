@@ -141,6 +141,53 @@ def get_total_savings(db_path: str, member_id: int) -> Tuple[bool, float]:
         return False, 0.0
 
 
+def get_system_settings(db_path: str) -> Tuple[bool, Optional[Dict]]:
+    """
+    Retrieve current system settings from the SystemSettings table.
+
+    Returns (True, settings_dict) on success or (False, None) on error.
+    The settings dict contains: min_monthly_saving, max_loan_amount,
+    default_interest_rate, loan_multiplier, default_duration.
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT min_monthly_saving, max_loan_amount, default_interest_rate,
+                   loan_multiplier, default_duration, updated_at
+            FROM SystemSettings
+            WHERE setting_id = 1
+            """
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        if row:
+            settings = dict(row)
+            # Provide sensible defaults if columns are missing (for older DBs)
+            settings.setdefault('loan_multiplier', 2.0)
+            settings.setdefault('default_duration', 24)
+            settings.setdefault('default_interest_rate', 12.0)
+            return True, settings
+        else:
+            # No settings row; return defaults
+            return True, {
+                'min_monthly_saving': 0.0,
+                'max_loan_amount': 0.0,
+                'default_interest_rate': 12.0,
+                'loan_multiplier': 2.0,
+                'default_duration': 24,
+                'updated_at': None,
+            }
+
+    except sqlite3.DatabaseError:
+        return False, None
+    except Exception:
+        return False, None
+
+
 def generate_repayment_schedule(db_path: str, loan_id: int, principal: float, interest_rate: float, months: int = 24) -> Tuple[bool, str]:
     """
     Generate a simple repayment schedule for a loan.
