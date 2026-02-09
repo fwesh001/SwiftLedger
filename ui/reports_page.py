@@ -494,7 +494,7 @@ class ReportsPage(QWidget):
             return
 
         pdf, member = self._build_member_pdf(staff)
-        if pdf is None:
+        if pdf is None or member is None:
             return
 
         path, _ = QFileDialog.getSaveFileName(
