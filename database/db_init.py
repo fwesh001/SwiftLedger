@@ -62,6 +62,19 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
         );
     """)
 
+    # Backfill columns for existing databases created before staff_number/savings/loans were added.
+    cursor.execute("PRAGMA table_info(members);")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+    if "staff_number" not in existing_columns:
+        cursor.execute("ALTER TABLE members ADD COLUMN staff_number TEXT;")
+    if "current_savings" not in existing_columns:
+        cursor.execute("ALTER TABLE members ADD COLUMN current_savings REAL DEFAULT 0.0;")
+    if "total_loans" not in existing_columns:
+        cursor.execute("ALTER TABLE members ADD COLUMN total_loans REAL DEFAULT 0.0;")
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_members_staff_number ON members(staff_number);"
+    )
+
     # ── audit_logs ───────────────────────────────────────────────────
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS audit_logs (
@@ -71,6 +84,19 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             category    TEXT,
             description TEXT,
             status      TEXT
+        );
+    """)
+
+    # ── savings_transactions ─────────────────────────────────────────
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS savings_transactions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            member_id       INTEGER NOT NULL,
+            trans_date      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            trans_type      TEXT NOT NULL,
+            amount          REAL NOT NULL,
+            running_balance REAL NOT NULL,
+            FOREIGN KEY(member_id) REFERENCES members(member_id)
         );
     """)
 
