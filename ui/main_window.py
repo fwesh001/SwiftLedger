@@ -24,6 +24,9 @@ from database.queries import (
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
     get_society_stats, check_overdue_loans
 )
+from ui.audit_page import AuditLogPage
+from ui.about_page import AboutPage
+from ui.settings_page import SettingsPage
 
 
 class DashboardPage(QWidget):
@@ -1200,7 +1203,10 @@ class MainWindow(QMainWindow):
     def _check_inactivity(self) -> None:
         if self.is_locked:
             return
-        if time.time() - self.last_interaction_time > 600:
+        # Read timeout from settings (default 10 min)
+        ok, settings = get_system_settings(self.db_path)
+        timeout = int(settings.get('timeout_minutes', 10)) * 60 if ok and settings else 600
+        if time.time() - self.last_interaction_time > timeout:
             self.lock_screen()
 
     def lock_screen(self) -> None:
@@ -1252,12 +1258,18 @@ class MainWindow(QMainWindow):
         self.btn_members = QPushButton("Members")
         self.btn_savings = QPushButton("Savings")
         self.btn_loans = QPushButton("Loans")
+        self.btn_audit = QPushButton("Audit Logs")
+        self.btn_settings = QPushButton("Settings")
+        self.btn_about = QPushButton("About")
         
         buttons = [
             self.btn_dashboard,
             self.btn_members,
             self.btn_savings,
-            self.btn_loans
+            self.btn_loans,
+            self.btn_audit,
+            self.btn_settings,
+            self.btn_about,
         ]
         
         for i, button in enumerate(buttons):
@@ -1279,11 +1291,17 @@ class MainWindow(QMainWindow):
         self.members_page = MembersPage(self.db_path)
         self.savings_page = SavingsPage(self.db_path)
         self.loans_page = LoansPage(self.db_path)
+        self.audit_page = AuditLogPage(self.db_path)
+        self.settings_page = SettingsPage(self.db_path)
+        self.about_page = AboutPage(self.db_path)
         
         self.stacked_widget.addWidget(self.dashboard_page)
         self.stacked_widget.addWidget(self.members_page)
         self.stacked_widget.addWidget(self.savings_page)
         self.stacked_widget.addWidget(self.loans_page)
+        self.stacked_widget.addWidget(self.audit_page)
+        self.stacked_widget.addWidget(self.settings_page)
+        self.stacked_widget.addWidget(self.about_page)
         
         # Set default page
         self.stacked_widget.setCurrentIndex(0)
@@ -1296,6 +1314,8 @@ class MainWindow(QMainWindow):
         # Auto-refresh dashboard whenever it becomes visible
         if page_index == 0:
             self.dashboard_page.refresh_dashboard()
+        elif page_index == 4:
+            self.audit_page.refresh_logs()
     
     def update_button_styles(self, active_index: int) -> None:
         """Update button styles to highlight the active button."""
@@ -1304,7 +1324,10 @@ class MainWindow(QMainWindow):
             self.btn_dashboard,
             self.btn_members,
             self.btn_savings,
-            self.btn_loans
+            self.btn_loans,
+            self.btn_audit,
+            self.btn_settings,
+            self.btn_about,
         ]
         
         for i, button in enumerate(buttons):
