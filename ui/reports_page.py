@@ -115,13 +115,13 @@ class ReportsPage(QWidget):
         ok, s = get_system_settings(self.db_path)
         if ok and s:
             return {
-                "name": s.get("society_name", "SwiftLedger"),
-                "street": s.get("street", ""),
-                "city": s.get("city_state", ""),
-                "phone": s.get("phone", ""),
-                "email": s.get("email", ""),
-                "reg_no": s.get("reg_no", ""),
-                "logo": s.get("logo_path", ""),
+                "name": s.get("society_name") or "SwiftLedger",
+                "street": s.get("street") or "",
+                "city": s.get("city_state") or "",
+                "phone": s.get("phone") or "",
+                "email": s.get("email") or "",
+                "reg_no": s.get("reg_no") or "",
+                "logo": s.get("logo_path") or "",
             }
         return {"name": "SwiftLedger", "street": "", "city": "",
                 "phone": "", "email": "", "reg_no": "", "logo": ""}
