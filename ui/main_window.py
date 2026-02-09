@@ -27,6 +27,7 @@ from database.queries import (
 from ui.audit_page import AuditLogPage
 from ui.about_page import AboutPage
 from ui.settings_page import SettingsPage
+from ui.login_screen import LoginScreen
 
 
 class DashboardPage(QWidget):
@@ -715,6 +716,17 @@ class SavingsPage(QWidget):
         else:
             QMessageBox.critical(self, "Error", message)
 
+    def clear_selection(self) -> None:
+        """Clear the active member context and reset UI widgets."""
+        self.current_member_id = None
+        self.current_member_name = None
+        self.input_search.clear()
+        self.input_amount.setValue(0)
+        self.label_member_name.setText("Name: Not Selected")
+        self.label_total_savings.setText("Total Savings: ₦0.00")
+        self.table_savings.setRowCount(0)
+        self.btn_post.setEnabled(False)
+
 
 class LoansPage(QWidget):
     """Page for Loans management with eligibility checking, application, and schedule preview."""
@@ -1153,6 +1165,25 @@ class LoansPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load loans: {str(e)}")
 
+    def clear_selection(self) -> None:
+        """Clear the active member context and reset UI widgets."""
+        self.current_member_id = None
+        self.current_member_name = None
+        self.total_savings = 0.0
+        self.max_eligible_amount = 0.0
+        self.input_search.clear()
+        self.input_principal.setValue(0)
+        self.input_interest_rate.setValue(self.default_interest_rate)
+        self.input_duration.setValue(self.default_duration)
+        self.label_member_name.setText("Member: Not Selected")
+        self.label_total_savings.setText("Total Savings: ₦0.00")
+        self.label_max_eligible.setText("Max Eligible Loan: ₦0.00")
+        self.label_validation_status.setText("")
+        self.table_loans.setRowCount(0)
+        self.btn_validate.setEnabled(False)
+        self.btn_preview.setEnabled(False)
+        self.btn_submit.setEnabled(False)
+
 
 class MainWindow(QMainWindow):
     """Main application window for SwiftLedger."""
@@ -1209,21 +1240,26 @@ class MainWindow(QMainWindow):
         if time.time() - self.last_interaction_time > timeout:
             self.lock_screen()
 
+    def _clear_sensitive_state(self) -> None:
+        if hasattr(self, "savings_page"):
+            self.savings_page.clear_selection()
+        if hasattr(self, "loans_page"):
+            self.loans_page.clear_selection()
+
     def lock_screen(self) -> None:
         self.is_locked = True
+        self._clear_sensitive_state()
+
         dialog = QDialog(self)
         dialog.setWindowTitle("Session Locked")
         dialog.setModal(True)
-        dialog.setFixedSize(360, 160)
+        dialog.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
+        dialog.setFixedSize(420, 360)
 
         layout = QVBoxLayout(dialog)
-        label = QLabel("Session locked due to inactivity. Click Unlock to continue.")
-        label.setWordWrap(True)
-        layout.addWidget(label)
-
-        unlock_btn = QPushButton("Unlock")
-        unlock_btn.clicked.connect(dialog.accept)
-        layout.addWidget(unlock_btn)
+        login = LoginScreen(self.db_path)
+        login.login_successful.connect(dialog.accept)
+        layout.addWidget(login)
 
         dialog.exec()
         self.last_interaction_time = time.time()
