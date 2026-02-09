@@ -6,7 +6,8 @@ Contains the sidebar navigation and stacked widget for multiple pages.
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame, 
     QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout,
-    QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox
+    QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox,
+    QAbstractItemView
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QFont
@@ -26,7 +27,9 @@ class DashboardPage(QWidget):
         super().__init__()
         layout = QVBoxLayout()
         label = QLabel("Dashboard Page")
-        label.setFont(QFont("Arial", 18, QFont.Bold))
+        font = QFont("Arial", 18)
+        font.setBold(True)
+        label.setFont(font)
         layout.addWidget(label)
         layout.addStretch()
         self.setLayout(layout)
@@ -46,12 +49,16 @@ class MembersPage(QWidget):
         
         # Title
         title = QLabel("Members Management")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title_font = QFont("Arial", 18)
+        title_font.setBold(True)
+        title.setFont(title_font)
         main_layout.addWidget(title)
         
         # Registration Form Group
         form_group = QGroupBox("Register New Member")
-        form_group.setFont(QFont("Arial", 10, QFont.Bold))
+        form_font = QFont("Arial", 10)
+        form_font.setBold(True)
+        form_group.setFont(form_font)
         form_layout = QFormLayout()
         
         # Staff Number input
@@ -79,7 +86,9 @@ class MembersPage(QWidget):
         button_layout = QHBoxLayout()
         self.btn_register = QPushButton("Register Member")
         self.btn_register.setMinimumHeight(40)
-        self.btn_register.setFont(QFont("Arial", 10, QFont.Bold))
+        btn_font = QFont("Arial", 10)
+        btn_font.setBold(True)
+        self.btn_register.setFont(btn_font)
         self.btn_register.setStyleSheet("""
             QPushButton {
                 background-color: #27ae60;
@@ -97,12 +106,14 @@ class MembersPage(QWidget):
         """)
         self.btn_register.clicked.connect(self.register_member)
         button_layout.addStretch()
-        button_layout.addWidget(self.btn_register, 0, Qt.AlignRight)
+        button_layout.addWidget(self.btn_register, 0, Qt.AlignmentFlag.AlignRight)
         main_layout.addLayout(button_layout)
         
         # Members Table
         table_title = QLabel("All Members")
-        table_title.setFont(QFont("Arial", 12, QFont.Bold))
+        table_font = QFont("Arial", 12)
+        table_font.setBold(True)
+        table_title.setFont(table_font)
         main_layout.addWidget(table_title)
         
         self.table_members = QTableWidget()
@@ -110,8 +121,8 @@ class MembersPage(QWidget):
         self.table_members.setHorizontalHeaderLabels([
             "Staff Number", "Full Name", "Department", "Date Joined", "Status"
         ])
-        self.table_members.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_members.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table_members.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table_members.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table_members.horizontalHeader().setStretchLastSection(True)
         main_layout.addWidget(self.table_members)
         
@@ -202,7 +213,9 @@ class SavingsPage(QWidget):
         super().__init__()
         layout = QVBoxLayout()
         label = QLabel("Savings Page")
-        label.setFont(QFont("Arial", 18, QFont.Bold))
+        font = QFont("Arial", 18)
+        font.setBold(True)
+        label.setFont(font)
         layout.addWidget(label)
         layout.addStretch()
         self.setLayout(layout)
@@ -215,7 +228,9 @@ class LoansPage(QWidget):
         super().__init__()
         layout = QVBoxLayout()
         label = QLabel("Loans Page")
-        label.setFont(QFont("Arial", 18, QFont.Bold))
+        font = QFont("Arial", 18)
+        font.setBold(True)
+        label.setFont(font)
         layout.addWidget(label)
         layout.addStretch()
         self.setLayout(layout)
@@ -264,13 +279,15 @@ class MainWindow(QMainWindow):
         
         # Title
         title = QLabel("SwiftLedger")
-        title.setFont(QFont("Arial", 14, QFont.Bold))
-        title.setAlignment(Qt.AlignCenter)
+        title_font = QFont("Arial", 14)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
         # Separator
         separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShape(QFrame.Shape.HLine)
         layout.addWidget(separator)
         
         # Navigation buttons
@@ -289,7 +306,7 @@ class MainWindow(QMainWindow):
         for i, button in enumerate(buttons):
             button.setMinimumHeight(45)
             button.setFont(QFont("Arial", 10))
-            button.setCursor(Qt.PointingHandCursor)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.clicked.connect(lambda checked, idx=i: self.navigate_to_page(idx))
             layout.addWidget(button)
         
@@ -363,7 +380,6 @@ class MainWindow(QMainWindow):
                 border-radius: 5px;
                 padding: 10px;
                 font-weight: bold;
-                transition: background-color 0.3s;
             }
             
             QPushButton:hover {
