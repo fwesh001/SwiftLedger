@@ -20,23 +20,202 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.queries import (
     add_member, get_all_members, get_member_by_staff_number, 
     add_saving, get_member_savings, get_total_savings, get_system_settings,
-    apply_for_loan, get_member_loans, calculate_repayment_schedule
+    apply_for_loan, get_member_loans, calculate_repayment_schedule,
+    get_society_stats
 )
 
 
 class DashboardPage(QWidget):
-    """Placeholder page for Dashboard."""
-    
-    def __init__(self):
+    """Dashboard page with society-wide financial statistics and dividend breakdown."""
+
+    # Accent colours for each stat card (left-border & value text)
+    CARD_COLOURS = {
+        'members':  '#3498db',  # Blue
+        'savings':  '#27ae60',  # Green
+        'loans':    '#e67e22',  # Orange
+        'interest': '#9b59b6',  # Purple
+    }
+
+    def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
-        layout = QVBoxLayout()
-        label = QLabel("Dashboard Page")
-        font = QFont("Arial", 18)
-        font.setBold(True)
-        label.setFont(font)
-        layout.addWidget(label)
+        self.db_path = db_path
+        self._build_ui()
+
+    # ── UI construction ─────────────────────────────────────────────
+
+    def _build_ui(self) -> None:
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
+
+        # Title row
+        header_row = QHBoxLayout()
+        title = QLabel("Dashboard")
+        title_font = QFont("Arial", 20)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        header_row.addWidget(title)
+        header_row.addStretch()
+
+        self.btn_refresh = QPushButton("⟳  Refresh")
+        self.btn_refresh.setMinimumHeight(36)
+        self.btn_refresh.setMinimumWidth(110)
+        self.btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_refresh.setStyleSheet(
+            "QPushButton { background-color: #2980b9; color: white; border-radius: 6px; "
+            "font-weight: bold; padding: 6px 14px; } "
+            "QPushButton:hover { background-color: #3498db; }"
+        )
+        self.btn_refresh.clicked.connect(self.refresh_dashboard)
+        header_row.addWidget(self.btn_refresh)
+        main_layout.addLayout(header_row)
+
+        # ── Stat cards row ──────────────────────────────────────────
+        cards_layout = QHBoxLayout()
+        cards_layout.setSpacing(16)
+
+        self.card_members = self._create_stat_card(
+            "👥  Total Members", "0", self.CARD_COLOURS['members']
+        )
+        self.card_savings = self._create_stat_card(
+            "💰  Total Savings", "₦0.00", self.CARD_COLOURS['savings']
+        )
+        self.card_loans = self._create_stat_card(
+            "🏦  Loans Disbursed", "₦0.00", self.CARD_COLOURS['loans']
+        )
+        self.card_interest = self._create_stat_card(
+            "📈  Projected Interest", "₦0.00", self.CARD_COLOURS['interest']
+        )
+
+        for card, _, _ in [
+            self.card_members, self.card_savings,
+            self.card_loans, self.card_interest
+        ]:
+            cards_layout.addWidget(card)
+
+        main_layout.addLayout(cards_layout)
+
+        # ── Dividend section ────────────────────────────────────────
+        dividend_group = QGroupBox("Dividend Breakdown")
+        dividend_group.setFont(QFont("Arial", 12))
+        dividend_group.setStyleSheet(
+            "QGroupBox { border: 1px solid #34495e; border-radius: 8px; "
+            "margin-top: 14px; padding: 18px 14px 14px 14px; color: #ecf0f1; } "
+            "QGroupBox::title { subcontrol-origin: margin; left: 14px; "
+            "padding: 0 6px; color: #bdc3c7; }"
+        )
+        div_layout = QHBoxLayout(dividend_group)
+        div_layout.setSpacing(20)
+
+        self.member_div_card = self._create_dividend_card(
+            "Members' Share (60%)", "₦0.00", "#27ae60"
+        )
+        self.society_div_card = self._create_dividend_card(
+            "Society Reserve (40%)", "₦0.00", "#e74c3c"
+        )
+
+        div_layout.addWidget(self.member_div_card[0])
+        div_layout.addWidget(self.society_div_card[0])
+
+        main_layout.addWidget(dividend_group)
+
+        # ── Status bar ──────────────────────────────────────────────
+        self.lbl_status = QLabel("Last refreshed: —")
+        self.lbl_status.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignRight)
+        main_layout.addWidget(self.lbl_status)
+
+        main_layout.addStretch()
+
+    # ── Widget factories ────────────────────────────────────────────
+
+    def _create_stat_card(
+        self, title_text: str, value_text: str, accent: str
+    ) -> tuple:
+        """Return (QFrame card, QLabel title, QLabel value)."""
+        card = QFrame()
+        card.setMinimumHeight(120)
+        card.setStyleSheet(
+            f"QFrame {{ background-color: #2b2b2b; border-left: 4px solid {accent}; "
+            f"border-radius: 8px; padding: 14px; }}"
+        )
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(8)
+
+        lbl_title = QLabel(title_text)
+        lbl_title.setStyleSheet("color: #bdc3c7; font-size: 12px; border: none;")
+
+        lbl_value = QLabel(value_text)
+        lbl_value.setStyleSheet(
+            f"color: {accent}; font-size: 22px; font-weight: bold; border: none;"
+        )
+
+        layout.addWidget(lbl_title)
+        layout.addWidget(lbl_value)
         layout.addStretch()
-        self.setLayout(layout)
+
+        return card, lbl_title, lbl_value
+
+    def _create_dividend_card(
+        self, title_text: str, value_text: str, accent: str
+    ) -> tuple:
+        """Return (QFrame card, QLabel value)."""
+        card = QFrame()
+        card.setMinimumHeight(100)
+        card.setStyleSheet(
+            f"QFrame {{ background-color: #2b2b2b; border: 1px solid {accent}; "
+            f"border-radius: 10px; padding: 16px; }}"
+        )
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(6)
+
+        lbl_title = QLabel(title_text)
+        lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_title.setStyleSheet("color: #bdc3c7; font-size: 13px; border: none;")
+
+        lbl_value = QLabel(value_text)
+        lbl_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_value.setStyleSheet(
+            f"color: {accent}; font-size: 26px; font-weight: bold; border: none;"
+        )
+
+        layout.addWidget(lbl_title)
+        layout.addWidget(lbl_value)
+
+        return card, lbl_value
+
+    # ── Refresh logic ───────────────────────────────────────────────
+
+    def refresh_dashboard(self) -> None:
+        """Fetch society stats from the database and update every label."""
+        success, stats = get_society_stats(self.db_path)
+        if not success:
+            self.lbl_status.setText("⚠  Failed to load statistics")
+            return
+
+        # Stat cards
+        self.card_members[2].setText(str(stats.get('total_members', 0)))
+        self.card_savings[2].setText(f"₦{stats.get('total_savings', 0):,.2f}")
+        self.card_loans[2].setText(f"₦{stats.get('total_loans_disbursed', 0):,.2f}")
+        self.card_interest[2].setText(f"₦{stats.get('total_projected_interest', 0):,.2f}")
+
+        # Dividend cards
+        self.member_div_card[1].setText(
+            f"₦{stats.get('members_dividend_share', 0):,.2f}"
+        )
+        self.society_div_card[1].setText(
+            f"₦{stats.get('society_dividend_share', 0):,.2f}"
+        )
+
+        # Timestamp
+        from datetime import datetime
+        self.lbl_status.setText(
+            f"Last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
 
 
 class MembersPage(QWidget):
@@ -1006,7 +1185,7 @@ class MainWindow(QMainWindow):
     def create_pages(self) -> None:
         """Create placeholder pages and add them to the stacked widget."""
         
-        self.dashboard_page = DashboardPage()
+        self.dashboard_page = DashboardPage(self.db_path)
         self.members_page = MembersPage(self.db_path)
         self.savings_page = SavingsPage(self.db_path)
         self.loans_page = LoansPage(self.db_path)
@@ -1023,6 +1202,9 @@ class MainWindow(QMainWindow):
         """Navigate to a specific page in the stacked widget."""
         self.stacked_widget.setCurrentIndex(page_index)
         self.update_button_styles(page_index)
+        # Auto-refresh dashboard whenever it becomes visible
+        if page_index == 0:
+            self.dashboard_page.refresh_dashboard()
     
     def update_button_styles(self, active_index: int) -> None:
         """Update button styles to highlight the active button."""
