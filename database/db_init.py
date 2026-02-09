@@ -153,7 +153,8 @@ def save_settings(data_dict: Dict[str, object], db_path: str = DB_PATH) -> None:
     """
     valid_columns = {
         "society_name", "street", "city_state", "phone", "email",
-        "reg_no", "logo_path", "security_mode", "auth_hash", "timeout_minutes",
+        "reg_no", "logo_path", "security_mode", "auth_hash",
+        "timeout_minutes", "show_charts",
     }
 
     # Filter to only recognised columns
