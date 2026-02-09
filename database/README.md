@@ -1,41 +1,37 @@
-# database — Schema & Data Access 📦
+```markdown
+# database — Schema & Data Access
 
-This folder contains the SQLite schema initialization scripts and the Data Access Layer (DAL) used by SwiftLedger.
+This folder contains the SQLite schema initialization and the Data Access Layer (DAL) used by SwiftLedger.
 
-## Schema Overview 🗂️
-The primary tables and their purpose:
+Key tables
+- `members` — member_id (PK), staff_number (UNIQUE), full_name, date_joined, current_savings, total_loans, created_at
+- `savings_transactions` — individual lodgment/deduction records, linked to `members.member_id`
+- `loans` — loan records with principal, interest_rate, status, date_issued, member_id
+- `repayment_schedule` — per-loan installment plan rows (installment_no, expected_principal, expected_interest, due_date, status)
+- `system_settings` — single-row configuration for UI and security settings (society_name, security_mode, auth_hash, theme, text_scale, etc.)
 
-- **Members**
-  - Columns: `member_id` (PK), `staff_number` (UNIQUE), `full_name`, `date_joined`, `created_at`
-  - Stores core member identity and join metadata.
+Where logic lives
+- Schema creation and initial values: `database/db_init.py`
+- Data access helper functions: `database/queries.py` (use these from UI/logic layers; do not access SQLite directly elsewhere)
 
-- **Savings**
-  - Columns: `savings_id` (PK), `member_id` (FK → Members.member_id), `amount`, `date`, `type` (`Deduction`/`Lodgment`), `created_at`
-  - Stores each deduction or lodgment event per member.
+Important notes
+- Business rules such as the "2× savings" loan-eligibility rule are enforced in `logic/loan_engine.py` (application logic), not as DB constraints.
+- `queries.py` uses parameterized SQL to avoid injection risks; prefer those helper functions for consistency.
+- When altering the schema, add a migration step in `db_init.py` or introduce a simple migrations table to track and apply upgrades.
 
-- **Loans**
-  - Columns: `loan_id` (PK), `member_id` (FK → Members.member_id), `principal`, `interest_rate`, `status`, `date_issued`, `created_at`
-  - Represents loans issued to members, with status tracking (Active/Closed/Default).
+Developer tips
+- Inspect the live database quickly:
 
-- **RepaymentSchedule**
-  - Columns: `schedule_id` (PK), `loan_id` (FK → Loans.loan_id), `installment_no`, `expected_principal`, `expected_interest`, `due_date`, `status`, `created_at`
-  - A payment schedule tied to a loan, with per-installment expected principal/interest and status.
+```powershell
+python -c "import sqlite3; conn=sqlite3.connect('swiftledger.db'); print(conn.execute('PRAGMA table_info(members)').fetchall()); conn.close()"
+```
 
-- **SystemSettings**
-  - A single-row table for global variables (e.g., `min_monthly_saving`, `max_loan_amount`, `default_interest_rate`).
+- Back up the database before making schema changes:
 
-## Relationship Logic 🔗
-- `Savings.member_id` and `Loans.member_id` reference `Members.member_id` (ON DELETE CASCADE). Deleting a member cascades to associated savings and loans.
-- `RepaymentSchedule.loan_id` references `Loans.loan_id` (ON DELETE CASCADE) so schedules are removed if a loan is deleted.
+```powershell
+copy swiftledger.db swiftledger.db.bak
+```
 
-### 2× Savings Loan Constraint
-SwiftLedger enforces a business rule commonly used in thrift societies: a member's maximum eligible loan amount is limited to twice their total savings balance (2× savings). This is enforced at the business logic level (e.g., `logic/loan_engine.py`) during loan origination checks — not as a database constraint — because it requires aggregation and domain policy logic.
+If you need to add auditing or more advanced migration support, consider using a lightweight migration tool or keeping incremental SQL upgrade scripts under `database/migrations/`.
 
-## Initialization & DAL 🧭
-- `db_init.py` — Responsible for creating the SQLite file and all tables (uses `CREATE TABLE IF NOT EXISTS`) and inserting default settings into `SystemSettings`.
-- `queries.py` — Acts as the Data Access Layer (DAL). It exposes functions such as `add_member`, `get_all_members`, `add_saving`, `get_member_savings`, and loan-related helpers. Keep database access centralized here.
-
-## Notes & Best Practices ✅
-- Use parameterized SQL to avoid injection risks (implemented in `queries.py`).
-- Perform aggregate checks (like total savings) in the logic layer before writing loan records.
-- Keep migrations or schema evolution in mind — for production use, consider adding a simple migrations mechanism (e.g., a version table with incremental upgrade scripts).
+```
