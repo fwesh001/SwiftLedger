@@ -150,6 +150,62 @@ def get_all_members(db_path: str) -> Tuple[bool, List[Dict]]:
             conn.close()
 
 
+def delete_member(db_path: str, member_id: int) -> Tuple[bool, str]:
+    """
+    Delete a member and their related transactions/loans.
+
+    Returns:
+        (True, success_message) or (False, error_message)
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+
+        # Fetch member info for audit
+        cursor.execute("SELECT staff_number, full_name FROM members WHERE member_id = ?", (member_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False, f"Member ID {member_id} not found."
+        staff_number, full_name = row
+
+        # Delete related data
+        cursor.execute("DELETE FROM savings_transactions WHERE member_id = ?", (member_id,))
+        cursor.execute("DELETE FROM loans WHERE member_id = ?", (member_id,))
+        cursor.execute("DELETE FROM members WHERE member_id = ?", (member_id,))
+
+        conn.commit()
+
+        _safe_log_event(
+            user="Admin",
+            category="Members",
+            description=f"Member deleted: {full_name} ({staff_number}), ID {member_id}",
+            status="Success",
+            db_path=db_path,
+        )
+
+        return True, f"Member '{full_name}' ({staff_number}) has been deleted."
+
+    except sqlite3.DatabaseError as e:
+        if conn:
+            conn.rollback()
+        _safe_log_event("Admin", "Members",
+                        f"Member deletion failed for ID {member_id} (DB error: {e})",
+                        "Failed", db_path)
+        return False, f"Database error: {e}"
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        _safe_log_event("Admin", "Members",
+                        f"Member deletion failed for ID {member_id} (error: {e})",
+                        "Failed", db_path)
+        return False, f"Unexpected error: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
 def get_total_savings(db_path: str, member_id: int) -> Tuple[bool, float]:
     """
     Retrieve current savings for a member.
