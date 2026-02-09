@@ -109,6 +109,164 @@ def get_all_members(db_path: str) -> Tuple[bool, List[Dict]]:
         return False, []
 
 
+def get_total_savings(db_path: str, member_id: int) -> Tuple[bool, float]:
+    """
+    Calculate total savings for a member (Lodgments positive, Deductions negative).
+
+    Returns (True, total_amount) on success or (False, 0.0) on error.
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        cursor.execute(
+            """
+            SELECT COALESCE(SUM(CASE WHEN type = 'Lodgment' THEN amount
+                                      WHEN type = 'Deduction' THEN -amount
+                                      ELSE 0 END), 0.0) as total
+            FROM Savings
+            WHERE member_id = ?
+            """,
+            (member_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        total = float(row[0]) if row and row[0] is not None else 0.0
+        return True, total
+
+    except sqlite3.DatabaseError:
+        return False, 0.0
+    except Exception:
+        return False, 0.0
+
+
+def generate_repayment_schedule(db_path: str, loan_id: int, principal: float, interest_rate: float, months: int = 24) -> Tuple[bool, str]:
+    """
+    Generate a simple repayment schedule for a loan.
+
+    This is a placeholder implementation that creates `months` equal installments
+    with fixed principal portion and fixed interest per month based on the original principal.
+    """
+    try:
+        from datetime import date, timedelta
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Basic equal principal split
+        principal_per_installment = round(principal / months, 2)
+        monthly_interest = round((principal * (interest_rate / 100.0)) / 12.0, 2)
+
+        start_date = date.today()
+
+        for i in range(1, months + 1):
+            due_date = start_date + timedelta(days=30 * i)
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO RepaymentSchedule
+                    (loan_id, installment_no, expected_principal, expected_interest, due_date, status)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    loan_id,
+                    i,
+                    principal_per_installment,
+                    monthly_interest,
+                    str(due_date),
+                    'Pending',
+                ),
+            )
+
+        conn.commit()
+        conn.close()
+        return True, "Repayment schedule generated"
+
+    except sqlite3.DatabaseError as e:
+        return False, f"Database error generating schedule: {e}"
+    except Exception as e:
+        return False, f"Unexpected error generating schedule: {e}"
+
+
+def apply_for_loan(db_path: str, member_id: int, principal: float, interest_rate: float, duration: int = 24) -> Tuple[bool, str]:
+    """
+    Attempt to create a loan for a member, enforcing the 2x-savings rule.
+
+    Returns (True, message) on success or (False, error_message) on failure.
+    """
+    try:
+        # Get total savings
+        ok, total_savings = get_total_savings(db_path, member_id)
+        if not ok:
+            return False, "Failed to calculate total savings"
+
+        max_allowed = 2.0 * total_savings
+        if principal > max_allowed:
+            return False, f"Loan exceeds 2x savings limit (Max: ₦{max_allowed:,.2f})"
+
+        # Insert loan
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        cursor.execute(
+            """
+            INSERT INTO Loans (member_id, principal, interest_rate, status, date_issued)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (member_id, principal, interest_rate, 'Active', str(date.today())),
+        )
+        loan_id = cursor.lastrowid
+        conn.commit()
+
+        # Generate repayment schedule (placeholder)
+        schedule_ok, schedule_msg = generate_repayment_schedule(db_path, loan_id, principal, interest_rate, months=duration)
+        if not schedule_ok:
+            # schedule failed but loan exists; inform caller
+            return True, f"Loan created (ID: {loan_id}) but schedule generation failed: {schedule_msg}"
+
+        conn.close()
+        return True, f"Loan created successfully (ID: {loan_id})"
+
+    except sqlite3.IntegrityError as e:
+        return False, f"Integrity error: {e}"
+    except sqlite3.DatabaseError as e:
+        return False, f"Database error: {e}"
+    except Exception as e:
+        return False, f"Unexpected error: {e}"
+
+
+def get_member_loans(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
+    """
+    Retrieve all loans for a member.
+
+    Returns (True, loans_list) or (False, []).
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT loan_id, member_id, principal, interest_rate, status, date_issued, created_at
+            FROM Loans
+            WHERE member_id = ?
+            ORDER BY date_issued DESC
+            """,
+            (member_id,),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        loans = [dict(row) for row in rows]
+        return True, loans
+
+    except sqlite3.DatabaseError:
+        return False, []
+    except Exception:
+        return False, []
+
+
+
 def get_member_by_id(db_path: str, member_id: int) -> Tuple[bool, Optional[Dict]]:
     """
     Retrieve a specific member by ID.
