@@ -1,132 +1,168 @@
 """
 Database initialization script for SwiftLedger.
-Creates SQLite tables for members, savings, loans, repayment schedules, and system settings.
+Creates SQLite tables for system_settings, members, and audit_logs.
+Provides helper functions for saving settings and logging events.
 """
 
 import sqlite3
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Dict
+
+DB_PATH = "swiftledger.db"
 
 
-def initialize_database(db_path: str = "swiftledger.db") -> sqlite3.Connection:
+def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
     """
     Initialize the SwiftLedger SQLite database with all required tables.
-    
+
+    Creates the following tables if they don't already exist:
+      - system_settings
+      - members
+      - audit_logs
+
     Args:
         db_path: Path to the SQLite database file (default: swiftledger.db)
-        
+
     Returns:
         A sqlite3 Connection object to the database.
     """
-    
-    # Ensure database directory exists
     db_file = Path(db_path)
     db_file.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Connect to database
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
-    # Enable foreign keys
-    cursor.execute("PRAGMA foreign_keys = ON;")
-    
-    # Create Members table
+
+    # ── system_settings ──────────────────────────────────────────────
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Members (
-            member_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            staff_number TEXT UNIQUE NOT NULL,
-            full_name TEXT NOT NULL,
-            date_joined DATE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        CREATE TABLE IF NOT EXISTS system_settings (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            society_name  TEXT,
+            street        TEXT,
+            city_state    TEXT,
+            phone         TEXT,
+            email         TEXT,
+            reg_no        TEXT,
+            logo_path     TEXT,
+            security_mode TEXT,
+            auth_hash     TEXT,
+            timeout_minutes INTEGER DEFAULT 10
         );
     """)
-    
-    # Create Savings table
+
+    # ── members ──────────────────────────────────────────────────────
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Savings (
-            savings_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            member_id INTEGER NOT NULL,
-            amount REAL NOT NULL,
-            date DATE NOT NULL,
-            type TEXT NOT NULL CHECK(type IN ('Deduction', 'Lodgment')),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (member_id) REFERENCES Members(member_id) ON DELETE CASCADE
+        CREATE TABLE IF NOT EXISTS members (
+            member_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name      TEXT NOT NULL,
+            phone          TEXT,
+            current_savings REAL DEFAULT 0.0,
+            total_loans    REAL DEFAULT 0.0
         );
     """)
-    
-    # Create Loans table
+
+    # ── audit_logs ───────────────────────────────────────────────────
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Loans (
-            loan_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            member_id INTEGER NOT NULL,
-            principal REAL NOT NULL,
-            interest_rate REAL NOT NULL,
-            status TEXT NOT NULL CHECK(status IN ('Active', 'Closed', 'Default')),
-            date_issued DATE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (member_id) REFERENCES Members(member_id) ON DELETE CASCADE
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp   DATETIME DEFAULT CURRENT_TIMESTAMP,
+            user        TEXT,
+            category    TEXT,
+            description TEXT,
+            status      TEXT
         );
     """)
-    
-    # Create RepaymentSchedule table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS RepaymentSchedule (
-            schedule_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            loan_id INTEGER NOT NULL,
-            installment_no INTEGER NOT NULL,
-            expected_principal REAL NOT NULL,
-            expected_interest REAL NOT NULL,
-            due_date DATE NOT NULL,
-            status TEXT NOT NULL CHECK(status IN ('Pending', 'Paid', 'Overdue')),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (loan_id) REFERENCES Loans(loan_id) ON DELETE CASCADE,
-            UNIQUE(loan_id, installment_no)
-        );
-    """)
-    
-    # Create SystemSettings table (single row for global configuration)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS SystemSettings (
-            setting_id INTEGER PRIMARY KEY CHECK (setting_id = 1),
-            min_monthly_saving REAL DEFAULT 0.0,
-            max_loan_amount REAL DEFAULT 0.0,
-            default_interest_rate REAL DEFAULT 12.0,
-            loan_multiplier REAL DEFAULT 2.0,
-            default_duration INTEGER DEFAULT 24,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
-    
-    # Insert default system settings if not exists
-    cursor.execute("SELECT COUNT(*) FROM SystemSettings;")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("""
-            INSERT INTO SystemSettings (setting_id, min_monthly_saving, max_loan_amount, default_interest_rate, loan_multiplier, default_duration)
-            VALUES (1, 0.0, 0.0, 12.0, 2.0, 24);
-        """)
-    
-    # Commit changes
+
     conn.commit()
-    
     return conn
 
 
-def close_database(conn: sqlite3.Connection) -> None:
+# ── Helper functions ─────────────────────────────────────────────────
+
+
+def save_settings(data_dict: Dict[str, object], db_path: str = DB_PATH) -> None:
     """
-    Close the database connection.
-    
+    Insert or update a row in the system_settings table.
+
+    If a row with id = 1 already exists it will be updated; otherwise a new
+    row is inserted.  Only keys present in *data_dict* that match valid
+    column names are written.
+
     Args:
-        conn: The sqlite3 Connection object to close.
+        data_dict: A dictionary whose keys correspond to system_settings columns.
+        db_path:   Path to the SQLite database file.
     """
-    if conn:
-        conn.close()
+    valid_columns = {
+        "society_name", "street", "city_state", "phone", "email",
+        "reg_no", "logo_path", "security_mode", "auth_hash", "timeout_minutes",
+    }
+
+    # Filter to only recognised columns
+    filtered = {k: v for k, v in data_dict.items() if k in valid_columns}
+    if not filtered:
+        return
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Check whether a settings row already exists
+    cursor.execute("SELECT COUNT(*) FROM system_settings;")
+    exists = cursor.fetchone()[0] > 0
+
+    if exists:
+        set_clause = ", ".join(f"{col} = ?" for col in filtered)
+        cursor.execute(
+            f"UPDATE system_settings SET {set_clause} WHERE id = 1;",
+            list(filtered.values()),
+        )
+    else:
+        columns = ", ".join(filtered.keys())
+        placeholders = ", ".join("?" for _ in filtered)
+        cursor.execute(
+            f"INSERT INTO system_settings ({columns}) VALUES ({placeholders});",
+            list(filtered.values()),
+        )
+
+    conn.commit()
+    conn.close()
+
+
+def log_event(
+    user: str,
+    category: str,
+    description: str,
+    status: str,
+    db_path: str = DB_PATH,
+) -> None:
+    """
+    Insert a new audit-log entry into the audit_logs table.
+
+    Args:
+        user:        The user who triggered the event.
+        category:    Event category (e.g. 'LOGIN', 'SETTINGS', 'LOAN').
+        description: Human-readable description of the event.
+        status:      Outcome status (e.g. 'SUCCESS', 'FAILURE').
+        db_path:     Path to the SQLite database file.
+    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO audit_logs (timestamp, user, category, description, status)
+        VALUES (?, ?, ?, ?, ?);
+        """,
+        (datetime.now().isoformat(), user, category, description, status),
+    )
+
+    conn.commit()
+    conn.close()
 
 
 if __name__ == "__main__":
-    # Initialize database when script is run directly
     try:
-        db_connection = initialize_database()
+        db_conn = init_db()
         print("✓ Database initialized successfully: swiftledger.db")
-        close_database(db_connection)
+        db_conn.close()
     except Exception as e:
         print(f"✗ Error initializing database: {e}")
