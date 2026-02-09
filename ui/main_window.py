@@ -4,16 +4,17 @@ Contains the sidebar navigation and stacked widget for multiple pages.
 """
 
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame, 
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame,
     QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox,
-    QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog
+    QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog, QListWidget
 )
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QEvent, QTimer
 from PySide6.QtGui import QFont
 from datetime import date
 import sys
 from pathlib import Path
+import time
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -21,7 +22,7 @@ from database.queries import (
     add_member, get_all_members, get_member_by_staff_number,
     add_saving, get_total_savings, get_member_savings, get_system_settings,
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
-    get_society_stats
+    get_society_stats, check_overdue_loans
 )
 
 
@@ -119,6 +120,32 @@ class DashboardPage(QWidget):
 
         main_layout.addWidget(dividend_group)
 
+        # ── Alerts + Visuals row ────────────────────────────────────
+        alerts_row = QHBoxLayout()
+        alerts_row.setSpacing(16)
+
+        alerts_group = QGroupBox("Loan Alerts")
+        alerts_group.setFont(QFont("Arial", 12))
+        alerts_layout = QVBoxLayout(alerts_group)
+        self.list_overdue = QListWidget()
+        self.list_overdue.setMinimumHeight(120)
+        alerts_layout.addWidget(self.list_overdue)
+        alerts_row.addWidget(alerts_group)
+
+        health_group = QGroupBox("Financial Health")
+        health_group.setFont(QFont("Arial", 12))
+        self.chart_container = QWidget()
+        self.chart_layout = QVBoxLayout(self.chart_container)
+        self.chart_layout.setContentsMargins(0, 0, 0, 0)
+        self.chart_placeholder = QLabel("Charts disabled")
+        self.chart_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.chart_layout.addWidget(self.chart_placeholder)
+        health_layout = QVBoxLayout(health_group)
+        health_layout.addWidget(self.chart_container)
+        alerts_row.addWidget(health_group)
+
+        main_layout.addLayout(alerts_row)
+
         # ── Status bar ──────────────────────────────────────────────
         self.lbl_status = QLabel("Last refreshed: —")
         self.lbl_status.setStyleSheet("color: #7f8c8d; font-size: 11px;")
@@ -197,6 +224,9 @@ class DashboardPage(QWidget):
             self.lbl_status.setText("⚠  Failed to load statistics")
             return
 
+        settings_ok, settings = get_system_settings(self.db_path)
+        show_charts = bool(settings.get('show_charts', 0)) if settings_ok and settings else False
+
         # Stat cards
         self.card_members[2].setText(str(stats.get('total_members', 0)))
         self.card_savings[2].setText(f"₦{stats.get('total_savings', 0):,.2f}")
@@ -211,11 +241,72 @@ class DashboardPage(QWidget):
             f"₦{stats.get('society_dividend_share', 0):,.2f}"
         )
 
+        self._update_overdue_alerts()
+        self._update_financial_health_chart(stats, show_charts)
+
         # Timestamp
         from datetime import datetime
         self.lbl_status.setText(
             f"Last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
+
+    def _update_overdue_alerts(self) -> None:
+        ok, overdue = check_overdue_loans(self.db_path)
+        self.list_overdue.clear()
+        if not ok:
+            self.list_overdue.addItem("Failed to load alerts")
+            return
+        if not overdue:
+            self.list_overdue.addItem("No late payments")
+            return
+        for item in overdue:
+            label = (
+                f"⚠ Loan #{item['loan_id']} - {item['full_name']} "
+                f"({item['staff_number']}) due {item['due_date']}"
+            )
+            self.list_overdue.addItem(label)
+
+    def _update_financial_health_chart(self, stats: dict, show_charts: bool) -> None:
+        if not show_charts:
+            self._set_chart_placeholder("Charts disabled")
+            return
+
+        try:
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+        except Exception:
+            self._set_chart_placeholder("Install matplotlib to view charts")
+            return
+
+        total_savings = float(stats.get('total_savings', 0.0))
+        total_loans = float(stats.get('total_loans_disbursed', 0.0))
+        available_cash = max(total_savings - total_loans, 0.0)
+
+        self._clear_chart_layout()
+        fig = Figure(figsize=(4, 3))
+        ax = fig.add_subplot(111)
+        ax.pie(
+            [available_cash, total_loans],
+            labels=["Available Cash", "Outstanding Loans"],
+            autopct='%1.1f%%',
+            startangle=90
+        )
+        ax.axis('equal')
+        canvas = FigureCanvas(fig)
+        self.chart_layout.addWidget(canvas)
+
+    def _set_chart_placeholder(self, text: str) -> None:
+        self._clear_chart_layout()
+        self.chart_placeholder = QLabel(text)
+        self.chart_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.chart_layout.addWidget(self.chart_placeholder)
+
+    def _clear_chart_layout(self) -> None:
+        while self.chart_layout.count():
+            item = self.chart_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
 
 
 class MembersPage(QWidget):
@@ -1066,6 +1157,8 @@ class MainWindow(QMainWindow):
     def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
         self.db_path = db_path
+        self.last_interaction_time = time.time()
+        self.is_locked = False
         self.setWindowTitle("SwiftLedger - Thrift Society Management")
         self.setGeometry(100, 100, 1200, 700)
         
@@ -1089,6 +1182,46 @@ class MainWindow(QMainWindow):
         
         # Apply stylesheet
         self.apply_stylesheet()
+
+        QApplication.instance().installEventFilter(self)
+        self._start_watchdog_timer()
+
+    def eventFilter(self, obj, event):
+        if event.type() in (QEvent.Type.KeyPress, QEvent.Type.MouseButtonPress):
+            self.last_interaction_time = time.time()
+        return super().eventFilter(obj, event)
+
+    def _start_watchdog_timer(self) -> None:
+        self.watchdog_timer = QTimer(self)
+        self.watchdog_timer.setInterval(5_000)
+        self.watchdog_timer.timeout.connect(self._check_inactivity)
+        self.watchdog_timer.start()
+
+    def _check_inactivity(self) -> None:
+        if self.is_locked:
+            return
+        if time.time() - self.last_interaction_time > 600:
+            self.lock_screen()
+
+    def lock_screen(self) -> None:
+        self.is_locked = True
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Session Locked")
+        dialog.setModal(True)
+        dialog.setFixedSize(360, 160)
+
+        layout = QVBoxLayout(dialog)
+        label = QLabel("Session locked due to inactivity. Click Unlock to continue.")
+        label.setWordWrap(True)
+        layout.addWidget(label)
+
+        unlock_btn = QPushButton("Unlock")
+        unlock_btn.clicked.connect(dialog.accept)
+        layout.addWidget(unlock_btn)
+
+        dialog.exec()
+        self.last_interaction_time = time.time()
+        self.is_locked = False
     
     def create_sidebar(self) -> QFrame:
         """Create the left sidebar with navigation buttons."""
