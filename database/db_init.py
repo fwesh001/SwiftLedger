@@ -47,7 +47,10 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             security_mode TEXT,
             auth_hash     TEXT,
             timeout_minutes INTEGER DEFAULT 10,
-            show_charts   INTEGER DEFAULT 0
+            show_charts   INTEGER DEFAULT 0,
+            show_alerts   INTEGER DEFAULT 1,
+            theme         TEXT DEFAULT 'dark',
+            text_scale    REAL DEFAULT 1.0
         );
     """)
 
@@ -120,6 +123,12 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
     settings_columns = {row[1] for row in cursor.fetchall()}
     if "show_charts" not in settings_columns:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN show_charts INTEGER DEFAULT 0;")
+    if "show_alerts" not in settings_columns:
+        cursor.execute("ALTER TABLE system_settings ADD COLUMN show_alerts INTEGER DEFAULT 1;")
+    if "theme" not in settings_columns:
+        cursor.execute("ALTER TABLE system_settings ADD COLUMN theme TEXT DEFAULT 'dark';")
+    if "text_scale" not in settings_columns:
+        cursor.execute("ALTER TABLE system_settings ADD COLUMN text_scale REAL DEFAULT 1.0;")
 
     cursor.execute("PRAGMA table_info(loans);")
     loan_columns = {row[1] for row in cursor.fetchall()}
@@ -154,7 +163,8 @@ def save_settings(data_dict: Dict[str, object], db_path: str = DB_PATH) -> None:
     valid_columns = {
         "society_name", "street", "city_state", "phone", "email",
         "reg_no", "logo_path", "security_mode", "auth_hash",
-        "timeout_minutes", "show_charts",
+        "timeout_minutes", "show_charts", "show_alerts",
+        "theme", "text_scale",
     }
 
     # Filter to only recognised columns
