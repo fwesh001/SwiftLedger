@@ -235,23 +235,48 @@ def generate_repayment_schedule(db_path: str, loan_id: int, principal: float, in
         return False, f"Unexpected error generating schedule: {e}"
 
 
-def apply_for_loan(db_path: str, member_id: int, principal: float, interest_rate: float, duration: int = 24) -> Tuple[bool, str]:
+def apply_for_loan(
+    db_path: str,
+    member_id: int,
+    principal: float,
+    interest_rate: Optional[float] = None,
+    duration: Optional[int] = None
+) -> Tuple[bool, str]:
     """
-    Attempt to create a loan for a member, enforcing the 2x-savings rule.
+    Attempt to create a loan for a member, enforcing the dynamic savings-multiplier rule.
 
-    Returns (True, message) on success or (False, error_message) on failure.
+    Args:
+        db_path: Path to the SQLite database.
+        member_id: The member applying for the loan.
+        principal: Requested loan amount.
+        interest_rate: Annual interest rate (%). If None, uses SystemSettings.default_interest_rate.
+        duration: Number of months for repayment. If None, uses SystemSettings.default_duration.
+
+    Returns:
+        (True, success_message) on success or (False, error_message) on failure.
+        The loan record stores the actual interest_rate applied (audit trail).
     """
     try:
-        # Get total savings
+        # Fetch system settings for dynamic rules
+        settings_ok, settings = get_system_settings(db_path)
+        if not settings_ok or settings is None:
+            return False, "Failed to retrieve system settings"
+
+        # Apply defaults from settings if not provided
+        loan_multiplier = float(settings.get('loan_multiplier', 2.0))
+        actual_interest_rate = interest_rate if interest_rate is not None else float(settings.get('default_interest_rate', 12.0))
+        actual_duration = duration if duration is not None else int(settings.get('default_duration', 24))
+
+        # Get total savings for validation
         ok, total_savings = get_total_savings(db_path, member_id)
         if not ok:
             return False, "Failed to calculate total savings"
 
-        max_allowed = 2.0 * total_savings
+        max_allowed = loan_multiplier * total_savings
         if principal > max_allowed:
-            return False, f"Loan exceeds 2x savings limit (Max: ₦{max_allowed:,.2f})"
+            return False, f"Loan exceeds {loan_multiplier}x savings limit (Max: ₦{max_allowed:,.2f})"
 
-        # Insert loan
+        # Insert loan with actual applied rate (audit trail)
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("PRAGMA foreign_keys = ON;")
@@ -260,19 +285,21 @@ def apply_for_loan(db_path: str, member_id: int, principal: float, interest_rate
             INSERT INTO Loans (member_id, principal, interest_rate, status, date_issued)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (member_id, principal, interest_rate, 'Active', str(date.today())),
+            (member_id, principal, actual_interest_rate, 'Active', str(date.today())),
         )
         loan_id = cursor.lastrowid
         conn.commit()
 
-        # Generate repayment schedule (placeholder)
-        schedule_ok, schedule_msg = generate_repayment_schedule(db_path, loan_id, principal, interest_rate, months=duration)
+        # Generate repayment schedule using applied rate and duration
+        schedule_ok, schedule_msg = generate_repayment_schedule(
+            db_path, loan_id, principal, actual_interest_rate, months=actual_duration
+        )
         if not schedule_ok:
-            # schedule failed but loan exists; inform caller
+            conn.close()
             return True, f"Loan created (ID: {loan_id}) but schedule generation failed: {schedule_msg}"
 
         conn.close()
-        return True, f"Loan created successfully (ID: {loan_id})"
+        return True, f"Loan created successfully (ID: {loan_id}) at {actual_interest_rate}% for {actual_duration} months"
 
     except sqlite3.IntegrityError as e:
         return False, f"Integrity error: {e}"
