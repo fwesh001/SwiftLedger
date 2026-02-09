@@ -1461,49 +1461,156 @@ class MainWindow(QMainWindow):
             button.style().polish(button)
     
     def apply_stylesheet(self) -> None:
-        """Apply the high-contrast dark theme to the application."""
-        stylesheet = """
-            /* 1. The Main Foundation */
-            QMainWindow, QStackedWidget, QWidget {
-                background-color: #1e1e1e;
-                color: #ecf0f1;
-            }
+        """Apply the theme (dark or light) and text scaling from settings."""
+        ok, settings = get_system_settings(self.db_path)
+        theme = "dark"
+        text_scale = 1.0
+        if ok and settings:
+            theme = str(settings.get("theme", "dark")).lower()
+            text_scale = float(settings.get("text_scale", 1.0))
 
-            /* 2. The Sidebar */
-            QFrame#sidebar {
-                background-color: #2c3e50;
-                border-right: 1px solid #34495e;
-            }
+        base_font_size = max(10, int(14 * text_scale))
 
-            /* 3. Text & Labels */
-            QLabel {
-                color: #ffffff;
-                font-size: 14px;
-            }
-
-            /* 4. Input Fields (The fix for your visibility bug!) */
-            QLineEdit, QComboBox, QDateEdit {
-                background-color: #333333;
-                color: #ffffff;
-                border: 1px solid #555555;
-                padding: 5px;
-                border-radius: 3px;
-            }
-
-            /* 5. Tables */
-            QTableWidget {
-                background-color: #252525;
-                color: #ecf0f1;
-                gridline-color: #333333;
-            }
-            
-            /* 6. Success Button */
-            QPushButton#register_btn {
-                background-color: #27ae60;
-                color: white;
-                font-weight: bold;
-            }
-        """
+        if theme == "light":
+            stylesheet = f"""
+                QMainWindow, QStackedWidget, QWidget {{
+                    background-color: #f5f6fa;
+                    color: #2c3e50;
+                    font-size: {base_font_size}px;
+                }}
+                QFrame#sidebar {{
+                    background-color: #dfe6e9;
+                    border-right: 1px solid #b2bec3;
+                }}
+                QLabel {{
+                    color: #2c3e50;
+                    font-size: {base_font_size}px;
+                }}
+                QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
+                    background-color: #ffffff;
+                    color: #2c3e50;
+                    border: 1px solid #b2bec3;
+                    padding: 5px;
+                    border-radius: 3px;
+                }}
+                QTableWidget {{
+                    background-color: #ffffff;
+                    color: #2c3e50;
+                    gridline-color: #dfe6e9;
+                }}
+                QTableWidget QHeaderView::section {{
+                    background-color: #dfe6e9;
+                    color: #2c3e50;
+                    padding: 6px;
+                    border: 1px solid #b2bec3;
+                    font-weight: bold;
+                }}
+                QGroupBox {{
+                    border: 1px solid #b2bec3;
+                    border-radius: 6px;
+                    margin-top: 12px;
+                    padding: 14px 10px 10px 10px;
+                    color: #2c3e50;
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 12px;
+                    padding: 0 4px;
+                    color: #636e72;
+                }}
+                QPushButton {{
+                    background-color: #dfe6e9;
+                    color: #2c3e50;
+                    border: 1px solid #b2bec3;
+                    border-radius: 4px;
+                    padding: 6px 14px;
+                }}
+                QPushButton:hover {{
+                    background-color: #b2bec3;
+                }}
+                QListWidget {{
+                    background-color: #ffffff;
+                    color: #2c3e50;
+                    border: 1px solid #b2bec3;
+                }}
+                QScrollArea {{
+                    background-color: #f5f6fa;
+                    border: none;
+                }}
+                QCheckBox, QSlider {{
+                    color: #2c3e50;
+                }}
+            """
+        else:
+            stylesheet = f"""
+                QMainWindow, QStackedWidget, QWidget {{
+                    background-color: #1e1e1e;
+                    color: #ecf0f1;
+                    font-size: {base_font_size}px;
+                }}
+                QFrame#sidebar {{
+                    background-color: #2c3e50;
+                    border-right: 1px solid #34495e;
+                }}
+                QLabel {{
+                    color: #ffffff;
+                    font-size: {base_font_size}px;
+                }}
+                QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{
+                    background-color: #333333;
+                    color: #ffffff;
+                    border: 1px solid #555555;
+                    padding: 5px;
+                    border-radius: 3px;
+                }}
+                QTableWidget {{
+                    background-color: #252525;
+                    color: #ecf0f1;
+                    gridline-color: #333333;
+                }}
+                QTableWidget QHeaderView::section {{
+                    background-color: #34495e;
+                    color: #ecf0f1;
+                    padding: 6px;
+                    border: 1px solid #2c3e50;
+                    font-weight: bold;
+                }}
+                QGroupBox {{
+                    border: 1px solid #34495e;
+                    border-radius: 6px;
+                    margin-top: 12px;
+                    padding: 14px 10px 10px 10px;
+                    color: #ecf0f1;
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 12px;
+                    padding: 0 4px;
+                    color: #bdc3c7;
+                }}
+                QPushButton {{
+                    background-color: #34495e;
+                    color: #ecf0f1;
+                    border: 1px solid #2c3e50;
+                    border-radius: 4px;
+                    padding: 6px 14px;
+                }}
+                QPushButton:hover {{
+                    background-color: #3d566e;
+                }}
+                QListWidget {{
+                    background-color: #252525;
+                    color: #ecf0f1;
+                    border: 1px solid #333333;
+                }}
+                QScrollArea {{
+                    background-color: #1e1e1e;
+                    border: none;
+                }}
+                QCheckBox, QSlider {{
+                    color: #ecf0f1;
+                }}
+            """
         self.setStyleSheet(stylesheet)
 
 
