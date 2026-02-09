@@ -1,22 +1,35 @@
-# ui — User Interface Overview 🖥️
+```markdown
+# ui — User Interface Overview
 
 This folder contains the PySide6 (Qt for Python) UI implementation for SwiftLedger.
 
-## Architecture
-- The main entry-point for the UI is `MainWindow` (`ui/main_window.py`). `MainWindow` composes a left-hand sidebar and a main content area implemented with `QStackedWidget` for page navigation.
-- Each page is encapsulated in its own QWidget-derived class for separation of concerns and easier testing.
+Architecture
+- `ui/main_window.py` — `MainWindow` composes the left-hand sidebar and a `QStackedWidget` for pages.
+- Each page is a focused `QWidget` in `ui/` (e.g., `reports_page.py`, `settings_page.py`, `members_page`), making them easy to test and extend.
 
-## Pages (Quick Guide) 📚
-- **Dashboard** — Overview metrics and quick actions. (Placeholder for charts/stats)
-- **Members** — Member registration form and an interactive members table. Uses `database.queries.add_member` and `get_all_members` for data access.
-- **Savings** — Member search, transaction posting (lodgment/deduction), and per-member savings history. Integrates `add_saving`, `get_member_savings`, and `get_member_by_staff_number`.
-- **Loans** — Loan origination, approval (2× savings check), and repayment schedule management (wire up to `logic/loan_engine.py`).
+Pages (summary)
+- Dashboard — Overview metrics and quick actions (charts and stat cards).
+- Members — Register members, edit, and delete. Uses `database.queries` helpers.
+- Savings — Post lodgment/deduction transactions and view member savings history.
+- Loans — Loan origination, approvals, repayment schedule generation.
+- Reports — Generate and preview branded PDFs (member statements and society summaries).
+- Audit Logs — View the recorded system events from `audit_logs`.
+- Settings — Theme, text scale, security mode (PIN/Password/System Auth), and other preferences.
 
-## Navigation
-- Sidebar buttons switch the visible page in the `QStackedWidget` by changing the stacked widget index. The sidebar is implemented as a `QFrame` with flat-style `QPushButton` items.
+How to add a page
+1. Create a new file under `ui/` with a `QWidget` subclass.
+2. Implement the page UI and connect to `database.queries` or `logic/` as needed.
+3. Register the page in `MainWindow.create_pages()` and add a sidebar button.
 
-## Styling
-- The project uses a custom QSS stylesheet located in `assets/styles.qss`. The stylesheet implements a high-contrast dark theme (dark backgrounds, bright white/grey text) and provides consistent visuals for inputs, buttons, and tables.
+PDF preview
+- The Reports page supports in-app PDF preview using Qt's `QPdfDocument` + `QPdfView`. This requires PySide6 builds that include `QtPdf` and `QtPdfWidgets`.
+- If preview is unavailable, the app falls back to saving the PDF and opening it in an external viewer.
 
-## Extensibility
-- Pages are intentionally small and focused; add new widgets or dialogs as separate modules under `ui/` and register them in `MainWindow.create_pages()`.
+Styling
+- The global stylesheet is in `assets/styles.qss`. Adjust variables there for consistent theming.
+
+Developer tips
+- Keep page logic thin: call into `database/queries.py` and `logic/*` for business rules.
+- Reuse widgets from `ui/widgets.py` where helpful (common form rows, confirmation dialogs).
+
+```
