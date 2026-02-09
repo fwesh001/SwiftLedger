@@ -115,8 +115,8 @@ class AboutPage(QWidget):
             "automatic dividend calculations — was designed with your organisation's "
             "trust in mind.\n\n"
             "For support or custom features, contact me at:\n"
-            "📧  zabdiel.dev@outlook.com\n"
-            "🔗  github.com/zabdiel"
+            "📧  zabdielfwesh001@gmail.com\n"
+            "🔗  github.com/fwesh001"
         )
         dev_text.setWordWrap(True)
         dev_text.setStyleSheet("font-size: 13px; line-height: 1.6; padding: 10px;")
