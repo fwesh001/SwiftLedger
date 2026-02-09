@@ -211,7 +211,7 @@ class ReportsPage(QWidget):
         pdf.set_font("Helvetica", "", 10)
         savings_bal = float(member.get("current_savings", 0) or 0)
         loans_bal = float(member.get("total_loans", 0) or 0)
-        pdf.cell(0, 6, f"Current Savings: \u20a6{savings_bal:,.2f}   |   Outstanding Loans: \u20a6{loans_bal:,.2f}",
+        pdf.cell(0, 6, f"Current Savings: NGN {savings_bal:,.2f}   |   Outstanding Loans: NGN {loans_bal:,.2f}",
                  new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
@@ -248,8 +248,8 @@ class ReportsPage(QWidget):
             vals = [
                 str(tx.get("trans_date", ""))[:19],
                 ttype,
-                f"\u20a6{float(tx.get('amount', 0)):,.2f}",
-                f"\u20a6{float(tx.get('running_balance', 0)):,.2f}",
+                f"NGN {float(tx.get('amount', 0)):,.2f}",
+                f"NGN {float(tx.get('running_balance', 0)):,.2f}",
             ]
             for w, v in zip(col_w, vals):
                 pdf.cell(w, 6, v, border=1, fill=True)
@@ -292,7 +292,7 @@ class ReportsPage(QWidget):
 
             vals = [
                 str(loan.get("loan_id", "")),
-                f"\u20a6{float(loan.get('principal', 0)):,.2f}",
+                f"NGN {float(loan.get('principal', 0)):,.2f}",
                 f"{float(loan.get('interest_rate', 0)):.1f}%",
                 status,
                 str(loan.get("date_issued", ""))[:10],
@@ -349,11 +349,11 @@ class ReportsPage(QWidget):
         pdf.set_font("Helvetica", "", 11)
         lines = [
             f"Total Members: {stats.get('total_members', 0)}",
-            f"Total Savings: \u20a6{stats.get('total_savings', 0):,.2f}",
-            f"Total Loans Disbursed: \u20a6{stats.get('total_loans_disbursed', 0):,.2f}",
-            f"Projected Interest: \u20a6{stats.get('total_projected_interest', 0):,.2f}",
-            f"Members' Dividend (60%): \u20a6{stats.get('members_dividend_share', 0):,.2f}",
-            f"Society Reserve (40%): \u20a6{stats.get('society_dividend_share', 0):,.2f}",
+            f"Total Savings: NGN {stats.get('total_savings', 0):,.2f}",
+            f"Total Loans Disbursed: NGN {stats.get('total_loans_disbursed', 0):,.2f}",
+            f"Projected Interest: NGN {stats.get('total_projected_interest', 0):,.2f}",
+            f"Members' Dividend (60%): NGN {stats.get('members_dividend_share', 0):,.2f}",
+            f"Society Reserve (40%): NGN {stats.get('society_dividend_share', 0):,.2f}",
         ]
         for line in lines:
             pdf.cell(0, 7, line, new_x="LMARGIN", new_y="NEXT")
@@ -383,8 +383,8 @@ class ReportsPage(QWidget):
                     str(m.get("staff_number", "")),
                     str(m.get("full_name", ""))[:26],
                     str(m.get("phone", "") or ""),
-                    f"\u20a6{float(m.get('current_savings', 0) or 0):,.2f}",
-                    f"\u20a6{float(m.get('total_loans', 0) or 0):,.2f}",
+                    f"NGN {float(m.get('current_savings', 0) or 0):,.2f}",
+                    f"NGN {float(m.get('total_loans', 0) or 0):,.2f}",
                 ]
                 for w, v in zip(col_w, vals):
                     pdf.cell(w, 6, v, border=1, fill=True)
