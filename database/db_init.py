@@ -100,6 +100,20 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
         );
     """)
 
+    # ── loans ───────────────────────────────────────────────────────
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS loans (
+            loan_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            member_id       INTEGER NOT NULL,
+            principal       REAL NOT NULL,
+            interest_rate   REAL NOT NULL,
+            duration_months INTEGER NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'Active',
+            date_issued     DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(member_id) REFERENCES members(member_id)
+        );
+    """)
+
     conn.commit()
     return conn
 
