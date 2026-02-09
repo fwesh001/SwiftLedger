@@ -8,3 +8,14 @@ __pycache__/
 notes.md
 TESTING.md
 tests/test_ten_member_math_audit.py
+SwiftLedger_v1.0.spec
+build/SwiftLedger_v1.0/Analysis-00.toc
+build/SwiftLedger_v1.0/base_library.zip
+build/SwiftLedger_v1.0/EXE-00.toc
+build/SwiftLedger_v1.0/PKG-00.toc
+build/SwiftLedger_v1.0/PYZ-00.pyz
+build/SwiftLedger_v1.0/PYZ-00.toc
+build/SwiftLedger_v1.0/SwiftLedger_v1.0.pkg
+build/SwiftLedger_v1.0/warn-SwiftLedger_v1.0.txt
+build/SwiftLedger_v1.0/xref-SwiftLedger_v1.0.html
+dist/SwiftLedger_v1.0.exe
