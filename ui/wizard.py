@@ -7,14 +7,14 @@ and system finalization steps.
 
 import sys
 from pathlib import Path
+from typing import cast
 
 from PySide6.QtWidgets import (
     QWizard, QWizardPage, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QComboBox, QMessageBox, QFrame
+    QComboBox, QMessageBox
 )
-from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QFont, QPixmap
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -336,7 +336,7 @@ class FinalizePage(QWizardPage):
 
     def initializePage(self) -> None:
         """Populate summary before showing this page."""
-        wizard = self.wizard()
+        wizard = cast(FirstRunWizard, self.wizard())
         identity_data = wizard.identity_page.get_data()
         security_mode = wizard.security_page.get_security_mode()
 
@@ -389,7 +389,7 @@ class FirstRunWizard(QWizard):
 
     def _on_wizard_finished(self) -> None:
         """Handle wizard completion: save settings, log event, and launch dashboard."""
-        if self.result() != QWizard.Accepted:
+        if self.result() != QWizard.Accepted.value:
             return
 
         try:
@@ -438,8 +438,9 @@ class FirstRunWizard(QWizard):
             )
 
             # Emit signal to parent to launch dashboard
-            if self.parent():
-                self.parent().launch_dashboard()
+            parent = self.parent()
+            if parent is not None and hasattr(parent, 'launch_dashboard'):
+                cast(object, parent).launch_dashboard()
 
         except Exception as e:
             QMessageBox.critical(
