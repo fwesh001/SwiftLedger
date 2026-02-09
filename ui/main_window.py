@@ -33,16 +33,166 @@ class DashboardPage(QWidget):
 
 
 class MembersPage(QWidget):
-    """Placeholder page for Members management."""
+    """Page for Members management with registration form and member table."""
     
-    def __init__(self):
+    def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
-        layout = QVBoxLayout()
-        label = QLabel("Members Page")
-        label.setFont(QFont("Arial", 18, QFont.Bold))
-        layout.addWidget(label)
-        layout.addStretch()
-        self.setLayout(layout)
+        self.db_path = db_path
+        
+        # Create main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
+        
+        # Title
+        title = QLabel("Members Management")
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        main_layout.addWidget(title)
+        
+        # Registration Form Group
+        form_group = QGroupBox("Register New Member")
+        form_group.setFont(QFont("Arial", 10, QFont.Bold))
+        form_layout = QFormLayout()
+        
+        # Staff Number input
+        self.input_staff_number = QLineEdit()
+        self.input_staff_number.setPlaceholderText("e.g., EMP001")
+        form_layout.addRow("Staff Number:", self.input_staff_number)
+        
+        # Full Name input
+        self.input_full_name = QLineEdit()
+        self.input_full_name.setPlaceholderText("e.g., John Doe")
+        form_layout.addRow("Full Name:", self.input_full_name)
+        
+        # Department dropdown
+        self.combo_department = QComboBox()
+        self.combo_department.addItems([
+            "Admin", "Science", "Engineering", "Finance", 
+            "Marketing", "HR", "Operations", "Other"
+        ])
+        form_layout.addRow("Department:", self.combo_department)
+        
+        form_group.setLayout(form_layout)
+        main_layout.addWidget(form_group)
+        
+        # Register button
+        button_layout = QHBoxLayout()
+        self.btn_register = QPushButton("Register Member")
+        self.btn_register.setMinimumHeight(40)
+        self.btn_register.setFont(QFont("Arial", 10, QFont.Bold))
+        self.btn_register.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background-color: #2ecc71;
+            }
+            QPushButton:pressed {
+                background-color: #229954;
+            }
+        """)
+        self.btn_register.clicked.connect(self.register_member)
+        button_layout.addStretch()
+        button_layout.addWidget(self.btn_register, 0, Qt.AlignRight)
+        main_layout.addLayout(button_layout)
+        
+        # Members Table
+        table_title = QLabel("All Members")
+        table_title.setFont(QFont("Arial", 12, QFont.Bold))
+        main_layout.addWidget(table_title)
+        
+        self.table_members = QTableWidget()
+        self.table_members.setColumnCount(5)
+        self.table_members.setHorizontalHeaderLabels([
+            "Staff Number", "Full Name", "Department", "Date Joined", "Status"
+        ])
+        self.table_members.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table_members.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table_members.horizontalHeader().setStretchLastSection(True)
+        main_layout.addWidget(self.table_members)
+        
+        self.setLayout(main_layout)
+        
+        # Load initial data
+        self.load_data()
+    
+    def register_member(self) -> None:
+        """Handle member registration."""
+        
+        # Validate inputs
+        staff_number = self.input_staff_number.text().strip()
+        full_name = self.input_full_name.text().strip()
+        department = self.combo_department.currentText()
+        
+        if not staff_number or not full_name:
+            QMessageBox.warning(self, "Invalid Input", "Please fill in all required fields.")
+            return
+        
+        # Prepare member data
+        member_data = {
+            'staff_number': staff_number,
+            'full_name': full_name,
+            'date_joined': str(date.today())
+        }
+        
+        # Add member to database
+        success, message = add_member(self.db_path, member_data)
+        
+        if success:
+            QMessageBox.information(self, "Success", message)
+            # Clear inputs
+            self.input_staff_number.clear()
+            self.input_full_name.clear()
+            self.combo_department.setCurrentIndex(0)
+            # Refresh table
+            self.load_data()
+        else:
+            QMessageBox.critical(self, "Error", message)
+    
+    def load_data(self) -> None:
+        """Load and display all members in the table."""
+        
+        try:
+            success, members = get_all_members(self.db_path)
+            
+            if not success or not members:
+                self.table_members.setRowCount(0)
+                return
+            
+            # Clear existing rows
+            self.table_members.setRowCount(0)
+            
+            # Populate table
+            for row_idx, member in enumerate(members):
+                self.table_members.insertRow(row_idx)
+                
+                # Staff Number
+                staff_num_item = QTableWidgetItem(member.get('staff_number', 'N/A'))
+                self.table_members.setItem(row_idx, 0, staff_num_item)
+                
+                # Full Name
+                name_item = QTableWidgetItem(member.get('full_name', 'N/A'))
+                self.table_members.setItem(row_idx, 1, name_item)
+                
+                # Department (placeholder - not stored in DB yet)
+                dept_item = QTableWidgetItem("N/A")
+                self.table_members.setItem(row_idx, 2, dept_item)
+                
+                # Date Joined
+                date_joined = member.get('date_joined', 'N/A')
+                date_item = QTableWidgetItem(str(date_joined))
+                self.table_members.setItem(row_idx, 3, date_item)
+                
+                # Status (placeholder)
+                status_item = QTableWidgetItem("Active")
+                self.table_members.setItem(row_idx, 4, status_item)
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load members: {str(e)}")
 
 
 class SavingsPage(QWidget):
@@ -74,8 +224,9 @@ class LoansPage(QWidget):
 class MainWindow(QMainWindow):
     """Main application window for SwiftLedger."""
     
-    def __init__(self):
+    def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
+        self.db_path = db_path
         self.setWindowTitle("SwiftLedger - Thrift Society Management")
         self.setGeometry(100, 100, 1200, 700)
         
@@ -151,7 +302,7 @@ class MainWindow(QMainWindow):
         """Create placeholder pages and add them to the stacked widget."""
         
         self.dashboard_page = DashboardPage()
-        self.members_page = MembersPage()
+        self.members_page = MembersPage(self.db_path)
         self.savings_page = SavingsPage()
         self.loans_page = LoansPage()
         
