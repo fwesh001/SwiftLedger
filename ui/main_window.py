@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame, 
     QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox,
-    QAbstractItemView
+    QAbstractItemView, QDoubleSpinBox
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QFont
@@ -17,7 +17,10 @@ from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from database.queries import add_member, get_all_members
+from database.queries import (
+    add_member, get_all_members, get_member_by_staff_number, 
+    add_saving, get_member_savings
+)
 
 
 class DashboardPage(QWidget):
@@ -207,18 +210,279 @@ class MembersPage(QWidget):
 
 
 class SavingsPage(QWidget):
-    """Placeholder page for Savings management."""
+    """Page for Savings management with search, transaction form, and history."""
     
-    def __init__(self):
+    def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
-        layout = QVBoxLayout()
-        label = QLabel("Savings Page")
-        font = QFont("Arial", 18)
-        font.setBold(True)
-        label.setFont(font)
-        layout.addWidget(label)
-        layout.addStretch()
-        self.setLayout(layout)
+        self.db_path = db_path
+        self.current_member_id = None
+        self.current_member_name = None
+        
+        # Create main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
+        
+        # Title
+        title = QLabel("Savings Management")
+        title_font = QFont("Arial", 18)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        main_layout.addWidget(title)
+        
+        # Search Section
+        search_group = QGroupBox("Find Member")
+        search_font = QFont("Arial", 10)
+        search_font.setBold(True)
+        search_group.setFont(search_font)
+        search_layout = QHBoxLayout()
+        
+        search_label = QLabel("Staff Number:")
+        self.input_search = QLineEdit()
+        self.input_search.setPlaceholderText("e.g., EMP001")
+        self.btn_search = QPushButton("Search")
+        self.btn_search.setMinimumWidth(100)
+        self.btn_search.clicked.connect(self.search_member)
+        
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.input_search)
+        search_layout.addWidget(self.btn_search)
+        search_layout.addStretch()
+        search_group.setLayout(search_layout)
+        main_layout.addWidget(search_group)
+        
+        # Member Info Section
+        info_group = QGroupBox("Member Information")
+        info_font = QFont("Arial", 10)
+        info_font.setBold(True)
+        info_group.setFont(info_font)
+        info_layout = QHBoxLayout()
+        
+        self.label_member_name = QLabel("Name: Not Selected")
+        self.label_member_name.setFont(QFont("Arial", 11))
+        
+        self.label_total_savings = QLabel("Total Savings: ₦0.00")
+        self.label_total_savings.setFont(QFont("Arial", 11))
+        savings_font = QFont("Arial", 11)
+        savings_font.setBold(True)
+        self.label_total_savings.setFont(savings_font)
+        
+        info_layout.addWidget(self.label_member_name)
+        info_layout.addStretch()
+        info_layout.addWidget(self.label_total_savings)
+        info_group.setLayout(info_layout)
+        main_layout.addWidget(info_group)
+        
+        # Transaction Form Section
+        form_group = QGroupBox("Post New Transaction")
+        form_font = QFont("Arial", 10)
+        form_font.setBold(True)
+        form_group.setFont(form_font)
+        form_layout = QFormLayout()
+        
+        # Amount input
+        self.input_amount = QDoubleSpinBox()
+        self.input_amount.setRange(0, 1_000_000)
+        self.input_amount.setValue(0)
+        self.input_amount.setDecimals(2)
+        self.input_amount.setSingleStep(100)
+        self.input_amount.setPrefix("₦")
+        form_layout.addRow("Amount:", self.input_amount)
+        
+        # Transaction type
+        self.combo_type = QComboBox()
+        self.combo_type.addItems(["Lodgment", "Deduction"])
+        form_layout.addRow("Type:", self.combo_type)
+        
+        form_group.setLayout(form_layout)
+        main_layout.addWidget(form_group)
+        
+        # Post button
+        button_layout = QHBoxLayout()
+        self.btn_post = QPushButton("Post Saving")
+        self.btn_post.setMinimumHeight(40)
+        btn_font = QFont("Arial", 10)
+        btn_font.setBold(True)
+        self.btn_post.setFont(btn_font)
+        self.btn_post.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background-color: #2ecc71;
+            }
+            QPushButton:pressed {
+                background-color: #229954;
+            }
+            QPushButton:disabled {
+                background-color: #888888;
+            }
+        """)
+        self.btn_post.clicked.connect(self.post_saving)
+        self.btn_post.setEnabled(False)
+        button_layout.addStretch()
+        button_layout.addWidget(self.btn_post, 0, Qt.AlignmentFlag.AlignRight)
+        main_layout.addLayout(button_layout)
+        
+        # Savings History Table
+        history_title = QLabel("Transaction History (Last 10)")
+        history_font = QFont("Arial", 12)
+        history_font.setBold(True)
+        history_title.setFont(history_font)
+        main_layout.addWidget(history_title)
+        
+        self.table_savings = QTableWidget()
+        self.table_savings.setColumnCount(5)
+        self.table_savings.setHorizontalHeaderLabels([
+            "Date", "Type", "Amount", "Running Balance", "ID"
+        ])
+        self.table_savings.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_savings.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table_savings.horizontalHeader().setStretchLastSection(True)
+        self.table_savings.setColumnHidden(4, True)  # Hide ID column
+        main_layout.addWidget(self.table_savings)
+        
+        self.setLayout(main_layout)
+    
+    def search_member(self) -> None:
+        """Search for a member by staff number and load their info."""
+        
+        staff_number = self.input_search.text().strip()
+        
+        if not staff_number:
+            QMessageBox.warning(self, "Invalid Input", "Please enter a staff number.")
+            return
+        
+        # Search for member
+        success, member = get_member_by_staff_number(self.db_path, staff_number)
+        
+        if not success or not member:
+            QMessageBox.warning(self, "Not Found", f"No member found with staff number '{staff_number}'.")
+            self.current_member_id = None
+            self.current_member_name = None
+            self.label_member_name.setText("Name: Not Selected")
+            self.label_total_savings.setText("Total Savings: ₦0.00")
+            self.table_savings.setRowCount(0)
+            self.btn_post.setEnabled(False)
+            return
+        
+        # Store member info
+        self.current_member_id = member['member_id']
+        self.current_member_name = member['full_name']
+        
+        # Update member info display
+        self.label_member_name.setText(f"Name: {member['full_name']}")
+        
+        # Load and display savings
+        self.load_savings_data()
+        
+        # Enable post button
+        self.btn_post.setEnabled(True)
+        
+        QMessageBox.information(self, "Success", f"Member found: {member['full_name']}")
+    
+    def load_savings_data(self) -> None:
+        """Load and display savings data for the current member."""
+        
+        if not self.current_member_id:
+            return
+        
+        try:
+            # Get all savings records for the member
+            success, savings = get_member_savings(self.db_path, self.current_member_id)
+            
+            if not success:
+                QMessageBox.critical(self, "Error", "Failed to load savings data.")
+                return
+            
+            # Clear table
+            self.table_savings.setRowCount(0)
+            
+            # Calculate total and running balance
+            total_savings = 0.0
+            running_balance = 0.0
+            limited_savings = savings[:10]  # Last 10 transactions
+            
+            # Populate table in reverse order (oldest first for running balance calculation)
+            for savings_record in reversed(limited_savings):
+                amount = float(savings_record['amount'])
+                trans_type = savings_record['type']
+                
+                # Calculate running balance
+                if trans_type == 'Lodgment':
+                    running_balance += amount
+                    total_savings += amount
+                else:  # Deduction
+                    running_balance -= amount
+                    total_savings -= amount
+            
+            # Now add rows in chronological order (newest first for display)
+            for row_idx, savings_record in enumerate(limited_savings):
+                self.table_savings.insertRow(row_idx)
+                
+                # Date
+                date_item = QTableWidgetItem(str(savings_record['date']))
+                self.table_savings.setItem(row_idx, 0, date_item)
+                
+                # Type with color coding
+                trans_type = savings_record['type']
+                type_item = QTableWidgetItem(trans_type)
+                if trans_type == 'Lodgment':
+                    type_item.setForeground(Qt.GlobalColor.green)
+                else:
+                    type_item.setForeground(Qt.GlobalColor.red)
+                self.table_savings.setItem(row_idx, 1, type_item)
+                
+                # Amount
+                amount = float(savings_record['amount'])
+                amount_item = QTableWidgetItem(f"₦{amount:,.2f}")
+                amount_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                self.table_savings.setItem(row_idx, 2, amount_item)
+                
+                # Running balance (placeholder - you may need to recalculate)
+                balance_item = QTableWidgetItem(f"₦{running_balance:,.2f}")
+                balance_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                self.table_savings.setItem(row_idx, 3, balance_item)
+                
+                # ID (hidden)
+                id_item = QTableWidgetItem(str(savings_record['savings_id']))
+                self.table_savings.setItem(row_idx, 4, id_item)
+            
+            # Update total savings display
+            self.label_total_savings.setText(f"Total Savings: ₦{total_savings:,.2f}")
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load savings: {str(e)}")
+    
+    def post_saving(self) -> None:
+        """Post a new savings transaction."""
+        
+        if not self.current_member_id:
+            QMessageBox.warning(self, "Error", "Please select a member first.")
+            return
+        
+        amount = self.input_amount.value()
+        trans_type = self.combo_type.currentText()
+        
+        if amount <= 0:
+            QMessageBox.warning(self, "Invalid Input", "Amount must be greater than 0.")
+            return
+        
+        # Add saving to database
+        success, message = add_saving(self.db_path, self.current_member_id, amount, trans_type)
+        
+        if success:
+            QMessageBox.information(self, "Success", message)
+            # Clear amount field
+            self.input_amount.setValue(0)
+            # Refresh savings history
+            self.load_savings_data()
+        else:
+            QMessageBox.critical(self, "Error", message)
 
 
 class LoansPage(QWidget):
@@ -320,7 +584,7 @@ class MainWindow(QMainWindow):
         
         self.dashboard_page = DashboardPage()
         self.members_page = MembersPage(self.db_path)
-        self.savings_page = SavingsPage()
+        self.savings_page = SavingsPage(self.db_path)
         self.loans_page = LoansPage()
         
         self.stacked_widget.addWidget(self.dashboard_page)
