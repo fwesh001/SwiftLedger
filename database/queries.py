@@ -744,3 +744,33 @@ if __name__ == "__main__":
         print(f"\nTotal members: {len(members)}")
         for member in members:
             print(f"  - {member['full_name']} ({member['staff_number']})")
+
+
+def get_all_logs(db_path: str) -> Tuple[bool, List[Dict]]:
+    """
+    Retrieve all audit log entries, newest first.
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT id, timestamp, user, category, description, status
+            FROM audit_logs
+            ORDER BY id DESC
+            """
+        )
+
+        rows = cursor.fetchall()
+        return True, [dict(row) for row in rows]
+
+    except sqlite3.DatabaseError:
+        return False, []
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
