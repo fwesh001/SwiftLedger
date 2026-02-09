@@ -17,7 +17,7 @@ from datetime import datetime
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGroupBox, QFormLayout, QLineEdit, QComboBox, QMessageBox,
+    QGroupBox, QFormLayout, QLineEdit, QMessageBox,
     QFileDialog,
 )
 from PySide6.QtCore import Qt
@@ -230,7 +230,7 @@ class ReportsPage(QWidget):
         view.setPageMode(QPdfView.PageMode.MultiPage)
         layout.addWidget(view)
 
-        dialog._pdf_doc = pdf_doc
+        dialog.setProperty("pdf_doc", pdf_doc)
         dialog.exec()
 
     # ── Build PDF objects (shared by preview & save) ─────────────────
@@ -246,11 +246,16 @@ class ReportsPage(QWidget):
             QMessageBox.warning(self, "Not Found", f"No member with staff number '{staff}'.")
             return None, None
 
+        member = dict(member)
+
         FPDF = self._get_fpdf()
         if not FPDF:
             return None, None
 
-        mid = member["member_id"]
+        mid = member.get("member_id")
+        if not mid:
+            QMessageBox.warning(self, "Error", "Member record is missing an ID.")
+            return None, None
         _, savings_txns = get_member_savings(self.db_path, mid)
         _, loans = get_member_loans(self.db_path, mid)
         info = self._society_header()
@@ -264,7 +269,8 @@ class ReportsPage(QWidget):
 
         # Member info
         pdf.set_font("Helvetica", "B", 13)
-        pdf.cell(0, 8, f"Statement for: {member['full_name']} ({staff})", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, f"Statement for: {member.get('full_name', '')} ({staff})",
+             new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", "", 10)
         savings_bal = float(member.get("current_savings", 0) or 0)
         loans_bal = float(member.get("total_loans", 0) or 0)
