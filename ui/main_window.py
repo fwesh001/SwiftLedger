@@ -18,8 +18,8 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.queries import (
-    add_member, get_all_members, get_member_by_staff_number, 
-    add_saving, get_member_savings, get_total_savings, get_system_settings,
+    add_member, get_all_members, get_member_by_staff_number,
+    add_saving, get_total_savings, get_system_settings,
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
     get_society_stats
 )
@@ -253,15 +253,7 @@ class MembersPage(QWidget):
         self.input_full_name = QLineEdit()
         self.input_full_name.setPlaceholderText("e.g., John Doe")
         form_layout.addRow("Full Name:", self.input_full_name)
-        
-        # Department dropdown
-        self.combo_department = QComboBox()
-        self.combo_department.addItems([
-            "Admin", "Science", "Engineering", "Finance", 
-            "Marketing", "HR", "Operations", "Other"
-        ])
-        form_layout.addRow("Department:", self.combo_department)
-        
+
         form_group.setLayout(form_layout)
         main_layout.addWidget(form_group)
         
@@ -302,7 +294,7 @@ class MembersPage(QWidget):
         self.table_members = QTableWidget()
         self.table_members.setColumnCount(5)
         self.table_members.setHorizontalHeaderLabels([
-            "Staff Number", "Full Name", "Department", "Date Joined", "Status"
+            "Staff Number", "Full Name", "Phone", "Current Savings", "Total Loans"
         ])
         self.table_members.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_members.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -320,7 +312,6 @@ class MembersPage(QWidget):
         # Validate inputs
         staff_number = self.input_staff_number.text().strip()
         full_name = self.input_full_name.text().strip()
-        department = self.combo_department.currentText()
         
         if not staff_number or not full_name:
             QMessageBox.warning(self, "Invalid Input", "Please fill in all required fields.")
@@ -330,7 +321,6 @@ class MembersPage(QWidget):
         member_data = {
             'staff_number': staff_number,
             'full_name': full_name,
-            'date_joined': str(date.today())
         }
         
         # Add member to database
@@ -341,7 +331,6 @@ class MembersPage(QWidget):
             # Clear inputs
             self.input_staff_number.clear()
             self.input_full_name.clear()
-            self.combo_department.setCurrentIndex(0)
             # Refresh table
             self.load_data()
         else:
@@ -372,18 +361,21 @@ class MembersPage(QWidget):
                 name_item = QTableWidgetItem(member.get('full_name', 'N/A'))
                 self.table_members.setItem(row_idx, 1, name_item)
                 
-                # Department (placeholder - not stored in DB yet)
-                dept_item = QTableWidgetItem("N/A")
-                self.table_members.setItem(row_idx, 2, dept_item)
-                
-                # Date Joined
-                date_joined = member.get('date_joined', 'N/A')
-                date_item = QTableWidgetItem(str(date_joined))
-                self.table_members.setItem(row_idx, 3, date_item)
-                
-                # Status (placeholder)
-                status_item = QTableWidgetItem("Active")
-                self.table_members.setItem(row_idx, 4, status_item)
+                # Phone
+                phone_item = QTableWidgetItem(member.get('phone', 'N/A'))
+                self.table_members.setItem(row_idx, 2, phone_item)
+
+                # Current Savings
+                savings = float(member.get('current_savings', 0.0) or 0.0)
+                savings_item = QTableWidgetItem(f"₦{savings:,.2f}")
+                savings_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                self.table_members.setItem(row_idx, 3, savings_item)
+
+                # Total Loans
+                loans = float(member.get('total_loans', 0.0) or 0.0)
+                loans_item = QTableWidgetItem(f"₦{loans:,.2f}")
+                loans_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                self.table_members.setItem(row_idx, 4, loans_item)
         
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load members: {str(e)}")
@@ -417,9 +409,9 @@ class SavingsPage(QWidget):
         search_group.setFont(search_font)
         search_layout = QHBoxLayout()
         
-        search_label = QLabel("Staff Number:")
+        search_label = QLabel("Phone:")
         self.input_search = QLineEdit()
-        self.input_search.setPlaceholderText("e.g., EMP001")
+        self.input_search.setPlaceholderText("e.g., +1 (555) 123-4567")
         self.btn_search = QPushButton("Search")
         self.btn_search.setMinimumWidth(100)
         self.btn_search.clicked.connect(self.search_member)
@@ -566,75 +558,20 @@ class SavingsPage(QWidget):
         QMessageBox.information(self, "Success", f"Member found: {member['full_name']}")
     
     def load_savings_data(self) -> None:
-        """Load and display savings data for the current member."""
-        
+        """Load and display current savings balance for the member."""
+
         if not self.current_member_id:
             return
-        
+
         try:
-            # Get all savings records for the member
-            success, savings = get_member_savings(self.db_path, self.current_member_id)
-            
+            success, total_savings = get_total_savings(self.db_path, self.current_member_id)
             if not success:
                 QMessageBox.critical(self, "Error", "Failed to load savings data.")
                 return
-            
-            # Clear table
+
             self.table_savings.setRowCount(0)
-            
-            # Calculate total and running balance
-            total_savings = 0.0
-            running_balance = 0.0
-            limited_savings = savings[:10]  # Last 10 transactions
-            
-            # Populate table in reverse order (oldest first for running balance calculation)
-            for savings_record in reversed(limited_savings):
-                amount = float(savings_record['amount'])
-                trans_type = savings_record['type']
-                
-                # Calculate running balance
-                if trans_type == 'Lodgment':
-                    running_balance += amount
-                    total_savings += amount
-                else:  # Deduction
-                    running_balance -= amount
-                    total_savings -= amount
-            
-            # Now add rows in chronological order (newest first for display)
-            for row_idx, savings_record in enumerate(limited_savings):
-                self.table_savings.insertRow(row_idx)
-                
-                # Date
-                date_item = QTableWidgetItem(str(savings_record['date']))
-                self.table_savings.setItem(row_idx, 0, date_item)
-                
-                # Type with color coding
-                trans_type = savings_record['type']
-                type_item = QTableWidgetItem(trans_type)
-                if trans_type == 'Lodgment':
-                    type_item.setForeground(Qt.GlobalColor.green)
-                else:
-                    type_item.setForeground(Qt.GlobalColor.red)
-                self.table_savings.setItem(row_idx, 1, type_item)
-                
-                # Amount
-                amount = float(savings_record['amount'])
-                amount_item = QTableWidgetItem(f"₦{amount:,.2f}")
-                amount_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
-                self.table_savings.setItem(row_idx, 2, amount_item)
-                
-                # Running balance (placeholder - you may need to recalculate)
-                balance_item = QTableWidgetItem(f"₦{running_balance:,.2f}")
-                balance_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
-                self.table_savings.setItem(row_idx, 3, balance_item)
-                
-                # ID (hidden)
-                id_item = QTableWidgetItem(str(savings_record['savings_id']))
-                self.table_savings.setItem(row_idx, 4, id_item)
-            
-            # Update total savings display
             self.label_total_savings.setText(f"Total Savings: ₦{total_savings:,.2f}")
-        
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load savings: {str(e)}")
     
@@ -867,9 +804,9 @@ class LoansPage(QWidget):
         if not staff_number:
             QMessageBox.warning(self, "Invalid Input", "Please enter a staff number.")
             return
-        
+
         success, member = get_member_by_staff_number(self.db_path, staff_number)
-        
+
         if not success or not member:
             QMessageBox.warning(self, "Not Found", f"No member found with staff number '{staff_number}'.")
             self.current_member_id = None
