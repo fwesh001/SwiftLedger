@@ -1,32 +1,23 @@
-# SwiftLedger 🚀
+```markdown
+# SwiftLedger
 
-SwiftLedger is a professional-grade, multi-user thrift and credit-union management system designed to help small societies and cooperatives manage members, savings, loans, and repayments with a modern dark user interface.
+SwiftLedger is a local desktop application for managing small thrift societies and cooperatives. It provides member management, savings transaction tracking, loan origination and repayment scheduling, PDF reporting, and an audit trail — all in a compact PySide6 (Qt) GUI.
 
-## Key Features ✨
-- **Member registration & management** — register members with unique staff numbers and track join dates.
-- **Savings tracking** — record deductions and lodgments per member with a full transaction history.
-- **Loan engine** — loans governed by a 2× savings rule (loan eligibility tied to member savings), with repayment scheduling and status tracking.
-- **Modern Dark UI** — PySide6-based desktop UI with a high-contrast QSS stylesheet for accessibility and clarity.
+Quick highlights
+- Member registration and lookup by staff number
+- Savings transactions (lodgment/deduction) with running balances
+- Loan issuance with business-rule checks and repayment schedules
+- Branded PDF export for member statements and society summaries
+- Audit logging for important events
+- UI customization: light/dark theme and text scaling
 
-## Tech Stack 🛠️
-| Component | Technology |
-|---|---|
-| Language | Python 3.10+ |
-| GUI | PySide6 (Qt for Python) |
-| Database | SQLite |
+Supported environment
+- Python 3.10+ (3.11 recommended)
+- Windows / macOS / Linux (Windows-only features: system authentication)
+- SQLite local database (swiftledger.db)
 
-## Project Structure 📁
-| Path | Purpose |
-|---|---|
-| `main.py` | Application launcher — bootstraps the Qt app and opens `MainWindow`. |
-| `requirements.txt` | Project Python dependencies (e.g., PySide6). |
-| `database/` | Database schema initialization and data access layer (DAL). |
-| `ui/` | PySide6 UI code: `MainWindow`, pages, and widgets. |
-| `logic/` | Business logic, loan & dividend engines, calculation helpers. |
-| `assets/` | Static assets: icons, logos, QSS stylesheets. |
-
-## Getting Started ▶️
-1. Create a Python virtual environment and install dependencies:
+Getting started
+1. Create and activate a virtual environment, then install dependencies:
 
 ```powershell
 python -m venv .venv
@@ -34,7 +25,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-2. Initialize the database (the `db_init.py` script will create required tables):
+2. Initialize the database (creates schema and default settings):
 
 ```powershell
 python -m database.db_init
@@ -46,10 +37,20 @@ python -m database.db_init
 python main.py
 ```
 
-## Next steps
-- Implement detailed loan rules in `logic/loan_engine.py`.
-- Add unit tests and CI workflow.
-- Add user authentication and role-based access control if multi-user remote operation is required.
+How to use
+- On first run the app opens a setup wizard to configure society name and initial credential.
+- Use the left sidebar to navigate: Dashboard, Members, Savings, Loans, Reports, Audit Logs, Settings, About.
+- Generate PDF reports in the Reports page. Use the Preview button to view them inside the app (requires Qt PDF modules) or Save to persist to disk.
 
----
-For more information about the database and UI internals, see `database/README.md` and `ui/README.md`.
+Developer notes
+- UI code is under `ui/` (main window and page widgets).
+- Database schema and DAL are in `database/` (`db_init.py`, `queries.py`).
+- Business rules (loan/dividend calculations) live under `logic/`.
+
+Troubleshooting
+- If PDF preview fails, install the Qt PDF components: upgrade PySide6 to a release with QtPdf and QtPdfWidgets.
+- If saving a PDF fails with PermissionError, ensure the target file is not open in another program.
+
+See `database/README.md`, `ui/README.md`, and `assets/README.md` for module-specific details.
+
+```markdown
