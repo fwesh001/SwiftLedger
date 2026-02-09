@@ -1,20 +1,19 @@
-# SwiftLedger - Thrift Society Management Application
-# Main entry point
 import sys
-from PySide6.QtWidgets import QApplication, QMainWindow, QLabel
+import os
+from PySide6.QtWidgets import QApplication
 
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("SwiftLedger")
-        self.resize(800, 600)
-        
-        # Simple test label
-        label = QLabel("Welcome to SwiftLedger", self)
-        label.move(300, 300)
+# 1. Add the project directory to the path so Python finds your folders
+base_path = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(base_path)
+
+# 2. Import the REAL MainWindow from your ui folder
+from ui.main_window import MainWindow
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    
+    # 3. Launch the actual application
     window = MainWindow()
     window.show()
+    
     sys.exit(app.exec())
