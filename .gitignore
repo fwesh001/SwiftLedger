@@ -5,4 +5,4 @@ __pycache__/
 *.pyd
 *.db
 .vscode/
-notes.txt
+notes.md
