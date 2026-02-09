@@ -233,6 +233,24 @@ class ReportsPage(QWidget):
         dialog.setProperty("pdf_doc", pdf_doc)
         dialog.exec()
 
+    def _write_pdf_to_path(self, pdf, path: str) -> bool:
+        """Persist an FPDF object to disk and return success state."""
+        try:
+            content = pdf.output(dest="S")
+            if isinstance(content, str):
+                data = content.encode("latin-1")
+            else:
+                data = bytes(content)
+
+            if not data:
+                return False
+
+            with open(path, "wb") as f:
+                f.write(data)
+            return True
+        except Exception:
+            return False
+
     # ── Build PDF objects (shared by preview & save) ─────────────────
 
     def _build_member_pdf(self, staff: str):
@@ -460,7 +478,10 @@ class ReportsPage(QWidget):
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, prefix="sl_preview_")
         tmp_path = tmp.name
         tmp.close()
-        pdf.output(tmp_path)
+        if not self._write_pdf_to_path(pdf, tmp_path):
+            QMessageBox.warning(self, "Preview Error", "Unable to write preview file.")
+            return
+
         self._open_pdf_preview(tmp_path)
 
         # Clean up temp file after dialog closes
@@ -477,7 +498,10 @@ class ReportsPage(QWidget):
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, prefix="sl_preview_")
         tmp_path = tmp.name
         tmp.close()
-        pdf.output(tmp_path)
+        if not self._write_pdf_to_path(pdf, tmp_path):
+            QMessageBox.warning(self, "Preview Error", "Unable to write preview file.")
+            return
+
         self._open_pdf_preview(tmp_path)
 
         try:
@@ -504,7 +528,13 @@ class ReportsPage(QWidget):
         if not path:
             return
 
-        pdf.output(path)
+        if not self._write_pdf_to_path(pdf, path):
+            QMessageBox.warning(
+                self,
+                "Export Error",
+                "Unable to save the PDF. If the file is open, close it and try again.",
+            )
+            return
 
         log_event("Admin", "Reports",
                   f"Member statement exported for {member['full_name']} ({staff})",
@@ -523,7 +553,13 @@ class ReportsPage(QWidget):
         if not path:
             return
 
-        pdf.output(path)
+        if not self._write_pdf_to_path(pdf, path):
+            QMessageBox.warning(
+                self,
+                "Export Error",
+                "Unable to save the PDF. If the file is open, close it and try again.",
+            )
+            return
 
         log_event("Admin", "Reports", "Society summary report exported",
                   "Success", self.db_path)
