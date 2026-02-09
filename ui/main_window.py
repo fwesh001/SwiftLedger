@@ -357,57 +357,49 @@ class MainWindow(QMainWindow):
             button.style().polish(button)
     
     def apply_stylesheet(self) -> None:
-        """Apply dark theme stylesheet to the application."""
-        
+        """Apply the high-contrast dark theme to the application."""
         stylesheet = """
-            QMainWindow {
-                background-color: #f5f5f5;
+            /* 1. The Main Foundation */
+            QMainWindow, QStackedWidget, QWidget {
+                background-color: #1e1e1e;
+                color: #ecf0f1;
             }
-            
-            QFrame {
+
+            /* 2. The Sidebar */
+            QFrame#sidebar {
                 background-color: #2c3e50;
-                border: none;
+                border-right: 1px solid #34495e;
             }
-            
+
+            /* 3. Text & Labels */
             QLabel {
-                color: white;
+                color: #ffffff;
+                font-size: 14px;
+            }
+
+            /* 4. Input Fields (The fix for your visibility bug!) */
+            QLineEdit, QComboBox, QDateEdit {
+                background-color: #333333;
+                color: #ffffff;
+                border: 1px solid #555555;
+                padding: 5px;
+                border-radius: 3px;
+            }
+
+            /* 5. Tables */
+            QTableWidget {
+                background-color: #252525;
+                color: #ecf0f1;
+                gridline-color: #333333;
             }
             
-            QPushButton {
-                background-color: #34495e;
+            /* 6. Success Button */
+            QPushButton#register_btn {
+                background-color: #27ae60;
                 color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 10px;
                 font-weight: bold;
             }
-            
-            QPushButton:hover {
-                background-color: #3d5a72;
-            }
-            
-            QPushButton:pressed {
-                background-color: #2c3e50;
-            }
-            
-            QPushButton[active="true"] {
-                background-color: #3498db;
-                border-left: 4px solid #2980b9;
-            }
-            
-            QPushButton[active="true"]:hover {
-                background-color: #5dade2;
-            }
-            
-            QStackedWidget {
-                background-color: #ecf0f1;
-            }
-            
-            QWidget {
-                background-color: #ecf0f1;
-            }
         """
-        
         self.setStyleSheet(stylesheet)
 
 
