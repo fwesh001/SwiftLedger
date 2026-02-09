@@ -7,11 +7,11 @@ and system finalization steps.
 
 import sys
 from pathlib import Path
-from typing import cast
+from typing import cast, Any
 
 from PySide6.QtWidgets import (
     QWizard, QWizardPage, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QComboBox, QMessageBox
+    QComboBox, QMessageBox, QDialog, QStyle
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -367,7 +367,7 @@ class FirstRunWizard(QWizard):
         super().__init__(parent)
         self.db_path = db_path
         self.setWindowTitle("SwiftLedger - First Run Setup")
-        self.setWindowIcon(self.style().standardIcon(self.style().StandardPixmap.SP_DesktopIcon))
+        self.setWindowIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DesktopIcon))
         self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
         self.setMinimumWidth(600)
         self.setMinimumHeight(500)
@@ -389,7 +389,7 @@ class FirstRunWizard(QWizard):
 
     def _on_wizard_finished(self) -> None:
         """Handle wizard completion: save settings, log event, and launch dashboard."""
-        if self.result() != QWizard.Accepted.value:
+        if self.result() != QDialog.DialogCode.Accepted:
             return
 
         try:
@@ -440,7 +440,7 @@ class FirstRunWizard(QWizard):
             # Emit signal to parent to launch dashboard
             parent = self.parent()
             if parent is not None and hasattr(parent, 'launch_dashboard'):
-                cast(object, parent).launch_dashboard()
+                cast(Any, parent).launch_dashboard()
 
         except Exception as e:
             QMessageBox.critical(
