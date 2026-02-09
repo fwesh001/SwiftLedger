@@ -7,6 +7,15 @@ import sqlite3
 from datetime import date, timedelta
 from typing import Dict, List, Tuple, Optional
 
+from database.db_init import log_event
+
+
+def _safe_log_event(user: str, category: str, description: str, status: str, db_path: str) -> None:
+    try:
+        log_event(user=user, category=category, description=description, status=status, db_path=db_path)
+    except Exception:
+        pass
+
 
 def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
     """
@@ -25,6 +34,13 @@ def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
     required_fields = ['staff_number', 'full_name']
     if not all(field in member_data for field in required_fields):
         missing = [f for f in required_fields if f not in member_data]
+        _safe_log_event(
+            user="Admin",
+            category="Members",
+            description=f"Member registration failed (missing: {', '.join(missing)})",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, f"Missing required fields: {', '.join(missing)}"
 
     conn = None
@@ -51,16 +67,41 @@ def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
         member_id = cursor.lastrowid
         conn.commit()
 
+        _safe_log_event(
+            user="Admin",
+            category="Members",
+            description=(
+                f"Member registered: {member_data['full_name']} "
+                f"({member_data['staff_number']}), ID {member_id}"
+            ),
+            status="Success",
+            db_path=db_path,
+        )
+
         return True, f"Member '{member_data['full_name']}' (Staff: {member_data['staff_number']}, ID: {member_id}) added successfully."
 
     except sqlite3.DatabaseError as e:
         if conn:
             conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Members",
+            description=f"Member registration failed (database error: {str(e)})",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, f"Database error: {str(e)}"
 
     except Exception as e:
         if conn:
             conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Members",
+            description=f"Member registration failed (unexpected error: {str(e)})",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, f"Unexpected error: {str(e)}"
 
     finally:
@@ -249,59 +290,29 @@ def calculate_repayment_schedule(principal: float, annual_rate: float, duration_
     return schedule
 
 
-def generate_repayment_schedule(db_path: str, loan_id: int, principal: float, interest_rate: float, months: int = 24) -> Tuple[bool, str]:
+def generate_repayment_schedule(
+    db_path: str,
+    loan_id: int,
+    principal: float,
+    interest_rate: float,
+    months: int = 24,
+) -> Tuple[bool, List[Dict]]:
     """
-    Generate a simple repayment schedule for a loan.
-
-    This is a placeholder implementation that creates `months` equal installments
-    with fixed principal portion and fixed interest per month based on the original principal.
+    Generate a repayment schedule for a loan without persisting to a table.
     """
-    conn = None
     try:
-        from datetime import date, timedelta
-
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        # Basic equal principal split
-        principal_per_installment = round(principal / months, 2)
-        monthly_interest = round((principal * (interest_rate / 100.0)) / 12.0, 2)
-
-        start_date = date.today()
-
-        for i in range(1, months + 1):
-            due_date = start_date + timedelta(days=30 * i)
-            cursor.execute(
-                """
-                INSERT OR IGNORE INTO RepaymentSchedule
-                    (loan_id, installment_no, expected_principal, expected_interest, due_date, status)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    loan_id,
-                    i,
-                    principal_per_installment,
-                    monthly_interest,
-                    str(due_date),
-                    'Pending',
-                ),
-            )
-
-        conn.commit()
-        return True, "Repayment schedule generated"
-
-    except sqlite3.DatabaseError as e:
-        if conn:
-            conn.rollback()
-        return False, f"Database error generating schedule: {e}"
     except Exception as e:
-        if conn:
-            conn.rollback()
-        return False, f"Unexpected error generating schedule: {e}"
-    
-    finally:
-        if conn:
-            conn.close()
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=f"Failed to generate repayment schedule (error: {str(e)})",
+            status="Failed",
+            db_path=db_path,
+        )
+        return False, []
+
+    schedule = calculate_repayment_schedule(principal, interest_rate, months)
+    return True, schedule
 
 
 def apply_for_loan(
@@ -326,16 +337,40 @@ def apply_for_loan(
     """
     settings_ok, settings = get_system_settings(db_path)
     if not settings_ok or settings is None:
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description="Loan application failed (settings unavailable)",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, "Failed to retrieve system settings"
 
     loan_multiplier = float(settings.get('loan_multiplier', 2.0))
 
     ok, total_savings = get_total_savings(db_path, member_id)
     if not ok:
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description="Loan application failed (could not calculate savings)",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, "Failed to calculate total savings"
 
     max_allowed = loan_multiplier * total_savings
     if principal > max_allowed:
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=(
+                f"Loan application rejected for member_id {member_id} "
+                f"(amount ₦{principal:,.2f} exceeds limit ₦{max_allowed:,.2f})"
+            ),
+            status="Failed",
+            db_path=db_path,
+        )
         return False, f"Loan exceeds {loan_multiplier}x savings limit (Max: ₦{max_allowed:,.2f})"
 
     conn = None
@@ -367,18 +402,49 @@ def apply_for_loan(
 
         if cursor.rowcount == 0:
             conn.rollback()
+            _safe_log_event(
+                user="Admin",
+                category="Loans",
+                description=f"Loan application failed (member_id {member_id} not found)",
+                status="Failed",
+                db_path=db_path,
+            )
             return False, f"Error: Member ID {member_id} does not exist."
 
         conn.commit()
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=(
+                f"Loan approved for member_id {member_id}: ₦{principal:,.2f}, "
+                f"{final_interest_rate:.2f}% for {final_duration} months"
+            ),
+            status="Success",
+            db_path=db_path,
+        )
         return True, f"Loan recorded successfully. Amount: ₦{principal:,.2f}"
 
     except sqlite3.DatabaseError as e:
         if conn:
             conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=f"Loan application failed (database error: {e})",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, f"Database error: {e}"
     except Exception as e:
         if conn:
             conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=f"Loan application failed (unexpected error: {e})",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, f"Unexpected error: {e}"
 
     finally:
@@ -549,12 +615,33 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
         A tuple (success: bool, message: str)
     """
     if category not in ['Deduction', 'Lodgment']:
+        _safe_log_event(
+            user="Admin",
+            category="Savings",
+            description=f"Savings transaction rejected (invalid category: {category})",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, f"Invalid category '{category}'. Must be 'Deduction' or 'Lodgment'."
 
     if amount <= 0:
+        _safe_log_event(
+            user="Admin",
+            category="Savings",
+            description="Savings transaction rejected (non-positive amount)",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, "Amount must be a positive number."
 
     if not isinstance(member_id, int) or member_id <= 0:
+        _safe_log_event(
+            user="Admin",
+            category="Savings",
+            description=f"Savings transaction rejected (invalid member_id: {member_id})",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, "Invalid member ID."
 
     delta = amount if category == 'Lodgment' else -amount
@@ -575,6 +662,13 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
 
         if cursor.rowcount == 0:
             conn.rollback()
+            _safe_log_event(
+                user="Admin",
+                category="Savings",
+                description=f"Savings transaction failed (member_id {member_id} not found)",
+                status="Failed",
+                db_path=db_path,
+            )
             return False, f"Error: Member ID {member_id} does not exist."
 
         cursor.execute(
@@ -597,16 +691,39 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
         )
 
         conn.commit()
+        _safe_log_event(
+            user="Admin",
+            category="Savings",
+            description=(
+                f"Savings {category} posted for member_id {member_id}: ₦{amount:,.2f}"
+            ),
+            status="Success",
+            db_path=db_path,
+        )
         return True, f"Savings updated successfully. Amount: {amount}, Category: {category}"
 
     except sqlite3.DatabaseError as e:
         if conn:
             conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Savings",
+            description=f"Savings transaction failed (database error: {str(e)})",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, f"Database error: {str(e)}"
 
     except Exception as e:
         if conn:
             conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Savings",
+            description=f"Savings transaction failed (unexpected error: {str(e)})",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, f"Unexpected error: {str(e)}"
 
     finally:
@@ -720,32 +837,6 @@ def get_society_stats(db_path: str) -> Tuple[bool, Dict]:
             conn.close()
 
 
-if __name__ == "__main__":
-    # Example usage
-    db_path = "swiftledger.db"
-    
-    # Test add_member
-    test_member = {
-        'staff_number': 'EMP001',
-        'full_name': 'John Doe',
-        'date_joined': '2026-02-09'
-    }
-    
-    success, message = add_member(db_path, test_member)
-    print(f"Add member: {message}")
-    
-    # Test duplicate
-    success, message = add_member(db_path, test_member)
-    print(f"Add duplicate: {message}")
-    
-    # Test get_all_members
-    success, members = get_all_members(db_path)
-    if success:
-        print(f"\nTotal members: {len(members)}")
-        for member in members:
-            print(f"  - {member['full_name']} ({member['staff_number']})")
-
-
 def get_all_logs(db_path: str) -> Tuple[bool, List[Dict]]:
     """
     Retrieve all audit log entries, newest first.
@@ -774,3 +865,29 @@ def get_all_logs(db_path: str) -> Tuple[bool, List[Dict]]:
     finally:
         if conn:
             conn.close()
+
+
+if __name__ == "__main__":
+    # Example usage
+    db_path = "swiftledger.db"
+    
+    # Test add_member
+    test_member = {
+        'staff_number': 'EMP001',
+        'full_name': 'John Doe',
+        'date_joined': '2026-02-09'
+    }
+    
+    success, message = add_member(db_path, test_member)
+    print(f"Add member: {message}")
+    
+    # Test duplicate
+    success, message = add_member(db_path, test_member)
+    print(f"Add duplicate: {message}")
+    
+    # Test get_all_members
+    success, members = get_all_members(db_path)
+    if success:
+        print(f"\nTotal members: {len(members)}")
+        for member in members:
+            print(f"  - {member['full_name']} ({member['staff_number']})")
