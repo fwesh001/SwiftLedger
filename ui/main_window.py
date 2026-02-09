@@ -409,9 +409,9 @@ class SavingsPage(QWidget):
         search_group.setFont(search_font)
         search_layout = QHBoxLayout()
         
-        search_label = QLabel("Phone:")
+        search_label = QLabel("Staff Number:")
         self.input_search = QLineEdit()
-        self.input_search.setPlaceholderText("e.g., +1 (555) 123-4567")
+        self.input_search.setPlaceholderText("e.g., EMP001")
         self.btn_search = QPushButton("Search")
         self.btn_search.setMinimumWidth(100)
         self.btn_search.clicked.connect(self.search_member)
