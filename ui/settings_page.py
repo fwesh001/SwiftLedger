@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from database.db_init import save_settings
+from database.db_init import save_settings, log_event
 from database.queries import get_system_settings
 
 
@@ -130,6 +130,23 @@ class SettingsPage(QWidget):
 
         try:
             save_settings(data, self.db_path)
+            log_event(
+                user="Admin",
+                category="Settings",
+                description=(
+                    f"Preferences updated (charts={data['show_charts']}, "
+                    f"timeout_minutes={data['timeout_minutes']})"
+                ),
+                status="Success",
+                db_path=self.db_path,
+            )
             QMessageBox.information(self, "Saved", "Settings applied successfully.")
         except Exception as e:
+            log_event(
+                user="Admin",
+                category="Settings",
+                description=f"Settings update failed (error: {e})",
+                status="Failed",
+                db_path=self.db_path,
+            )
             QMessageBox.critical(self, "Error", f"Failed to save settings:\n{e}")
