@@ -169,6 +169,50 @@ class ReportsPage(QWidget):
             align="C",
         )
 
+    def _prompt_preview(self, path: str) -> None:
+        reply = QMessageBox.question(
+            self,
+            "Preview Report",
+            "PDF generated successfully. Preview it now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._open_pdf_preview(path)
+
+    def _open_pdf_preview(self, path: str) -> None:
+        try:
+            from PySide6.QtPdf import QPdfDocument
+            from PySide6.QtPdfWidgets import QPdfView
+            from PySide6.QtWidgets import QDialog
+        except ImportError:
+            QMessageBox.information(
+                self,
+                "Preview Unavailable",
+                "PDF preview requires Qt PDF modules.\n"
+                "Please update PySide6 or open the file with an external viewer.",
+            )
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("PDF Preview")
+        dialog.resize(900, 700)
+        layout = QVBoxLayout(dialog)
+
+        pdf_doc = QPdfDocument(dialog)
+        status = pdf_doc.load(path)
+        if status != QPdfDocument.Status.Ready:
+            QMessageBox.warning(self, "Preview Error", "Unable to load the PDF file.")
+            return
+
+        view = QPdfView(dialog)
+        view.setDocument(pdf_doc)
+        view.setPageMode(QPdfView.PageMode.MultiPage)
+        layout.addWidget(view)
+
+        dialog._pdf_doc = pdf_doc
+        dialog.exec()
+
     # ── Member PDF ───────────────────────────────────────────────────
 
     def _generate_member_pdf(self) -> None:
@@ -313,6 +357,7 @@ class ReportsPage(QWidget):
                   f"Member statement exported for {member['full_name']} ({staff})",
                   "Success", self.db_path)
         QMessageBox.information(self, "Exported", f"Statement saved to:\n{path}")
+        self._prompt_preview(path)
 
     # ── Society PDF ──────────────────────────────────────────────────
 
@@ -396,3 +441,4 @@ class ReportsPage(QWidget):
         log_event("Admin", "Reports", "Society summary report exported",
                   "Success", self.db_path)
         QMessageBox.information(self, "Exported", f"Summary saved to:\n{path}")
+        self._prompt_preview(path)
