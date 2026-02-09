@@ -54,6 +54,7 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS members (
             member_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            staff_number   TEXT UNIQUE,
             full_name      TEXT NOT NULL,
             phone          TEXT,
             current_savings REAL DEFAULT 0.0,
