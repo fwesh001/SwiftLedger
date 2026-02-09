@@ -10,68 +10,59 @@ from typing import Dict, List, Tuple, Optional
 
 def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
     """
-    Add a new member to the Members table.
-    
+    Add a new member to the members table.
+
     Args:
         db_path: Path to the SQLite database file.
         member_data: Dictionary containing:
             - 'staff_number': Unique staff ID (required)
             - 'full_name': Member's full name (required)
-            - 'date_joined': Date member joined (required, format: YYYY-MM-DD)
-    
+            - 'phone': Member's phone number (optional)
+
     Returns:
         A tuple (success: bool, message: str)
     """
-    # Validate input before opening connection
-    required_fields = ['staff_number', 'full_name', 'date_joined']
+    required_fields = ['staff_number', 'full_name']
     if not all(field in member_data for field in required_fields):
         missing = [f for f in required_fields if f not in member_data]
         return False, f"Missing required fields: {', '.join(missing)}"
-    
+
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
-        # Enable foreign keys
+
         cursor.execute("PRAGMA foreign_keys = ON;")
-        
-        # Insert new member
-        cursor.execute("""
-            INSERT INTO Members (staff_number, full_name, date_joined)
-            VALUES (?, ?, ?)
-        """, (
-            member_data['staff_number'],
-            member_data['full_name'],
-            member_data['date_joined']
-        ))
-        
-        # Get the inserted member's ID
+
+        cursor.execute(
+            """
+            INSERT INTO members (staff_number, full_name, phone, current_savings, total_loans)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                member_data['staff_number'],
+                member_data['full_name'],
+                member_data.get('phone', ''),
+                float(member_data.get('current_savings', 0.0)),
+                float(member_data.get('total_loans', 0.0)),
+            ),
+        )
+
         member_id = cursor.lastrowid
-        
-        # Commit changes
         conn.commit()
-        
-        return True, f"Member '{member_data['full_name']}' (ID: {member_id}) added successfully."
-    
-    except sqlite3.IntegrityError as e:
-        if conn:
-            conn.rollback()
-        if "UNIQUE constraint failed" in str(e):
-            return False, f"Error: Staff number '{member_data.get('staff_number', 'N/A')}' already exists. Please use a unique staff number."
-        else:
-            return False, f"Integrity error: {str(e)}"
-    
+
+        return True, f"Member '{member_data['full_name']}' (Staff: {member_data['staff_number']}, ID: {member_id}) added successfully."
+
     except sqlite3.DatabaseError as e:
         if conn:
             conn.rollback()
         return False, f"Database error: {str(e)}"
-    
+
     except Exception as e:
         if conn:
             conn.rollback()
         return False, f"Unexpected error: {str(e)}"
-    
+
     finally:
         if conn:
             conn.close()
@@ -79,41 +70,40 @@ def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
 
 def get_all_members(db_path: str) -> Tuple[bool, List[Dict]]:
     """
-    Retrieve all members from the Members table.
-    
+    Retrieve all members from the members table.
+
     Args:
         db_path: Path to the SQLite database file.
-    
+
     Returns:
         A tuple (success: bool, members: List[Dict])
-        Each member dict contains: member_id, staff_number, full_name, date_joined, created_at
+        Each member dict contains: member_id, staff_number, full_name, phone, current_savings, total_loans
     """
     conn = None
     try:
         conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
-        # Fetch all members
-        cursor.execute("""
-            SELECT member_id, staff_number, full_name, date_joined, created_at
-            FROM Members
-            ORDER BY created_at DESC
-        """)
-        
+
+        cursor.execute(
+            """
+            SELECT member_id, staff_number, full_name, phone, current_savings, total_loans
+            FROM members
+            ORDER BY member_id DESC
+            """
+        )
+
         rows = cursor.fetchall()
-        
-        # Convert to list of dictionaries
         members = [dict(row) for row in rows]
-        
+
         return True, members
-    
-    except sqlite3.DatabaseError as e:
+
+    except sqlite3.DatabaseError:
         return False, []
-    
-    except Exception as e:
+
+    except Exception:
         return False, []
-    
+
     finally:
         if conn:
             conn.close()
@@ -121,27 +111,23 @@ def get_all_members(db_path: str) -> Tuple[bool, List[Dict]]:
 
 def get_total_savings(db_path: str, member_id: int) -> Tuple[bool, float]:
     """
-    Calculate total savings for a member (Lodgments positive, Deductions negative).
+    Retrieve current savings for a member.
 
-    Returns (True, total_amount) on success or (False, 0.0) on error.
+    Returns (True, amount) on success or (False, 0.0) on error.
     """
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("PRAGMA foreign_keys = ON;")
         cursor.execute(
             """
-            SELECT COALESCE(SUM(CASE WHEN type = 'Lodgment' THEN amount
-                                      WHEN type = 'Deduction' THEN -amount
-                                      ELSE 0 END), 0.0) as total
-            FROM Savings
+            SELECT COALESCE(current_savings, 0.0)
+            FROM members
             WHERE member_id = ?
             """,
-            (member_id,)
+            (member_id,),
         )
         row = cursor.fetchone()
-
         total = float(row[0]) if row and row[0] is not None else 0.0
         return True, total
 
@@ -149,7 +135,7 @@ def get_total_savings(db_path: str, member_id: int) -> Tuple[bool, float]:
         return False, 0.0
     except Exception:
         return False, 0.0
-    
+
     finally:
         if conn:
             conn.close()
@@ -157,53 +143,18 @@ def get_total_savings(db_path: str, member_id: int) -> Tuple[bool, float]:
 
 def get_system_settings(db_path: str) -> Tuple[bool, Optional[Dict]]:
     """
-    Retrieve current system settings from the SystemSettings table.
+    Retrieve system settings for loan defaults.
 
-    Returns (True, settings_dict) on success or (False, None) on error.
-    The settings dict contains: min_monthly_saving, max_loan_amount,
-    default_interest_rate, loan_multiplier, default_duration.
+    The simplified schema does not store loan settings, so defaults are returned.
     """
-    conn = None
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT min_monthly_saving, max_loan_amount, default_interest_rate,
-                   loan_multiplier, default_duration, updated_at
-            FROM SystemSettings
-            WHERE setting_id = 1
-            """
-        )
-        row = cursor.fetchone()
-
-        if row:
-            settings = dict(row)
-            # Provide sensible defaults if columns are missing (for older DBs)
-            settings.setdefault('loan_multiplier', 2.0)
-            settings.setdefault('default_duration', 24)
-            settings.setdefault('default_interest_rate', 12.0)
-            return True, settings
-        else:
-            # No settings row; return defaults
-            return True, {
-                'min_monthly_saving': 0.0,
-                'max_loan_amount': 0.0,
-                'default_interest_rate': 12.0,
-                'loan_multiplier': 2.0,
-                'default_duration': 24,
-                'updated_at': None,
-            }
-
-    except sqlite3.DatabaseError:
-        return False, None
-    except Exception:
-        return False, None
-    
-    finally:
-        if conn:
-            conn.close()
+    return True, {
+        'min_monthly_saving': 0.0,
+        'max_loan_amount': 0.0,
+        'default_interest_rate': 12.0,
+        'loan_multiplier': 2.0,
+        'default_duration': 24,
+        'updated_at': None,
+    }
 
 
 def calculate_repayment_schedule(principal: float, annual_rate: float, duration_months: int = 24) -> List[Dict]:
@@ -337,30 +288,24 @@ def apply_for_loan(
     duration: Optional[int] = None
 ) -> Tuple[bool, str]:
     """
-    Attempt to create a loan for a member, enforcing the dynamic savings-multiplier rule.
+    Update a member's total_loans balance while enforcing a savings-multiplier rule.
 
     Args:
         db_path: Path to the SQLite database.
         member_id: The member applying for the loan.
         principal: Requested loan amount.
-        interest_rate: Annual interest rate (%). If None, uses SystemSettings.default_interest_rate.
-        duration: Number of months for repayment. If None, uses SystemSettings.default_duration.
+        interest_rate: Unused (kept for compatibility).
+        duration: Unused (kept for compatibility).
 
     Returns:
         (True, success_message) on success or (False, error_message) on failure.
-        The loan record stores the actual interest_rate applied (audit trail).
     """
-    # Fetch system settings for dynamic rules (before opening main connection)
     settings_ok, settings = get_system_settings(db_path)
     if not settings_ok or settings is None:
         return False, "Failed to retrieve system settings"
 
-    # Apply defaults from settings if not provided
     loan_multiplier = float(settings.get('loan_multiplier', 2.0))
-    actual_interest_rate = interest_rate if interest_rate is not None else float(settings.get('default_interest_rate', 12.0))
-    actual_duration = duration if duration is not None else int(settings.get('default_duration', 24))
 
-    # Get total savings for validation (uses its own connection)
     ok, total_savings = get_total_savings(db_path, member_id)
     if not ok:
         return False, "Failed to calculate total savings"
@@ -371,35 +316,24 @@ def apply_for_loan(
 
     conn = None
     try:
-        # Insert loan with actual applied rate (audit trail)
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("PRAGMA foreign_keys = ON;")
         cursor.execute(
             """
-            INSERT INTO Loans (member_id, principal, interest_rate, status, date_issued)
-            VALUES (?, ?, ?, ?, ?)
+            UPDATE members
+            SET total_loans = COALESCE(total_loans, 0.0) + ?
+            WHERE member_id = ?
             """,
-            (member_id, principal, actual_interest_rate, 'Active', str(date.today())),
+            (principal, member_id),
         )
-        loan_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        conn = None  # Mark as closed before calling generate_repayment_schedule
 
-        # Generate repayment schedule using applied rate and duration
-        schedule_ok, schedule_msg = generate_repayment_schedule(
-            db_path, loan_id, principal, actual_interest_rate, months=actual_duration
-        )
-        if not schedule_ok:
-            return True, f"Loan created (ID: {loan_id}) but schedule generation failed: {schedule_msg}"
-
-        return True, f"Loan created successfully (ID: {loan_id}) at {actual_interest_rate}% for {actual_duration} months"
-
-    except sqlite3.IntegrityError as e:
-        if conn:
+        if cursor.rowcount == 0:
             conn.rollback()
-        return False, f"Integrity error: {e}"
+            return False, f"Error: Member ID {member_id} does not exist."
+
+        conn.commit()
+        return True, f"Loan recorded successfully. Amount: ₦{principal:,.2f}"
+
     except sqlite3.DatabaseError as e:
         if conn:
             conn.rollback()
@@ -408,7 +342,7 @@ def apply_for_loan(
         if conn:
             conn.rollback()
         return False, f"Unexpected error: {e}"
-    
+
     finally:
         if conn:
             conn.close()
@@ -416,37 +350,9 @@ def apply_for_loan(
 
 def get_member_loans(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
     """
-    Retrieve all loans for a member.
-
-    Returns (True, loans_list) or (False, []).
+    Return an empty list for loans history in the simplified schema.
     """
-    conn = None
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT loan_id, member_id, principal, interest_rate, status, date_issued, created_at
-            FROM Loans
-            WHERE member_id = ?
-            ORDER BY date_issued DESC
-            """,
-            (member_id,),
-        )
-        rows = cursor.fetchall()
-
-        loans = [dict(row) for row in rows]
-        return True, loans
-
-    except sqlite3.DatabaseError:
-        return False, []
-    except Exception:
-        return False, []
-    
-    finally:
-        if conn:
-            conn.close()
+    return True, []
 
 
 
@@ -467,11 +373,14 @@ def get_member_by_id(db_path: str, member_id: int) -> Tuple[bool, Optional[Dict]
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        cursor.execute("""
-            SELECT member_id, staff_number, full_name, date_joined, created_at
-            FROM Members
+        cursor.execute(
+            """
+            SELECT member_id, staff_number, full_name, phone, current_savings, total_loans
+            FROM members
             WHERE member_id = ?
-        """, (member_id,))
+            """,
+            (member_id,),
+        )
         
         row = cursor.fetchone()
         
@@ -491,11 +400,11 @@ def get_member_by_id(db_path: str, member_id: int) -> Tuple[bool, Optional[Dict]
 def get_member_by_staff_number(db_path: str, staff_number: str) -> Tuple[bool, Optional[Dict]]:
     """
     Retrieve a specific member by staff number.
-    
+
     Args:
         db_path: Path to the SQLite database file.
         staff_number: The member's staff number.
-    
+
     Returns:
         A tuple (success: bool, member: Optional[Dict])
     """
@@ -504,23 +413,25 @@ def get_member_by_staff_number(db_path: str, staff_number: str) -> Tuple[bool, O
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT member_id, staff_number, full_name, date_joined, created_at
-            FROM Members
+
+        cursor.execute(
+            """
+            SELECT member_id, staff_number, full_name, phone, current_savings, total_loans
+            FROM members
             WHERE staff_number = ?
-        """, (staff_number,))
-        
+            """,
+            (staff_number,),
+        )
+
         row = cursor.fetchone()
-        
+
         if row:
             return True, dict(row)
-        else:
-            return False, None
-    
-    except Exception as e:
         return False, None
-    
+
+    except Exception:
+        return False, None
+
     finally:
         if conn:
             conn.close()
@@ -528,72 +439,59 @@ def get_member_by_staff_number(db_path: str, staff_number: str) -> Tuple[bool, O
 
 def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tuple[bool, str]:
     """
-    Add a new savings record for a member.
-    
+    Update a member's current savings balance.
+
     Args:
         db_path: Path to the SQLite database file.
-        member_id: The ID of the member (foreign key).
+        member_id: The ID of the member.
         amount: The savings amount (positive number).
         category: Either 'Deduction' or 'Lodgment'.
-    
+
     Returns:
         A tuple (success: bool, message: str)
     """
-    # Validate inputs before opening connection
     if category not in ['Deduction', 'Lodgment']:
         return False, f"Invalid category '{category}'. Must be 'Deduction' or 'Lodgment'."
-    
+
     if amount <= 0:
         return False, "Amount must be a positive number."
-    
+
     if not isinstance(member_id, int) or member_id <= 0:
         return False, "Invalid member ID."
-    
+
+    delta = amount if category == 'Lodgment' else -amount
+
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
-        # Enable foreign keys
-        cursor.execute("PRAGMA foreign_keys = ON;")
-        
-        # Insert new savings record
-        cursor.execute("""
-            INSERT INTO Savings (member_id, amount, date, type)
-            VALUES (?, ?, ?, ?)
-        """, (
-            member_id,
-            amount,
-            str(date.today()),
-            category
-        ))
-        
-        # Get the inserted savings record ID
-        savings_id = cursor.lastrowid
-        
-        # Commit changes
-        conn.commit()
-        
-        return True, f"Savings record (ID: {savings_id}) added successfully. Amount: {amount}, Category: {category}"
-    
-    except sqlite3.IntegrityError as e:
-        if conn:
+
+        cursor.execute(
+            """
+            UPDATE members
+            SET current_savings = COALESCE(current_savings, 0.0) + ?
+            WHERE member_id = ?
+            """,
+            (delta, member_id),
+        )
+
+        if cursor.rowcount == 0:
             conn.rollback()
-        if "FOREIGN KEY constraint failed" in str(e):
             return False, f"Error: Member ID {member_id} does not exist."
-        else:
-            return False, f"Integrity error: {str(e)}"
-    
+
+        conn.commit()
+        return True, f"Savings updated successfully. Amount: {amount}, Category: {category}"
+
     except sqlite3.DatabaseError as e:
         if conn:
             conn.rollback()
         return False, f"Database error: {str(e)}"
-    
+
     except Exception as e:
         if conn:
             conn.rollback()
         return False, f"Unexpected error: {str(e)}"
-    
+
     finally:
         if conn:
             conn.close()
@@ -601,46 +499,9 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
 
 def get_member_savings(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
     """
-    Retrieve all savings records for a specific member.
-    
-    Args:
-        db_path: Path to the SQLite database file.
-        member_id: The ID of the member.
-    
-    Returns:
-        A tuple (success: bool, savings: List[Dict])
-        Each savings dict contains: savings_id, member_id, amount, date, type, created_at
+    Return an empty list for savings history in the simplified schema.
     """
-    conn = None
-    try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row  # Return rows as dictionaries
-        cursor = conn.cursor()
-        
-        # Fetch all savings records for the member, ordered by date (newest first)
-        cursor.execute("""
-            SELECT savings_id, member_id, amount, date, type, created_at
-            FROM Savings
-            WHERE member_id = ?
-            ORDER BY date DESC
-        """, (member_id,))
-        
-        rows = cursor.fetchall()
-        
-        # Convert to list of dictionaries
-        savings = [dict(row) for row in rows]
-        
-        return True, savings
-    
-    except sqlite3.DatabaseError as e:
-        return False, []
-    
-    except Exception as e:
-        return False, []
-    
-    finally:
-        if conn:
-            conn.close()
+    return True, []
 
 
 def get_society_stats(db_path: str) -> Tuple[bool, Dict]:
@@ -649,11 +510,11 @@ def get_society_stats(db_path: str) -> Tuple[bool, Dict]:
     
     Returns a dictionary containing:
     - total_members: Count of all members
-    - total_savings: Sum of all savings (Lodgments minus Deductions)
-    - total_loans_disbursed: Sum of all principal amounts in active loans
-    - total_projected_interest: Sum of all expected interest from active repayment schedules
-    - members_dividend_share: 60% of total projected interest
-    - society_dividend_share: 40% of total projected interest
+    - total_savings: Sum of all current_savings
+    - total_loans_disbursed: Sum of all total_loans
+    - total_projected_interest: Calculated interest (total_loans * interest_rate)
+    - members_dividend_share: 60% of projected interest
+    - society_dividend_share: 40% of projected interest
     
     Args:
         db_path: Path to the SQLite database file.
@@ -668,33 +529,26 @@ def get_society_stats(db_path: str) -> Tuple[bool, Dict]:
         cursor.execute("PRAGMA foreign_keys = ON;")
         
         # 1. Total Members (count of all members)
-        cursor.execute("SELECT COUNT(*) as count FROM Members")
+        cursor.execute("SELECT COUNT(*) FROM members")
         total_members = cursor.fetchone()[0] or 0
         
-        # 2. Total Savings (Lodgments positive, Deductions negative)
+        # 2. Total Savings (sum of current_savings from all members)
         cursor.execute("""
-            SELECT COALESCE(SUM(CASE WHEN type = 'Lodgment' THEN amount
-                                      WHEN type = 'Deduction' THEN -amount
-                                      ELSE 0 END), 0.0) as total
-            FROM Savings
+            SELECT COALESCE(SUM(current_savings), 0.0)
+            FROM members
         """)
         total_savings = float(cursor.fetchone()[0] or 0.0)
         
-        # 3. Total Loans Disbursed (sum of all principal amounts)
+        # 3. Total Loans Disbursed (sum of total_loans from all members)
         cursor.execute("""
-            SELECT COALESCE(SUM(principal), 0.0) as total
-            FROM Loans
-            WHERE status = 'Active'
+            SELECT COALESCE(SUM(total_loans), 0.0)
+            FROM members
         """)
         total_loans_disbursed = float(cursor.fetchone()[0] or 0.0)
         
-        # 4. Total Projected Interest (sum of interest_payment from active repayment schedules)
-        cursor.execute("""
-            SELECT COALESCE(SUM(expected_interest), 0.0) as total
-            FROM RepaymentSchedule
-            WHERE status = 'Pending'
-        """)
-        total_projected_interest = float(cursor.fetchone()[0] or 0.0)
+        # 4. Total Projected Interest (estimate: 12% of total loans by default)
+        # This is a simplified calculation; in production this would come from loan records
+        total_projected_interest = round(total_loans_disbursed * 0.12, 2)
         
         # 5. Calculate dividend shares
         members_dividend_share = round(total_projected_interest * 0.60, 2)
@@ -705,7 +559,7 @@ def get_society_stats(db_path: str) -> Tuple[bool, Dict]:
             'total_members': total_members,
             'total_savings': round(total_savings, 2),
             'total_loans_disbursed': round(total_loans_disbursed, 2),
-            'total_projected_interest': round(total_projected_interest, 2),
+            'total_projected_interest': total_projected_interest,
             'members_dividend_share': members_dividend_share,
             'society_dividend_share': society_dividend_share,
         }
