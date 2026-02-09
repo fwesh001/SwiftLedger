@@ -188,6 +188,74 @@ def get_system_settings(db_path: str) -> Tuple[bool, Optional[Dict]]:
         return False, None
 
 
+def calculate_repayment_schedule(principal: float, annual_rate: float, duration_months: int = 24) -> List[Dict]:
+    """
+    Calculate a repayment schedule with the following rules:
+    - Month 1: principal_payment = 0, interest on full principal (interest-only month)
+    - Months 2 to duration_months: equal principal payments with interest on remaining balance
+
+    Args:
+        principal: The loan principal amount.
+        annual_rate: Annual interest rate as a percentage (e.g., 12 for 12%).
+        duration_months: Total number of months (default 24).
+
+    Returns:
+        A list of dictionaries, each containing:
+        - month_number
+        - principal_payment
+        - interest_payment
+        - total_payment
+        - remaining_balance
+    """
+    schedule = []
+    monthly_rate = annual_rate / 100.0 / 12.0
+    remaining_balance = principal
+
+    # Number of principal-paying months (excludes the interest-only first month)
+    principal_paying_months = duration_months - 1
+    if principal_paying_months <= 0:
+        principal_paying_months = 1  # Edge case: if duration is 1, pay it all
+
+    # Calculate base monthly principal payment (rounded to 2 decimals)
+    base_principal_payment = round(principal / principal_paying_months, 2)
+
+    for month in range(1, duration_months + 1):
+        if month == 1:
+            # Month 1: interest-only
+            principal_payment = 0.0
+            interest_payment = round(remaining_balance * monthly_rate, 2)
+        else:
+            # Months 2+: principal + interest on remaining balance
+            # Last month: pay off the exact remaining balance to avoid rounding errors
+            if month == duration_months:
+                principal_payment = round(remaining_balance, 2)
+            else:
+                principal_payment = base_principal_payment
+
+            interest_payment = round(remaining_balance * monthly_rate, 2)
+            remaining_balance -= principal_payment
+
+        total_payment = round(principal_payment + interest_payment, 2)
+
+        # Ensure remaining balance doesn't go negative due to rounding
+        if remaining_balance < 0:
+            remaining_balance = 0.0
+
+        schedule.append({
+            'month_number': month,
+            'principal_payment': principal_payment,
+            'interest_payment': interest_payment,
+            'total_payment': total_payment,
+            'remaining_balance': round(remaining_balance, 2),
+        })
+
+    # Final sanity check: force last month's remaining balance to exactly 0
+    if schedule:
+        schedule[-1]['remaining_balance'] = 0.0
+
+    return schedule
+
+
 def generate_repayment_schedule(db_path: str, loan_id: int, principal: float, interest_rate: float, months: int = 24) -> Tuple[bool, str]:
     """
     Generate a simple repayment schedule for a loan.
