@@ -4,7 +4,7 @@ Contains the sidebar navigation and stacked widget for multiple pages.
 """
 
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame,
+    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame,
     QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox,
     QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog, QListWidget
