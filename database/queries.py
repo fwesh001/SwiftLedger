@@ -479,6 +479,25 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
             conn.rollback()
             return False, f"Error: Member ID {member_id} does not exist."
 
+        cursor.execute(
+            """
+            SELECT COALESCE(current_savings, 0.0)
+            FROM members
+            WHERE member_id = ?
+            """,
+            (member_id,),
+        )
+        row = cursor.fetchone()
+        running_balance = float(row[0]) if row and row[0] is not None else 0.0
+
+        cursor.execute(
+            """
+            INSERT INTO savings_transactions (member_id, trans_type, amount, running_balance)
+            VALUES (?, ?, ?, ?)
+            """,
+            (member_id, category, amount, running_balance),
+        )
+
         conn.commit()
         return True, f"Savings updated successfully. Amount: {amount}, Category: {category}"
 
@@ -499,9 +518,35 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
 
 def get_member_savings(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
     """
-    Return an empty list for savings history in the simplified schema.
+    Retrieve the last 10 savings transactions for a member.
     """
-    return True, []
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT id, trans_date, trans_type, amount, running_balance
+            FROM savings_transactions
+            WHERE member_id = ?
+            ORDER BY id DESC
+            LIMIT 10
+            """,
+            (member_id,),
+        )
+
+        rows = cursor.fetchall()
+        return True, [dict(row) for row in rows]
+
+    except sqlite3.DatabaseError:
+        return False, []
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
 
 
 def get_society_stats(db_path: str) -> Tuple[bool, Dict]:
