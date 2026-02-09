@@ -22,11 +22,12 @@ from database.queries import (
     add_member, get_all_members, get_member_by_staff_number,
     add_saving, get_total_savings, get_member_savings, get_system_settings,
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
-    get_society_stats, check_overdue_loans
+    get_society_stats, check_overdue_loans, delete_member,
 )
 from ui.audit_page import AuditLogPage
 from ui.about_page import AboutPage
 from ui.settings_page import SettingsPage
+from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
 
 
@@ -150,6 +151,25 @@ class DashboardPage(QWidget):
 
         main_layout.addLayout(alerts_row)
 
+        # ── Quick Start Guide ───────────────────────────────────────
+        help_group = QGroupBox("Quick Start Guide")
+        help_group.setFont(QFont("Arial", 12))
+        help_layout = QVBoxLayout(help_group)
+        help_items = [
+            "1. Register members on the Members page (Staff Number + Name).",
+            "2. Post savings via the Savings page (Lodgment / Deduction).",
+            "3. Apply for loans on the Loans page — eligibility is 2× savings.",
+            "4. Check overdue alerts above, or toggle them in Settings.",
+            "5. Export branded PDFs from the Reports page.",
+            "6. All actions are tracked — review them on the Audit Logs page.",
+        ]
+        for item in help_items:
+            lbl = QLabel(item)
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet("font-size: 11px; padding: 2px 0;")
+            help_layout.addWidget(lbl)
+        main_layout.addWidget(help_group)
+
         # ── Status bar ──────────────────────────────────────────────
         self.lbl_status = QLabel("Last refreshed: —")
         self.lbl_status.setStyleSheet("color: #7f8c8d; font-size: 11px;")
@@ -230,6 +250,7 @@ class DashboardPage(QWidget):
 
         settings_ok, settings = get_system_settings(self.db_path)
         show_charts = bool(settings.get('show_charts', 0)) if settings_ok and settings else False
+        show_alerts = bool(settings.get('show_alerts', 1)) if settings_ok and settings else True
 
         # Stat cards
         self.card_members[2].setText(str(stats.get('total_members', 0)))
@@ -245,7 +266,7 @@ class DashboardPage(QWidget):
             f"₦{stats.get('society_dividend_share', 0):,.2f}"
         )
 
-        self._update_overdue_alerts()
+        self._update_overdue_alerts(show_alerts)
         self._update_financial_health_chart(stats, show_charts)
 
         # Timestamp
@@ -254,9 +275,12 @@ class DashboardPage(QWidget):
             f"Last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
-    def _update_overdue_alerts(self) -> None:
-        ok, overdue = check_overdue_loans(self.db_path)
+    def _update_overdue_alerts(self, show_alerts: bool = True) -> None:
         self.list_overdue.clear()
+        if not show_alerts:
+            self.list_overdue.addItem("Alerts disabled (enable in Settings)")
+            return
+        ok, overdue = check_overdue_loans(self.db_path)
         if not ok:
             self.list_overdue.addItem("Failed to load alerts")
             return
@@ -387,14 +411,30 @@ class MembersPage(QWidget):
         main_layout.addWidget(table_title)
         
         self.table_members = QTableWidget()
-        self.table_members.setColumnCount(5)
+        self.table_members.setColumnCount(6)
         self.table_members.setHorizontalHeaderLabels([
-            "Staff Number", "Full Name", "Phone", "Current Savings", "Total Loans"
+            "Staff Number", "Full Name", "Phone", "Current Savings", "Total Loans", "ID"
         ])
         self.table_members.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_members.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_members.horizontalHeader().setStretchLastSection(True)
+        self.table_members.setColumnHidden(5, True)  # Hide member_id column
         main_layout.addWidget(self.table_members)
+
+        # Delete button
+        del_row = QHBoxLayout()
+        del_row.addStretch()
+        self.btn_delete = QPushButton("Delete Selected Member")
+        self.btn_delete.setMinimumHeight(36)
+        self.btn_delete.setFont(QFont("Arial", 10))
+        self.btn_delete.setStyleSheet(
+            "QPushButton { background-color: #c0392b; color: white; "
+            "border-radius: 5px; padding: 8px 16px; font-weight: bold; } "
+            "QPushButton:hover { background-color: #e74c3c; }"
+        )
+        self.btn_delete.clicked.connect(self._delete_selected_member)
+        del_row.addWidget(self.btn_delete)
+        main_layout.addLayout(del_row)
         
         self.setLayout(main_layout)
         
@@ -471,9 +511,45 @@ class MembersPage(QWidget):
                 loans_item = QTableWidgetItem(f"₦{loans:,.2f}")
                 loans_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 self.table_members.setItem(row_idx, 4, loans_item)
+
+                # Hidden member_id
+                id_item = QTableWidgetItem(str(member.get('member_id', '')))
+                self.table_members.setItem(row_idx, 5, id_item)
         
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load members: {str(e)}")
+
+    def _delete_selected_member(self) -> None:
+        """Delete the currently selected member after confirmation."""
+        row = self.table_members.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "No Selection", "Select a member row first.")
+            return
+
+        id_item = self.table_members.item(row, 5)
+        name_item = self.table_members.item(row, 1)
+        if not id_item:
+            return
+
+        member_id = int(id_item.text())
+        member_name = name_item.text() if name_item else "Unknown"
+
+        reply = QMessageBox.question(
+            self, "Confirm Deletion",
+            f"Delete member '{member_name}' and ALL related transactions/loans?\n\n"
+            "This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        ok, msg = delete_member(self.db_path, member_id)
+        if ok:
+            QMessageBox.information(self, "Deleted", msg)
+            self.load_data()
+        else:
+            QMessageBox.critical(self, "Error", msg)
 
 
 class SavingsPage(QWidget):
@@ -1294,6 +1370,7 @@ class MainWindow(QMainWindow):
         self.btn_members = QPushButton("Members")
         self.btn_savings = QPushButton("Savings")
         self.btn_loans = QPushButton("Loans")
+        self.btn_reports = QPushButton("Reports")
         self.btn_audit = QPushButton("Audit Logs")
         self.btn_settings = QPushButton("Settings")
         self.btn_about = QPushButton("About")
@@ -1303,6 +1380,7 @@ class MainWindow(QMainWindow):
             self.btn_members,
             self.btn_savings,
             self.btn_loans,
+            self.btn_reports,
             self.btn_audit,
             self.btn_settings,
             self.btn_about,
@@ -1321,23 +1399,28 @@ class MainWindow(QMainWindow):
         return sidebar
     
     def create_pages(self) -> None:
-        """Create placeholder pages and add them to the stacked widget."""
+        """Create all pages and add them to the stacked widget."""
         
         self.dashboard_page = DashboardPage(self.db_path)
         self.members_page = MembersPage(self.db_path)
         self.savings_page = SavingsPage(self.db_path)
         self.loans_page = LoansPage(self.db_path)
+        self.reports_page = ReportsPage(self.db_path)
         self.audit_page = AuditLogPage(self.db_path)
         self.settings_page = SettingsPage(self.db_path)
         self.about_page = AboutPage(self.db_path)
+
+        # Connect settings signal for live theme/scale updates
+        self.settings_page.settings_changed.connect(self.apply_stylesheet)
         
-        self.stacked_widget.addWidget(self.dashboard_page)
-        self.stacked_widget.addWidget(self.members_page)
-        self.stacked_widget.addWidget(self.savings_page)
-        self.stacked_widget.addWidget(self.loans_page)
-        self.stacked_widget.addWidget(self.audit_page)
-        self.stacked_widget.addWidget(self.settings_page)
-        self.stacked_widget.addWidget(self.about_page)
+        self.stacked_widget.addWidget(self.dashboard_page)   # 0
+        self.stacked_widget.addWidget(self.members_page)     # 1
+        self.stacked_widget.addWidget(self.savings_page)     # 2
+        self.stacked_widget.addWidget(self.loans_page)       # 3
+        self.stacked_widget.addWidget(self.reports_page)     # 4
+        self.stacked_widget.addWidget(self.audit_page)       # 5
+        self.stacked_widget.addWidget(self.settings_page)    # 6
+        self.stacked_widget.addWidget(self.about_page)       # 7
         
         # Set default page
         self.stacked_widget.setCurrentIndex(0)
