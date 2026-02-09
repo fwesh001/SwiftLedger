@@ -9,7 +9,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QCheckBox, QSlider, QMessageBox,
-    QSpinBox, QComboBox, QScrollArea, QFrame,
+    QSpinBox, QComboBox, QScrollArea, QFrame, QLineEdit,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
@@ -17,6 +17,7 @@ from PySide6.QtGui import QFont
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.db_init import save_settings, log_event
 from database.queries import get_system_settings
+from security import hash_credential
 
 
 class SettingsPage(QWidget):
@@ -28,6 +29,7 @@ class SettingsPage(QWidget):
     def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
         self.db_path = db_path
+        self.current_auth_hash = ""
         self._build_ui()
         self._load_current_settings()
 
@@ -107,6 +109,24 @@ class SettingsPage(QWidget):
         sec_form.setContentsMargins(14, 20, 14, 14)
         sec_form.setSpacing(16)
 
+        # Security mode
+        self.combo_security_mode = QComboBox()
+        self.combo_security_mode.addItems(["PIN", "Password", "System Auth"])
+        self.combo_security_mode.setFont(QFont("Arial", 11))
+        self.combo_security_mode.currentTextChanged.connect(self._sync_security_placeholders)
+        sec_form.addRow("Security Mode:", self.combo_security_mode)
+
+        # New credential fields
+        self.input_new_credential = QLineEdit()
+        self.input_new_credential.setEchoMode(QLineEdit.EchoMode.Password)
+        self.input_new_credential.setMinimumHeight(34)
+        sec_form.addRow("New Credential:", self.input_new_credential)
+
+        self.input_confirm_credential = QLineEdit()
+        self.input_confirm_credential.setEchoMode(QLineEdit.EchoMode.Password)
+        self.input_confirm_credential.setMinimumHeight(34)
+        sec_form.addRow("Confirm Credential:", self.input_confirm_credential)
+
         timeout_row = QHBoxLayout()
         self.slider_timeout = QSlider(Qt.Orientation.Horizontal)
         self.slider_timeout.setRange(1, 60)
@@ -165,6 +185,24 @@ class SettingsPage(QWidget):
         self.slider_timeout.setValue(value)
         self.slider_timeout.blockSignals(False)
 
+    def _sync_security_placeholders(self) -> None:
+        mode = self.combo_security_mode.currentText().lower().replace(" ", "_")
+        if mode == "pin":
+            self.input_new_credential.setPlaceholderText("4-6 digit PIN")
+            self.input_confirm_credential.setPlaceholderText("Re-enter PIN")
+            self.input_new_credential.setEnabled(True)
+            self.input_confirm_credential.setEnabled(True)
+        elif mode == "password":
+            self.input_new_credential.setPlaceholderText("New password (min 6 chars)")
+            self.input_confirm_credential.setPlaceholderText("Re-enter password")
+            self.input_new_credential.setEnabled(True)
+            self.input_confirm_credential.setEnabled(True)
+        else:
+            self.input_new_credential.setPlaceholderText("Not required for System Auth")
+            self.input_confirm_credential.setPlaceholderText("Not required for System Auth")
+            self.input_new_credential.setEnabled(False)
+            self.input_confirm_credential.setEnabled(False)
+
     # ── Load / Save ──────────────────────────────────────────────────
 
     def _load_current_settings(self) -> None:
@@ -188,14 +226,51 @@ class SettingsPage(QWidget):
         self.slider_timeout.setValue(timeout)
         self.spin_timeout.setValue(timeout)
 
+        self.current_auth_hash = str(settings.get("auth_hash") or "")
+        mode = str(settings.get("security_mode") or "pin").lower().replace(" ", "_")
+        mode_label = "System Auth" if mode == "system_auth" else mode.capitalize()
+        idx = self.combo_security_mode.findText(mode_label)
+        if idx >= 0:
+            self.combo_security_mode.setCurrentIndex(idx)
+        self._sync_security_placeholders()
+
     def _apply_settings(self) -> None:
+        mode = self.combo_security_mode.currentText().lower().replace(" ", "_")
+        new_cred = self.input_new_credential.text().strip()
+        confirm = self.input_confirm_credential.text().strip()
+
+        # Validate credential change if provided or required
+        if mode in ("pin", "password"):
+            if not self.current_auth_hash and not new_cred:
+                QMessageBox.warning(
+                    self, "Credential Required",
+                    "Please set a credential for the selected security mode."
+                )
+                return
+            if new_cred or confirm:
+                if new_cred != confirm:
+                    QMessageBox.warning(self, "Mismatch", "Credential confirmation does not match.")
+                    return
+                if mode == "pin":
+                    if not new_cred.isdigit() or not (4 <= len(new_cred) <= 6):
+                        QMessageBox.warning(self, "Invalid PIN", "PIN must be 4-6 digits.")
+                        return
+                if mode == "password":
+                    if len(new_cred) < 6:
+                        QMessageBox.warning(self, "Weak Password", "Password must be at least 6 characters.")
+                        return
+
         data = {
             'show_charts': 1 if self.chk_charts.isChecked() else 0,
             'show_alerts': 1 if self.chk_alerts.isChecked() else 0,
             'theme': self.combo_theme.currentText().lower(),
             'text_scale': round(self.slider_scale.value() / 100.0, 2),
             'timeout_minutes': self.spin_timeout.value(),
+            'security_mode': mode,
         }
+
+        if new_cred and mode in ("pin", "password"):
+            data['auth_hash'] = hash_credential(new_cred)
 
         try:
             save_settings(data, self.db_path)
@@ -205,7 +280,8 @@ class SettingsPage(QWidget):
                 description=(
                     f"Preferences updated (theme={data['theme']}, "
                     f"scale={data['text_scale']}, charts={data['show_charts']}, "
-                    f"alerts={data['show_alerts']}, timeout={data['timeout_minutes']})"
+                    f"alerts={data['show_alerts']}, timeout={data['timeout_minutes']}, "
+                    f"security_mode={data['security_mode']})"
                 ),
                 status="Success",
                 db_path=self.db_path,
