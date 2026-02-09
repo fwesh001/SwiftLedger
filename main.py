@@ -2,6 +2,7 @@ import sys
 import os
 import sqlite3
 from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtGui import QIcon
 
 # 1. Add the project directory to the path so Python finds your folders
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -12,6 +13,7 @@ from database.db_init import init_db
 from ui.login_screen import LoginScreen
 from ui.main_window import MainWindow
 from ui.wizard import FirstRunWizard
+from utils import get_asset_path
 
 
 class AppController:
@@ -68,6 +70,17 @@ class AppController:
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    # ── Load global stylesheet from assets/ ─────────────────────────
+    qss_path = get_asset_path(os.path.join("assets", "styles.qss"))
+    if os.path.isfile(qss_path):
+        with open(qss_path, "r", encoding="utf-8") as fh:
+            app.setStyleSheet(fh.read())
+
+    # ── Set application window icon ─────────────────────────────────
+    icon_path = get_asset_path(os.path.join("assets", "app_icon.ico"))
+    if os.path.isfile(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
     # 3. Launch with first-run + auth gate
     controller = AppController(app)
