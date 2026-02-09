@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame, 
     QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox,
-    QAbstractItemView, QDoubleSpinBox
+    QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QFont
@@ -19,7 +19,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.queries import (
     add_member, get_all_members, get_member_by_staff_number, 
-    add_saving, get_member_savings
+    add_saving, get_member_savings, get_total_savings, get_system_settings,
+    apply_for_loan, get_member_loans, calculate_repayment_schedule
 )
 
 
@@ -486,18 +487,441 @@ class SavingsPage(QWidget):
 
 
 class LoansPage(QWidget):
-    """Placeholder page for Loans management."""
+    """Page for Loans management with eligibility checking, application, and schedule preview."""
     
-    def __init__(self):
+    def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
-        layout = QVBoxLayout()
-        label = QLabel("Loans Page")
-        font = QFont("Arial", 18)
-        font.setBold(True)
-        label.setFont(font)
-        layout.addWidget(label)
-        layout.addStretch()
-        self.setLayout(layout)
+        self.db_path = db_path
+        self.current_member_id = None
+        self.current_member_name = None
+        self.max_eligible_amount = 0.0
+        self.total_savings = 0.0
+        self.loan_multiplier = 2.0
+        self.default_interest_rate = 12.0
+        self.default_duration = 24
+        
+        # Create main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
+        
+        # Title
+        title = QLabel("Loan Management")
+        title_font = QFont("Arial", 18)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        main_layout.addWidget(title)
+        
+        # Search Section
+        search_group = QGroupBox("Find Member")
+        search_font = QFont("Arial", 10)
+        search_font.setBold(True)
+        search_group.setFont(search_font)
+        search_layout = QHBoxLayout()
+        
+        search_label = QLabel("Staff Number:")
+        self.input_search = QLineEdit()
+        self.input_search.setPlaceholderText("e.g., EMP001")
+        self.btn_search = QPushButton("Search")
+        self.btn_search.setMinimumWidth(100)
+        self.btn_search.clicked.connect(self.search_member)
+        
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.input_search)
+        search_layout.addWidget(self.btn_search)
+        search_layout.addStretch()
+        search_group.setLayout(search_layout)
+        main_layout.addWidget(search_group)
+        
+        # Eligibility Section
+        eligibility_group = QGroupBox("Eligibility Information")
+        eligibility_font = QFont("Arial", 10)
+        eligibility_font.setBold(True)
+        eligibility_group.setFont(eligibility_font)
+        eligibility_layout = QHBoxLayout()
+        
+        self.label_member_name = QLabel("Member: Not Selected")
+        self.label_member_name.setFont(QFont("Arial", 11))
+        
+        self.label_total_savings = QLabel("Total Savings: ₦0.00")
+        self.label_total_savings.setFont(QFont("Arial", 11))
+        
+        self.label_max_eligible = QLabel("Max Eligible Loan: ₦0.00")
+        max_eligible_font = QFont("Arial", 11)
+        max_eligible_font.setBold(True)
+        self.label_max_eligible.setFont(max_eligible_font)
+        
+        eligibility_layout.addWidget(self.label_member_name)
+        eligibility_layout.addStretch()
+        eligibility_layout.addWidget(self.label_total_savings)
+        eligibility_layout.addStretch()
+        eligibility_layout.addWidget(self.label_max_eligible)
+        eligibility_group.setLayout(eligibility_layout)
+        main_layout.addWidget(eligibility_group)
+        
+        # Loan Application Form
+        form_group = QGroupBox("Loan Application")
+        form_font = QFont("Arial", 10)
+        form_font.setBold(True)
+        form_group.setFont(form_font)
+        form_layout = QFormLayout()
+        
+        # Principal input
+        self.input_principal = QDoubleSpinBox()
+        self.input_principal.setRange(0, 10_000_000)
+        self.input_principal.setValue(0)
+        self.input_principal.setDecimals(2)
+        self.input_principal.setSingleStep(1000)
+        self.input_principal.setPrefix("₦")
+        self.input_principal.valueChanged.connect(self.validate_principal)
+        form_layout.addRow("Requested Principal:", self.input_principal)
+        
+        # Interest rate input
+        self.input_interest_rate = QDoubleSpinBox()
+        self.input_interest_rate.setRange(0, 100)
+        self.input_interest_rate.setValue(self.default_interest_rate)
+        self.input_interest_rate.setDecimals(2)
+        self.input_interest_rate.setSingleStep(0.5)
+        self.input_interest_rate.setSuffix("%")
+        form_layout.addRow("Annual Interest Rate:", self.input_interest_rate)
+        
+        # Duration input
+        self.input_duration = QSpinBox()
+        self.input_duration.setRange(1, 60)
+        self.input_duration.setValue(self.default_duration)
+        self.input_duration.setSuffix(" months")
+        form_layout.addRow("Duration:", self.input_duration)
+        
+        form_group.setLayout(form_layout)
+        main_layout.addWidget(form_group)
+        
+        # Validation and Preview Section
+        button_layout = QHBoxLayout()
+        
+        self.btn_validate = QPushButton("Validate Loan")
+        self.btn_validate.setMinimumHeight(40)
+        btn_font = QFont("Arial", 10)
+        btn_font.setBold(True)
+        self.btn_validate.setFont(btn_font)
+        self.btn_validate.clicked.connect(self.validate_loan)
+        self.btn_validate.setEnabled(False)
+        button_layout.addWidget(self.btn_validate)
+        
+        self.btn_preview = QPushButton("Preview Schedule")
+        self.btn_preview.setMinimumHeight(40)
+        self.btn_preview.setFont(btn_font)
+        self.btn_preview.clicked.connect(self.show_schedule_preview)
+        self.btn_preview.setEnabled(False)
+        button_layout.addWidget(self.btn_preview)
+        
+        button_layout.addStretch()
+        
+        self.btn_submit = QPushButton("Submit Loan")
+        self.btn_submit.setMinimumHeight(40)
+        self.btn_submit.setFont(btn_font)
+        self.btn_submit.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 10px;
+            }
+            QPushButton:hover:!disabled {
+                background-color: #2ecc71;
+            }
+            QPushButton:pressed:!disabled {
+                background-color: #229954;
+            }
+            QPushButton:disabled {
+                background-color: #888888;
+                color: #cccccc;
+            }
+        """)
+        self.btn_submit.clicked.connect(self.submit_loan)
+        self.btn_submit.setEnabled(False)
+        button_layout.addWidget(self.btn_submit)
+        
+        main_layout.addLayout(button_layout)
+        
+        # Validation Status Label
+        self.label_validation_status = QLabel("")
+        self.label_validation_status.setFont(QFont("Arial", 9))
+        main_layout.addWidget(self.label_validation_status)
+        
+        # Active Loans Table
+        loans_title = QLabel("Active Loans")
+        loans_font = QFont("Arial", 12)
+        loans_font.setBold(True)
+        loans_title.setFont(loans_font)
+        main_layout.addWidget(loans_title)
+        
+        self.table_loans = QTableWidget()
+        self.table_loans.setColumnCount(5)
+        self.table_loans.setHorizontalHeaderLabels([
+            "Loan ID", "Principal", "Interest Rate", "Status", "Date Issued"
+        ])
+        self.table_loans.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_loans.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table_loans.horizontalHeader().setStretchLastSection(True)
+        main_layout.addWidget(self.table_loans)
+        
+        self.setLayout(main_layout)
+        
+        # Load system settings
+        self.load_system_settings()
+    
+    def load_system_settings(self) -> None:
+        """Load system settings for loan defaults."""
+        ok, settings = get_system_settings(self.db_path)
+        if ok and settings:
+            self.loan_multiplier = float(settings.get('loan_multiplier', 2.0))
+            self.default_interest_rate = float(settings.get('default_interest_rate', 12.0))
+            self.default_duration = int(settings.get('default_duration', 24))
+            self.input_interest_rate.setValue(self.default_interest_rate)
+            self.input_duration.setValue(self.default_duration)
+    
+    def search_member(self) -> None:
+        """Search for a member by staff number."""
+        staff_number = self.input_search.text().strip()
+        
+        if not staff_number:
+            QMessageBox.warning(self, "Invalid Input", "Please enter a staff number.")
+            return
+        
+        success, member = get_member_by_staff_number(self.db_path, staff_number)
+        
+        if not success or not member:
+            QMessageBox.warning(self, "Not Found", f"No member found with staff number '{staff_number}'.")
+            self.current_member_id = None
+            self.current_member_name = None
+            self.label_member_name.setText("Member: Not Selected")
+            self.label_total_savings.setText("Total Savings: ₦0.00")
+            self.label_max_eligible.setText("Max Eligible Loan: ₦0.00")
+            self.table_loans.setRowCount(0)
+            self.btn_validate.setEnabled(False)
+            self.btn_preview.setEnabled(False)
+            self.btn_submit.setEnabled(False)
+            return
+        
+        self.current_member_id = member['member_id']
+        self.current_member_name = member['full_name']
+        
+        # Get total savings
+        ok, total_savings = get_total_savings(self.db_path, self.current_member_id)
+        if ok:
+            self.total_savings = total_savings
+        else:
+            self.total_savings = 0.0
+        
+        # Update display
+        self.max_eligible_amount = self.loan_multiplier * self.total_savings
+        self.label_member_name.setText(f"Member: {self.current_member_name}")
+        self.label_total_savings.setText(f"Total Savings: ₦{self.total_savings:,.2f}")
+        self.label_max_eligible.setText(f"Max Eligible Loan: ₦{self.max_eligible_amount:,.2f}")
+        
+        # Load active loans
+        self.load_active_loans()
+        
+        # Enable validation and preview buttons
+        self.btn_validate.setEnabled(True)
+        self.btn_preview.setEnabled(True)
+        
+        # Clear validation status
+        self.label_validation_status.setText("")
+    
+    def validate_principal(self) -> None:
+        """Real-time validation as principal amount changes."""
+        principal = self.input_principal.value()
+        
+        if self.current_member_id is None:
+            return
+        
+        if principal > self.max_eligible_amount:
+            self.btn_submit.setEnabled(False)
+            self.label_validation_status.setText(
+                f"❌ Principal exceeds limit (Max: ₦{self.max_eligible_amount:,.2f})"
+            )
+        elif principal <= 0:
+            self.btn_submit.setEnabled(False)
+            self.label_validation_status.setText("❌ Principal must be greater than 0")
+        else:
+            self.btn_submit.setEnabled(True)
+            self.label_validation_status.setText(f"✓ Principal is within eligibility limit")
+    
+    def validate_loan(self) -> None:
+        """Explicitly validate the loan application."""
+        if self.current_member_id is None:
+            QMessageBox.warning(self, "Error", "Please search for a member first.")
+            return
+        
+        principal = self.input_principal.value()
+        
+        if principal <= 0:
+            QMessageBox.warning(self, "Invalid Principal", "Principal must be greater than 0.")
+            return
+        
+        if principal > self.max_eligible_amount:
+            QMessageBox.warning(
+                self,
+                "Exceeds Limit",
+                f"Requested principal (₦{principal:,.2f}) exceeds maximum eligibility (₦{self.max_eligible_amount:,.2f})."
+            )
+            return
+        
+        QMessageBox.information(self, "Valid", "✓ Loan application is valid and ready to submit.")
+    
+    def show_schedule_preview(self) -> None:
+        """Show a preview of the repayment schedule."""
+        if self.current_member_id is None:
+            QMessageBox.warning(self, "Error", "Please search for a member first.")
+            return
+        
+        principal = self.input_principal.value()
+        interest_rate = self.input_interest_rate.value()
+        duration = self.input_duration.value()
+        
+        if principal <= 0:
+            QMessageBox.warning(self, "Invalid Principal", "Principal must be greater than 0.")
+            return
+        
+        # Calculate schedule
+        schedule = calculate_repayment_schedule(principal, interest_rate, duration)
+        
+        # Create preview dialog
+        preview_dialog = QDialog(self)
+        preview_dialog.setWindowTitle("Repayment Schedule Preview")
+        preview_dialog.setGeometry(100, 100, 900, 600)
+        
+        layout = QVBoxLayout(preview_dialog)
+        
+        # Info label
+        info_text = f"Loan: ₦{principal:,.2f} @ {interest_rate}% for {duration} months"
+        info_label = QLabel(info_text)
+        info_font = QFont("Arial", 11)
+        info_font.setBold(True)
+        info_label.setFont(info_font)
+        layout.addWidget(info_label)
+        
+        # Schedule table
+        table = QTableWidget()
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(["Month", "Principal", "Interest", "Total", "Remaining"])
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        
+        for row_idx, month_data in enumerate(schedule):
+            table.insertRow(row_idx)
+            
+            month_item = QTableWidgetItem(str(month_data['month_number']))
+            table.setItem(row_idx, 0, month_item)
+            
+            principal_item = QTableWidgetItem(f"₦{month_data['principal_payment']:,.2f}")
+            principal_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+            table.setItem(row_idx, 1, principal_item)
+            
+            interest_item = QTableWidgetItem(f"₦{month_data['interest_payment']:,.2f}")
+            interest_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+            table.setItem(row_idx, 2, interest_item)
+            
+            total_item = QTableWidgetItem(f"₦{month_data['total_payment']:,.2f}")
+            total_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+            table.setItem(row_idx, 3, total_item)
+            
+            remaining_item = QTableWidgetItem(f"₦{month_data['remaining_balance']:,.2f}")
+            remaining_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+            table.setItem(row_idx, 4, remaining_item)
+        
+        layout.addWidget(table)
+        
+        # Close button
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(preview_dialog.accept)
+        layout.addWidget(close_btn)
+        
+        preview_dialog.exec()
+    
+    def submit_loan(self) -> None:
+        """Submit the loan application."""
+        if self.current_member_id is None:
+            QMessageBox.warning(self, "Error", "Please search for a member first.")
+            return
+        
+        principal = self.input_principal.value()
+        interest_rate = self.input_interest_rate.value()
+        duration = self.input_duration.value()
+        
+        if principal <= 0:
+            QMessageBox.warning(self, "Invalid Principal", "Principal must be greater than 0.")
+            return
+        
+        # Apply for loan
+        success, message = apply_for_loan(self.db_path, self.current_member_id, principal, interest_rate, duration)
+        
+        if success:
+            QMessageBox.information(self, "Success", message)
+            # Clear form
+            self.input_principal.setValue(0)
+            self.input_interest_rate.setValue(self.default_interest_rate)
+            self.input_duration.setValue(self.default_duration)
+            # Reload active loans
+            self.load_active_loans()
+            # Reset validation status
+            self.label_validation_status.setText("")
+        else:
+            QMessageBox.critical(self, "Error", message)
+    
+    def load_active_loans(self) -> None:
+        """Load and display active loans for the current member."""
+        if self.current_member_id is None:
+            self.table_loans.setRowCount(0)
+            return
+        
+        try:
+            success, loans = get_member_loans(self.db_path, self.current_member_id)
+            
+            if not success:
+                QMessageBox.critical(self, "Error", "Failed to load loans.")
+                return
+            
+            # Clear table
+            self.table_loans.setRowCount(0)
+            
+            # Populate table
+            for row_idx, loan in enumerate(loans):
+                self.table_loans.insertRow(row_idx)
+                
+                # Loan ID
+                loan_id_item = QTableWidgetItem(str(loan['loan_id']))
+                self.table_loans.setItem(row_idx, 0, loan_id_item)
+                
+                # Principal
+                principal_item = QTableWidgetItem(f"₦{loan['principal']:,.2f}")
+                principal_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                self.table_loans.setItem(row_idx, 1, principal_item)
+                
+                # Interest Rate
+                rate_item = QTableWidgetItem(f"{loan['interest_rate']:.2f}%")
+                rate_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table_loans.setItem(row_idx, 2, rate_item)
+                
+                # Status
+                status = loan['status']
+                status_item = QTableWidgetItem(status)
+                if status == 'Active':
+                    status_item.setForeground(Qt.GlobalColor.green)
+                elif status == 'Closed':
+                    status_item.setForeground(Qt.GlobalColor.blue)
+                elif status == 'Default':
+                    status_item.setForeground(Qt.GlobalColor.red)
+                self.table_loans.setItem(row_idx, 3, status_item)
+                
+                # Date Issued
+                date_item = QTableWidgetItem(str(loan['date_issued']))
+                self.table_loans.setItem(row_idx, 4, date_item)
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load loans: {str(e)}")
 
 
 class MainWindow(QMainWindow):
@@ -585,7 +1009,7 @@ class MainWindow(QMainWindow):
         self.dashboard_page = DashboardPage()
         self.members_page = MembersPage(self.db_path)
         self.savings_page = SavingsPage(self.db_path)
-        self.loans_page = LoansPage()
+        self.loans_page = LoansPage(self.db_path)
         
         self.stacked_widget.addWidget(self.dashboard_page)
         self.stacked_widget.addWidget(self.members_page)
