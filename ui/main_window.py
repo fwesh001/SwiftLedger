@@ -11,7 +11,10 @@ from PySide6.QtWidgets import (
     QFileDialog
 )
 from PySide6.QtCore import Qt, QSize, QEvent, QTimer
-from PySide6.QtGui import QFont, QColor, QBrush
+from PySide6.QtGui import QFont, QColor, QBrush, QPixmap
+from PySide6.QtWidgets import QHeaderView
+import shutil
+from pathlib import Path
 from datetime import date
 import sys
 from pathlib import Path
@@ -697,6 +700,8 @@ class MembersPage(QWidget):
         self.table_members.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_members.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_members.horizontalHeader().setStretchLastSection(True)
+        # Ensure headers fit and columns size proportionally
+        self.table_members.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table_members.setColumnHidden(5, True)  # Hide member_id column
         self.table_members.cellDoubleClicked.connect(self._open_member_profile)
         main_layout.addWidget(self.table_members)
