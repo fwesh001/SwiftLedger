@@ -39,6 +39,23 @@ def clean_build() -> None:
             shutil.rmtree(directory)
             log(f"Removed {directory.name}", "SUCCESS")
 
+def find_nsis_compiler() -> Path | None:
+    """Locate makensis.exe from common install paths or PATH."""
+    candidates = [
+        Path("C:/Program Files (x86)/NSIS/makensis.exe"),
+        Path("C:/Program Files/NSIS/makensis.exe"),
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    in_path = shutil.which("makensis")
+    if in_path:
+        return Path(in_path)
+
+    return None
+
 def build_executable() -> bool:
     """Build the executable using PyInstaller."""
     log("Building executable with PyInstaller...")
@@ -49,15 +66,15 @@ def build_executable() -> bool:
         "--windowed",
         "--name", PROJECT_NAME,
         "--icon", str(PROJECT_ROOT / "assets" / "app_icon.ico"),
-        "--add-data", f"{PROJECT_ROOT / 'assets'}:assets",
-        "--add-data", f"{PROJECT_ROOT / 'database'}:database",
+        "--add-data", f"{PROJECT_ROOT / 'assets'};assets",
+        "--add-data", f"{PROJECT_ROOT / 'database'};database",
         "--hidden-import=PySide6",
         "--hidden-import=matplotlib",
         "--hidden-import=pandas",
         "--hidden-import=openpyxl",
         "--hidden-import=fpdf",
         "--distpath", str(DIST_DIR),
-        "--buildpath", str(BUILD_DIR),
+        "--workpath", str(BUILD_DIR),
         str(MAIN_SCRIPT),
     ]
     
@@ -155,10 +172,10 @@ SectionEnd
     
     # Attempt to compile with NSIS
     try:
-        nsis_compiler = "C:\\Program Files (x86)\\NSIS\\makensis.exe"
-        if Path(nsis_compiler).exists():
-            log("Compiling NSIS installer...")
-            subprocess.run([nsis_compiler, str(nsis_path)], check=True)
+        nsis_compiler = find_nsis_compiler()
+        if nsis_compiler:
+            log(f"Compiling NSIS installer with {nsis_compiler}...")
+            subprocess.run([str(nsis_compiler), str(nsis_path)], check=True)
             log(f"Installer created: SwiftLedger_Installer_{VERSION}.exe", "SUCCESS")
         else:
             log("NSIS compiler not found. Install NSIS to compile the installer.", "WARN")
