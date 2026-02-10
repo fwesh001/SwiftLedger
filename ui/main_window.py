@@ -1845,8 +1845,8 @@ class MainWindow(QMainWindow):
         self.savings_page = SavingsPage(self.db_path)
         self.loans_page = LoansPage(self.db_path)
         self.reports_page = ReportsPage(self.db_path)
-            # Link chart widget to reports page for PDF embedding
-            self.reports_page.set_monthly_chart(self.dashboard_page.monthly_chart)
+        # Link chart widget to reports page for PDF embedding
+        self.reports_page.set_monthly_chart(self.dashboard_page.monthly_chart)
 
         self.audit_page = AuditLogPage(self.db_path)
         self.settings_page = SettingsPage(self.db_path)
