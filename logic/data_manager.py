@@ -47,8 +47,13 @@ class BulkDataManager:
         self.db_path = db_path
 
     def generate_import_template(self, filename: str) -> bool:
-        if Workbook is None:
+        if Workbook is None or Font is None or PatternFill is None or Alignment is None:
             return False
+
+        assert Workbook is not None
+        assert Font is not None
+        assert PatternFill is not None
+        assert Alignment is not None
 
         wb = Workbook()
         ws = wb.active
@@ -119,7 +124,7 @@ class BulkDataManager:
             return 0, [{"row": 0, "name": "", "error": "pandas is not available."}]
 
         try:
-            df = pd.read_excel(filepath, engine="openpyxl")
+            df = pd.read_excel(filepath, engine="openpyxl", dtype=str)
         except Exception as exc:
             return 0, [{"row": 0, "name": "", "error": f"Unable to read Excel file: {exc}"}]
 
@@ -135,11 +140,12 @@ class BulkDataManager:
         success_count = 0
         error_log: List[Dict] = []
 
-        for idx, row in df.iterrows():
-            row_num = idx + 2
+        for row_idx in range(len(df.index)):
+            row = df.iloc[row_idx]
+            row_num = row_idx + 2
             if progress_callback is not None:
                 try:
-                    keep_going = progress_callback(idx + 1, total)
+                    keep_going = progress_callback(row_idx + 1, total)
                 except Exception:
                     keep_going = True
                 if keep_going is False:
@@ -247,7 +253,7 @@ class BulkDataManager:
         if value is None or value == "":
             return 0.0
         try:
-            return float(value)
+            return float(str(value))
         except Exception:
             return None
 
