@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout, QGridLayout,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox,
     QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog, QListWidget, QScrollArea,
-    QFileDialog
+    QFileDialog, QProgressDialog, QTextEdit
 )
 from PySide6.QtCore import Qt, QSize, QEvent, QTimer
 from PySide6.QtGui import QFont, QColor, QBrush, QPixmap
@@ -37,6 +37,7 @@ from ui.about_page import AboutPage
 from ui.settings_page import SettingsPage
 from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
+from logic.data_manager import BulkDataManager
 
 
 class DashboardPage(QWidget):
@@ -748,6 +749,30 @@ class MembersPage(QWidget):
         
         # Register button
         button_layout = QHBoxLayout()
+        self.btn_download_template = QPushButton("Download Template")
+        self.btn_download_template.setMinimumHeight(40)
+        self.btn_download_template.setFont(btn_font)
+        self.btn_download_template.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_download_template.setStyleSheet(
+            "QPushButton { background-color: #2980b9; color: white; border-radius: 5px; padding: 10px; } "
+            "QPushButton:hover { background-color: #3498db; }"
+        )
+        self.btn_download_template.clicked.connect(self._download_import_template)
+
+        self.btn_import_members = QPushButton("Import Members")
+        self.btn_import_members.setMinimumHeight(40)
+        self.btn_import_members.setFont(btn_font)
+        self.btn_import_members.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_import_members.setStyleSheet(
+            "QPushButton { background-color: #e67e22; color: white; border-radius: 5px; padding: 10px; } "
+            "QPushButton:hover { background-color: #f39c12; }"
+        )
+        self.btn_import_members.clicked.connect(self._import_members)
+
+        button_layout.addWidget(self.btn_download_template)
+        button_layout.addSpacing(8)
+        button_layout.addWidget(self.btn_import_members)
+        button_layout.addStretch()
         self.btn_register = QPushButton("Register Member")
         self.btn_register.setMinimumHeight(40)
         btn_font = QFont("Arial", 10)
@@ -769,7 +794,6 @@ class MembersPage(QWidget):
             }
         """)
         self.btn_register.clicked.connect(self.register_member)
-        button_layout.addStretch()
         button_layout.addWidget(self.btn_register, 0, Qt.AlignmentFlag.AlignRight)
         main_layout.addLayout(button_layout)
         
@@ -854,6 +878,62 @@ class MembersPage(QWidget):
             self.load_data()
         else:
             QMessageBox.critical(self, "Error", message)
+
+    def _download_import_template(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Import Template",
+            "SwiftLedger_Import_Template.xlsx",
+            "Excel Files (*.xlsx)",
+        )
+        if not path:
+            return
+
+        manager = BulkDataManager(self.db_path)
+        ok = manager.generate_import_template(path)
+        if ok:
+            QMessageBox.information(self, "Template Saved", f"Template saved to:\n{path}")
+        else:
+            QMessageBox.warning(self, "Error", "Unable to generate template. Ensure openpyxl is installed.")
+
+    def _import_members(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Import File",
+            "",
+            "Excel Files (*.xlsx *.xls)",
+        )
+        if not path:
+            return
+
+        progress = QProgressDialog("Importing members...", "Cancel", 0, 100, self)
+        progress.setWindowTitle("Bulk Import")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.setValue(0)
+
+        manager = BulkDataManager(self.db_path)
+
+        def _progress(current: int, total: int) -> bool:
+            if total > 0:
+                pct = int((current / total) * 100)
+                progress.setValue(pct)
+                progress.setLabelText(f"Processing row {current}/{total}...")
+            QApplication.processEvents()
+            return not progress.wasCanceled()
+
+        success_count, errors = manager.import_members_from_excel(path, progress_callback=_progress)
+        progress.close()
+
+        self.load_data()
+
+        if not errors:
+            QMessageBox.information(self, "Success", f"Imported {success_count} members.")
+            return
+
+        dialog = ImportErrorDialog(success_count, errors, self)
+        dialog.exec()
     
     def load_data(self) -> None:
         """Load and display all members in the table."""
@@ -989,6 +1069,64 @@ class MembersPage(QWidget):
 
         dialog = MemberProfileDialog(self.db_path, member, self)
         dialog.exec()
+
+
+class ImportErrorDialog(QDialog):
+    def __init__(self, success_count: int, errors: List[Dict], parent: QWidget = None):
+        super().__init__(parent)
+        self.setWindowTitle("Import Report")
+        self.setMinimumWidth(520)
+
+        main = QVBoxLayout(self)
+        summary = QLabel(f"Imported {success_count} members. Skipped {len(errors)} rows.")
+        summary.setFont(QFont("Arial", 11))
+        main.addWidget(summary)
+
+        self.text_area = QTextEdit()
+        self.text_area.setReadOnly(True)
+        lines = []
+        for err in errors:
+            row = err.get("row", "?")
+            name = err.get("name", "")
+            error = err.get("error", "")
+            lines.append(f"Row {row}: {name} - {error}")
+        self.text_area.setText("\n".join(lines))
+        main.addWidget(self.text_area)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch()
+        self.btn_save = QPushButton("Save Error Log")
+        self.btn_save.setMinimumHeight(34)
+        self.btn_save.setStyleSheet(
+            "QPushButton { background-color: #34495e; color: white; border-radius: 5px; padding: 6px 12px; } "
+            "QPushButton:hover { background-color: #2c3e50; }"
+        )
+        self.btn_save.clicked.connect(self._save_log)
+        self.btn_close = QPushButton("Close")
+        self.btn_close.setMinimumHeight(34)
+        self.btn_close.clicked.connect(self.accept)
+        button_row.addWidget(self.btn_save)
+        button_row.addSpacing(8)
+        button_row.addWidget(self.btn_close)
+        main.addLayout(button_row)
+
+        self.errors = errors
+
+    def _save_log(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Error Log",
+            "SwiftLedger_Import_Errors.txt",
+            "Text Files (*.txt)",
+        )
+        if not path:
+            return
+
+        ok = BulkDataManager.export_error_log(self.errors, path)
+        if ok:
+            QMessageBox.information(self, "Saved", f"Error log saved to:\n{path}")
+        else:
+            QMessageBox.warning(self, "Error", "Unable to save error log.")
 
 
 class SavingsPage(QWidget):
