@@ -64,7 +64,8 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             bank_name       TEXT DEFAULT 'UBA',
             account_no      TEXT DEFAULT '',
             department      TEXT DEFAULT 'SLT',
-            date_joined     TEXT DEFAULT (DATE('now')),
+            date_joined     TEXT,
+            avatar_path     TEXT DEFAULT '',
             current_savings REAL DEFAULT 0.0,
             total_loans     REAL DEFAULT 0.0
         );
@@ -87,6 +88,8 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             cursor.execute("ALTER TABLE members ADD COLUMN department TEXT DEFAULT 'SLT';")
         if "date_joined" not in existing_columns:
             cursor.execute("ALTER TABLE members ADD COLUMN date_joined TEXT;")
+        if "avatar_path" not in existing_columns:
+            cursor.execute("ALTER TABLE members ADD COLUMN avatar_path TEXT DEFAULT '';")
         if "current_savings" not in existing_columns:
             cursor.execute("ALTER TABLE members ADD COLUMN current_savings REAL DEFAULT 0.0;")
         if "total_loans" not in existing_columns:
