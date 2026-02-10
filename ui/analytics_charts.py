@@ -260,7 +260,7 @@ class LTSRiskGauge(QWidget):
 class MonthlyInsightDialog(QDialog):
     """Full-screen dialog showing detailed monthly financial metrics."""
 
-    def __init__(self, snapshot: dict, parent: QWidget = None):
+    def __init__(self, snapshot: dict, parent=None):
         super().__init__(parent)
         self.snapshot = snapshot
         self.setWindowTitle("Monthly Insight")
