@@ -31,6 +31,7 @@ from database.queries import (
 from logic.analytics import (
     get_monthly_snapshot, get_monthly_trend, calculate_lts_ratio, get_liquidity_status
 )
+from ui.analytics_charts import InteractiveMonthlyChart, LTSRiskGauge
 from ui.audit_page import AuditLogPage
 from ui.about_page import AboutPage
 from ui.settings_page import SettingsPage
