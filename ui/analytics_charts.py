@@ -215,7 +215,7 @@ class LTSRiskGauge(QWidget):
 
     def refresh_gauge(self, lts_ratio: float) -> None:
         """Update gauge with current LTS ratio."""
-        if not MATPLOTLIB_AVAILABLE:
+        if not MATPLOTLIB_AVAILABLE or Figure is None:
             return
 
         self.fig.clear()
@@ -236,8 +236,8 @@ class LTSRiskGauge(QWidget):
             status = 'High Risk'
 
         # Draw gauge
-        theta_range = [0, 180]
-        rad_range = [0, 1]
+        theta_range = (0, 180)
+        rad_range = (0, 1)
 
         ax.barh(0, 180, color='#34495e', alpha=0.3)
         ax.barh(0, theta, color=color, height=0.5)
