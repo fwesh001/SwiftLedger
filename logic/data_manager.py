@@ -8,24 +8,6 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Callable, Dict, List, Optional, Tuple
 
-try:
-    import pandas as pd
-except Exception:  # pragma: no cover - handled at runtime
-    pd = None
-
-try:
-    from openpyxl import Workbook
-    from openpyxl.comments import Comment
-    from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.worksheet.datavalidation import DataValidation
-except Exception:  # pragma: no cover - handled at runtime
-    Workbook = None
-    Comment = None
-    Alignment = None
-    Font = None
-    PatternFill = None
-    DataValidation = None
-
 from database.queries import add_member, get_member_by_staff_number
 
 
@@ -47,13 +29,13 @@ class BulkDataManager:
         self.db_path = db_path
 
     def generate_import_template(self, filename: str) -> bool:
-        if Workbook is None or Font is None or PatternFill is None or Alignment is None:
+        try:
+            from openpyxl import Workbook
+            from openpyxl.comments import Comment
+            from openpyxl.styles import Alignment, Font, PatternFill
+            from openpyxl.worksheet.datavalidation import DataValidation
+        except Exception:
             return False
-
-        assert Workbook is not None
-        assert Font is not None
-        assert PatternFill is not None
-        assert Alignment is not None
 
         wb = Workbook()
         ws = wb.active
@@ -77,15 +59,14 @@ class BulkDataManager:
             staff_id_cell.comment = Comment("Must be unique. Duplicate IDs will be skipped.", "SwiftLedger")
 
         # Department dropdown
-        if DataValidation is not None:
-            dept_list = ",".join(self.DEPARTMENT_OPTIONS)
-            dv_dept = DataValidation(type="list", formula1=f'"{dept_list}"', allow_blank=True)
-            ws.add_data_validation(dv_dept)
-            dv_dept.add("D2:D2000")
+        dept_list = ",".join(self.DEPARTMENT_OPTIONS)
+        dv_dept = DataValidation(type="list", formula1=f'"{dept_list}"', allow_blank=True)
+        ws.add_data_validation(dv_dept)
+        dv_dept.add("D2:D2000")
 
-            dv_account = DataValidation(type="textLength", operator="equal", formula1="10", allow_blank=True)
-            ws.add_data_validation(dv_account)
-            dv_account.add("F2:F2000")
+        dv_account = DataValidation(type="textLength", operator="equal", formula1="10", allow_blank=True)
+        ws.add_data_validation(dv_account)
+        dv_account.add("F2:F2000")
 
         # Column formatting for phone and account number
         for row in range(2, 2001):
@@ -120,7 +101,9 @@ class BulkDataManager:
         filepath: str,
         progress_callback: Optional[Callable[[int, int], bool]] = None,
     ) -> Tuple[int, List[Dict]]:
-        if pd is None:
+        try:
+            import pandas as pd
+        except Exception:
             return 0, [{"row": 0, "name": "", "error": "pandas is not available."}]
 
         try:
