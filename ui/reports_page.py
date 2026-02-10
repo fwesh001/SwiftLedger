@@ -42,7 +42,12 @@ class ReportsPage(QWidget):
     def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
         self.db_path = db_path
+        self.monthly_chart = None  # Optional chart widget for embedding in PDF
         self._build_ui()
+
+    def set_monthly_chart(self, chart_widget) -> None:
+        """Set the monthly chart widget for PDF embedding."""
+        self.monthly_chart = chart_widget
 
     # ── UI ───────────────────────────────────────────────────────────
 
@@ -551,7 +556,7 @@ class ReportsPage(QWidget):
             pass
 
     def _preview_society_pdf(self) -> None:
-        pdf = self._build_society_pdf()
+        pdf = self._build_society_pdf(self.monthly_chart)
         if pdf is None:
             return
 
@@ -602,7 +607,7 @@ class ReportsPage(QWidget):
         QMessageBox.information(self, "Exported", f"Statement saved to:\n{path}")
 
     def _generate_society_pdf(self) -> None:
-        pdf = self._build_society_pdf()
+        pdf = self._build_society_pdf(self.monthly_chart)
         if pdf is None:
             return
 
