@@ -245,7 +245,11 @@ class AuditLogPage(QWidget):
         """Replace characters not supported by core PDF fonts."""
         if not text:
             return ""
-        return text.replace("₦", "NGN ")
+        return (
+            text.replace("₦", "NGN ")
+            .replace("—", "-")
+            .replace("–", "-")
+        )
 
     def _export_reportlab(self, path: str) -> None:
         from reportlab.lib.pagesizes import A4
