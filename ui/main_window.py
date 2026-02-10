@@ -533,7 +533,8 @@ class MemberProfileDialog(QDialog):
         for field in fields:
             field.setReadOnly(not enabled)
             field.setStyleSheet(
-                "QLineEdit { background-color: #ffffff; }" if enabled else "QLineEdit { background-color: #f5f5f5; }"
+                ("QLineEdit { background-color: #ffffff; color: #2c3e50; }") if enabled
+                else ("QLineEdit { background-color: #f5f5f5; color: #2c3e50; }")
             )
 
     def _toggle_edit(self) -> None:
