@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QHeaderView
 import shutil
 from pathlib import Path
 from datetime import date
-from typing import Dict, List
+from typing import Dict, List, Optional
 import sys
 from pathlib import Path
 import time
@@ -405,15 +405,17 @@ class DashboardPage(QWidget):
     def _clear_chart_layout(self) -> None:
         while self.chart_layout.count():
             item = self.chart_layout.takeAt(0)
+            if item is None:
+                continue
             widget = item.widget()
-            if widget:
+            if widget is not None:
                 widget.setParent(None)
 
 
 class MemberProfileDialog(QDialog):
     """Dialog showing a 360-degree member profile overview."""
 
-    def __init__(self, db_path: str, member_data: dict, parent: QWidget = None):
+    def __init__(self, db_path: str, member_data: dict, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.db_path = db_path
         self.member_data = member_data
@@ -822,7 +824,7 @@ class MembersPage(QWidget):
         self.table_members.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_members.horizontalHeader().setStretchLastSection(True)
         # Ensure headers fit and columns size proportionally
-        self.table_members.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table_members.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table_members.setColumnHidden(5, True)  # Hide member_id column
         self.table_members.cellDoubleClicked.connect(self._open_member_profile)
         main_layout.addWidget(self.table_members)
@@ -1074,7 +1076,7 @@ class MembersPage(QWidget):
 
 
 class ImportErrorDialog(QDialog):
-    def __init__(self, success_count: int, errors: List[Dict], parent: QWidget = None):
+    def __init__(self, success_count: int, errors: List[Dict], parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Import Report")
         self.setMinimumWidth(520)
@@ -1872,7 +1874,9 @@ class MainWindow(QMainWindow):
         # Apply stylesheet
         self.apply_stylesheet()
 
-        QApplication.instance().installEventFilter(self)
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
         self._start_watchdog_timer()
 
     def eventFilter(self, obj, event):
