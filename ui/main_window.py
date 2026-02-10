@@ -319,6 +319,24 @@ class DashboardPage(QWidget):
             f"₦{stats.get('society_dividend_share', 0):,.2f}"
         )
 
+        # LTS Ratio
+        lts_ok, lts_ratio = calculate_lts_ratio(self.db_path)
+        if lts_ok:
+            self.lts_gauge.refresh_gauge(lts_ratio)
+
+        # Liquidity Status
+        liq_ok, liquidity = get_liquidity_status(self.db_path)
+        if liq_ok:
+            self.lbl_available_cash.setText(
+                f"Available Cash: ₦{liquidity.get('available_cash', 0):,.2f}"
+            )
+            self.lbl_outstanding_loans.setText(
+                f"Outstanding Loans: ₦{liquidity.get('outstanding_loans', 0):,.2f}"
+            )
+
+        # Monthly trends chart
+        self.monthly_chart._refresh_chart()
+
         self._update_overdue_alerts(show_alerts)
         self._update_financial_health_chart(stats, show_charts)
 
