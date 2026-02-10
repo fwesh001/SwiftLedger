@@ -392,9 +392,12 @@ class ReportsPage(QWidget):
         self._add_footer_text(pdf)
         return pdf, member
 
-    def _build_society_pdf(self):
+    def _build_society_pdf(self, monthly_chart=None):
         """
-        Build a society summary PDF in memory.
+        Build a society summary PDF in memory with optional financial health chart.
+
+        Args:
+            monthly_chart: Optional InteractiveMonthlyChart widget for embedding chart image.
 
         Returns pdf_object or None on failure.
         """
@@ -409,6 +412,14 @@ class ReportsPage(QWidget):
 
         ok_m, members = get_all_members(self.db_path)
         info = self._society_header()
+
+        # Try to capture chart if provided
+        chart_png_path = None
+        if monthly_chart is not None:
+            try:
+                chart_png_path = monthly_chart.capture_chart()
+            except Exception:
+                pass
 
         pdf = FPDF()
         pdf.set_auto_page_break(auto=True, margin=20)
@@ -431,6 +442,44 @@ class ReportsPage(QWidget):
         ]
         for line in lines:
             pdf.cell(0, 7, line, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(4)
+
+        # Embed chart if available
+        if chart_png_path and Path(chart_png_path).is_file():
+            try:
+                pdf.set_font("Helvetica", "B", 12)
+                pdf.cell(0, 8, "Monthly Trends (Savings vs Loans)", new_x="LMARGIN", new_y="NEXT")
+                pdf.image(chart_png_path, x=10, w=190)
+                pdf.ln(4)
+            except Exception:
+                pass
+
+        # Financial Health Analysis section
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(0, 8, "Financial Health Analysis", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 10)
+        
+        # Import analytics for LTS and liquidity
+        try:
+            from logic.analytics import calculate_lts_ratio, get_liquidity_status
+            lts_ok, lts_ratio = calculate_lts_ratio(self.db_path)
+            liq_ok, liq_data = get_liquidity_status(self.db_path)
+            
+            if lts_ok and liq_ok:
+                lts_status = "Low Risk" if lts_ratio <= 60 else ("Moderate Risk" if lts_ratio <= 85 else "High Risk")
+                liq_ratio = liq_data.get('liquidity_ratio', 0) if liq_ok else 0
+                
+                analysis_lines = [
+                    f"Loan-to-Savings Ratio: {lts_ratio:.1f}% ({lts_status})",
+                    f"Available Cash: NGN {liq_data.get('available_cash', 0):,.2f}",
+                    f"Outstanding Loans: NGN {liq_data.get('outstanding_loans', 0):,.2f}",
+                    f"Liquidity Ratio: {liq_ratio:.1f}%",
+                ]
+                for line in analysis_lines:
+                    pdf.cell(0, 6, line, new_x="LMARGIN", new_y="NEXT")
+        except Exception:
+            pdf.cell(0, 6, "Unable to load financial analysis data.", new_x="LMARGIN", new_y="NEXT")
+        
         pdf.ln(4)
 
         # Member roster table
@@ -463,6 +512,13 @@ class ReportsPage(QWidget):
                 for w, v in zip(col_w, vals):
                     pdf.cell(w, 6, v, border=1, fill=True)
                 pdf.ln()
+
+        # Clean up temporary chart PNG file
+        if chart_png_path and Path(chart_png_path).is_file():
+            try:
+                os.unlink(chart_png_path)
+            except OSError:
+                pass
 
         self._add_footer_text(pdf)
         return pdf
