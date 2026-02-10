@@ -693,8 +693,8 @@ def get_member_by_staff_number(db_path: str, staff_number: str) -> Tuple[bool, O
 
         cursor.execute(
             """
-                 SELECT member_id, staff_number, full_name, phone, bank_name, account_no,
-                     department, date_joined, current_savings, total_loans
+                     SELECT member_id, staff_number, full_name, phone, bank_name, account_no,
+                         department, date_joined, avatar_path, current_savings, total_loans
             FROM members
             WHERE staff_number = ?
             """,
