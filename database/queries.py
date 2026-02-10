@@ -651,8 +651,8 @@ def get_member_by_id(db_path: str, member_id: int) -> Tuple[bool, Optional[Dict]
         
         cursor.execute(
             """
-                 SELECT member_id, staff_number, full_name, phone, bank_name, account_no,
-                     department, date_joined, current_savings, total_loans
+                     SELECT member_id, staff_number, full_name, phone, bank_name, account_no,
+                         department, date_joined, avatar_path, current_savings, total_loans
             FROM members
             WHERE member_id = ?
             """,
