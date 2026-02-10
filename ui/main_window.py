@@ -28,6 +28,9 @@ from database.queries import (
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
     get_society_stats, check_overdue_loans, delete_member, update_member_profile,
 )
+from logic.analytics import (
+    get_monthly_snapshot, get_monthly_trend, calculate_lts_ratio, get_liquidity_status
+)
 from ui.audit_page import AuditLogPage
 from ui.about_page import AboutPage
 from ui.settings_page import SettingsPage
