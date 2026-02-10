@@ -181,7 +181,7 @@ def get_all_members(db_path: str) -> Tuple[bool, List[Dict]]:
             """
             SELECT
                 m.member_id, m.staff_number, m.full_name, m.phone, m.bank_name,
-                m.account_no, m.department, m.date_joined, m.current_savings, m.total_loans,
+                m.account_no, m.department, m.date_joined, m.avatar_path, m.current_savings, m.total_loans,
                 (SELECT COUNT(1) FROM loans l WHERE l.member_id = m.member_id AND l.status = 'Default')
                     AS default_loan_count,
                 (SELECT COUNT(1) FROM loans l WHERE l.member_id = m.member_id AND l.status = 'Active')
