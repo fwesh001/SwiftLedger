@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QHeaderView
 import shutil
 from pathlib import Path
 from datetime import date
+from typing import Dict, List
 import sys
 from pathlib import Path
 import time
@@ -749,6 +750,9 @@ class MembersPage(QWidget):
         
         # Register button
         button_layout = QHBoxLayout()
+        btn_font = QFont("Arial", 10)
+        btn_font.setBold(True)
+
         self.btn_download_template = QPushButton("Download Template")
         self.btn_download_template.setMinimumHeight(40)
         self.btn_download_template.setFont(btn_font)
@@ -775,8 +779,6 @@ class MembersPage(QWidget):
         button_layout.addStretch()
         self.btn_register = QPushButton("Register Member")
         self.btn_register.setMinimumHeight(40)
-        btn_font = QFont("Arial", 10)
-        btn_font.setBold(True)
         self.btn_register.setFont(btn_font)
         self.btn_register.setStyleSheet("""
             QPushButton {
