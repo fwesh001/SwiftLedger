@@ -589,6 +589,34 @@ class MemberProfileDialog(QDialog):
                 "Unable to save the PDF. If the file is open, close it and try again.",
             )
 
+    def _upload_photo(self) -> None:
+        staff = self.member_data.get('staff_number') or ''
+        dest_dir = Path(__file__).parent.parent.joinpath('assets')
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Photo", str(dest_dir), "Image Files (*.png *.jpg *.jpeg *.svg)")
+        if not file_path:
+            return
+
+        ext = Path(file_path).suffix
+        dest = dest_dir.joinpath(f"profile_{staff}{ext}")
+        try:
+            shutil.copy(file_path, str(dest))
+        except Exception as e:
+            QMessageBox.critical(self, "Upload Error", f"Failed to copy file: {e}")
+            return
+
+        rel_path = str(dest.as_posix())
+        ok, msg = update_member_profile(self.db_path, int(self.member_data.get('member_id', 0)), {'avatar_path': rel_path})
+        if not ok:
+            QMessageBox.critical(self, "Save Error", msg)
+            return
+
+        # Update UI avatar
+        self.member_data['avatar_path'] = rel_path
+        self._avatar_label.setStyleSheet(
+            f"QLabel {{ border-radius: 36px; background-image: url('{rel_path}'); background-position: center; background-repeat: no-repeat; }}"
+        )
+
 
 class MembersPage(QWidget):
     """Page for Members management with registration form and member table."""
