@@ -17,13 +17,15 @@ from PySide6.QtGui import QFont
 try:
     import matplotlib
     matplotlib.use('Qt5Agg')
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.figure import Figure
     from matplotlib.patches import Rectangle
     import matplotlib.patches as mpatches
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
+    FigureCanvas = None
+    Figure = None
 
 
 class InteractiveMonthlyChart(QWidget):
