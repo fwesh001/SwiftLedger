@@ -31,3 +31,5 @@ build/uninstall/warn-uninstall.txt
 build/uninstall/xref-uninstall.html
 setup/SwiftLedger_v1.0.exe
 setup/uninstall.exe
+SwiftLedger.spec
+SwiftLedger_Installer.nsi
