@@ -7,10 +7,11 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame,
     QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout, QGridLayout,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox,
-    QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog, QListWidget, QScrollArea
+    QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog, QListWidget, QScrollArea,
+    QFileDialog
 )
 from PySide6.QtCore import Qt, QSize, QEvent, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QColor, QBrush
 from datetime import date
 import sys
 from pathlib import Path
@@ -19,10 +20,10 @@ import time
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.queries import (
-    add_member, get_all_members, get_member_by_staff_number,
+    add_member, get_all_members, get_member_by_staff_number, get_member_by_id,
     add_saving, get_total_savings, get_member_savings, get_system_settings,
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
-    get_society_stats, check_overdue_loans, delete_member,
+    get_society_stats, check_overdue_loans, delete_member, update_member_profile,
 )
 from ui.audit_page import AuditLogPage
 from ui.about_page import AboutPage
@@ -349,6 +350,236 @@ class DashboardPage(QWidget):
                 widget.setParent(None)
 
 
+class MemberProfileDialog(QDialog):
+    """Dialog showing a 360-degree member profile overview."""
+
+    def __init__(self, db_path: str, member_data: dict, parent: QWidget = None):
+        super().__init__(parent)
+        self.db_path = db_path
+        self.member_data = member_data
+        self._is_editing = False
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        self.setWindowTitle("Member 360 Profile")
+        self.setMinimumWidth(720)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(20, 20, 20, 20)
+        outer.setSpacing(16)
+
+        # Header
+        header = QHBoxLayout()
+        avatar = QLabel("USER")
+        avatar.setFixedSize(72, 72)
+        avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        avatar.setStyleSheet(
+            "QLabel { background-color: #dfe6e9; border-radius: 36px; color: #2c3e50; "
+            "font-weight: bold; letter-spacing: 1px; }"
+        )
+        header.addWidget(avatar)
+
+        header_text = QVBoxLayout()
+        name_label = QLabel(self.member_data.get("full_name", ""))
+        name_font = QFont("Arial", 16)
+        name_font.setBold(True)
+        name_label.setFont(name_font)
+
+        staff_label = QLabel(f"Staff ID: {self.member_data.get('staff_number', '')}")
+        staff_label.setStyleSheet("color: #7f8c8d; font-size: 12px;")
+
+        header_text.addWidget(name_label)
+        header_text.addWidget(staff_label)
+        header_text.addStretch()
+        header.addLayout(header_text)
+        header.addStretch()
+        outer.addLayout(header)
+
+        # Body grid
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(20)
+
+        identity_frame = QFrame()
+        identity_frame.setStyleSheet(
+            "QFrame { border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; }"
+        )
+        identity_layout = QFormLayout(identity_frame)
+        identity_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        self.input_phone = QLineEdit(self.member_data.get("phone", ""))
+        self.input_phone.setReadOnly(True)
+
+        self.input_department = QLineEdit(self.member_data.get("department", ""))
+        self.input_department.setReadOnly(True)
+
+        seniority = self._calculate_seniority(self.member_data.get("date_joined", ""))
+        self.label_seniority = QLabel(seniority)
+        self.label_seniority.setStyleSheet(
+            "QLabel { background-color: #ecf0f1; color: #2c3e50; padding: 4px 8px; "
+            "border-radius: 10px; font-weight: bold; }"
+        )
+
+        identity_layout.addRow("Phone Number:", self.input_phone)
+        identity_layout.addRow("Department:", self.input_department)
+        identity_layout.addRow("Seniority Badge:", self.label_seniority)
+
+        bank_frame = QFrame()
+        bank_frame.setStyleSheet(
+            "QFrame { border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; }"
+        )
+        bank_layout = QFormLayout(bank_frame)
+        bank_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        self.input_bank_name = QLineEdit(self.member_data.get("bank_name", ""))
+        self.input_bank_name.setReadOnly(True)
+
+        self.input_account_no = QLineEdit(self.member_data.get("account_no", ""))
+        self.input_account_no.setReadOnly(True)
+
+        bank_layout.addRow("Bank Name:", self.input_bank_name)
+        bank_layout.addRow("Account Number:", self.input_account_no)
+
+        grid.addWidget(identity_frame, 0, 0)
+        grid.addWidget(bank_frame, 0, 1)
+        outer.addLayout(grid)
+
+        # Financial scoreboard
+        scoreboard = QFrame()
+        scoreboard.setStyleSheet(
+            "QFrame { background-color: #f7f9fb; border: 1px solid #dfe6e9; "
+            "border-radius: 10px; padding: 12px; }"
+        )
+        score_layout = QHBoxLayout(scoreboard)
+        score_layout.setSpacing(18)
+
+        savings = float(self.member_data.get("current_savings", 0.0) or 0.0)
+        loans = float(self.member_data.get("total_loans", 0.0) or 0.0)
+        net = savings - loans
+
+        score_layout.addLayout(self._make_score_block("Total Savings", f"₦{savings:,.2f}", "#27ae60"))
+        score_layout.addLayout(self._make_score_block("Total Loans", f"₦{loans:,.2f}", "#e74c3c"))
+        score_layout.addLayout(self._make_score_block("Net Position", f"₦{net:,.2f}", "#34495e"))
+
+        outer.addWidget(scoreboard)
+
+        # Actions
+        action_row = QHBoxLayout()
+        self.btn_edit = QPushButton("Edit")
+        self.btn_edit.setMinimumHeight(36)
+        self.btn_edit.setStyleSheet(
+            "QPushButton { background-color: #2980b9; color: white; border-radius: 6px; "
+            "padding: 6px 18px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #3498db; }"
+        )
+        self.btn_edit.clicked.connect(self._toggle_edit)
+
+        self.btn_export = QPushButton("Export PDF")
+        self.btn_export.setMinimumHeight(36)
+        self.btn_export.setStyleSheet(
+            "QPushButton { background-color: #2c3e50; color: white; border-radius: 6px; "
+            "padding: 6px 18px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #34495e; }"
+        )
+        self.btn_export.clicked.connect(self._export_pdf)
+
+        action_row.addStretch()
+        action_row.addWidget(self.btn_edit)
+        action_row.addWidget(self.btn_export)
+        outer.addLayout(action_row)
+
+        self._set_editable(False)
+
+    def _make_score_block(self, title: str, value: str, color: str) -> QVBoxLayout:
+        block = QVBoxLayout()
+        label_title = QLabel(title)
+        label_title.setStyleSheet("color: #7f8c8d; font-size: 10px; letter-spacing: 0.5px;")
+
+        label_value = QLabel(value)
+        value_font = QFont("Arial", 14)
+        value_font.setBold(True)
+        label_value.setFont(value_font)
+        label_value.setStyleSheet(f"color: {color};")
+
+        block.addWidget(label_title)
+        block.addWidget(label_value)
+        return block
+
+    def _calculate_seniority(self, date_joined: str) -> str:
+        try:
+            joined = date.fromisoformat(date_joined)
+        except Exception:
+            return "Unknown"
+
+        years = (date.today() - joined).days / 365.25
+        if years < 1:
+            return "0-1y"
+        if years < 3:
+            return "1-3y"
+        if years < 5:
+            return "3-5y"
+        return "5y+"
+
+    def _set_editable(self, enabled: bool) -> None:
+        fields = [self.input_phone, self.input_department, self.input_bank_name, self.input_account_no]
+        for field in fields:
+            field.setReadOnly(not enabled)
+            field.setStyleSheet(
+                "QLineEdit { background-color: #ffffff; }" if enabled else "QLineEdit { background-color: #f5f5f5; }"
+            )
+
+    def _toggle_edit(self) -> None:
+        if not self._is_editing:
+            self._is_editing = True
+            self.btn_edit.setText("Save")
+            self._set_editable(True)
+            return
+
+        updates = {
+            "phone": self.input_phone.text().strip(),
+            "department": self.input_department.text().strip(),
+            "bank_name": self.input_bank_name.text().strip(),
+            "account_no": self.input_account_no.text().strip(),
+        }
+        ok, msg = update_member_profile(self.db_path, int(self.member_data.get("member_id", 0)), updates)
+        if ok:
+            QMessageBox.information(self, "Updated", msg)
+            self.member_data.update(updates)
+            self._is_editing = False
+            self.btn_edit.setText("Edit")
+            self._set_editable(False)
+        else:
+            QMessageBox.critical(self, "Update Error", msg)
+
+    def _export_pdf(self) -> None:
+        staff_number = self.member_data.get("staff_number", "")
+        if not staff_number:
+            QMessageBox.warning(self, "Export Error", "Staff number is missing for this member.")
+            return
+
+        reports = ReportsPage(self.db_path)
+        pdf, member = reports._build_member_pdf(staff_number)
+        if pdf is None or member is None:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Member Statement",
+            f"SwiftLedger_Statement_{staff_number}.pdf",
+            "PDF Files (*.pdf)",
+        )
+        if not path:
+            return
+
+        if reports._write_pdf_to_path(pdf, path):
+            QMessageBox.information(self, "Saved", "Member statement exported successfully.")
+        else:
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                "Unable to save the PDF. If the file is open, close it and try again.",
+            )
+
+
 class MembersPage(QWidget):
     """Page for Members management with registration form and member table."""
     
@@ -384,6 +615,35 @@ class MembersPage(QWidget):
         self.input_full_name = QLineEdit()
         self.input_full_name.setPlaceholderText("e.g., John Doe")
         form_layout.addRow("Full Name:", self.input_full_name)
+
+        # Phone input
+        self.input_phone = QLineEdit()
+        self.input_phone.setPlaceholderText("e.g., +2348012345678")
+        self.input_phone.setText("+234")
+        form_layout.addRow("Phone Number:", self.input_phone)
+
+        # Bank Name input
+        self.input_bank_name = QLineEdit()
+        self.input_bank_name.setPlaceholderText("e.g., UBA")
+        self.input_bank_name.setText("UBA")
+        form_layout.addRow("Bank Name:", self.input_bank_name)
+
+        # Account Number input
+        self.input_account_no = QLineEdit()
+        self.input_account_no.setPlaceholderText("e.g., 0123456789")
+        form_layout.addRow("Account Number:", self.input_account_no)
+
+        # Department input
+        self.input_department = QLineEdit()
+        self.input_department.setPlaceholderText("e.g., SLT")
+        self.input_department.setText("SLT")
+        form_layout.addRow("Department:", self.input_department)
+
+        # Date Joined input
+        self.input_date_joined = QLineEdit()
+        self.input_date_joined.setPlaceholderText("YYYY-MM-DD")
+        self.input_date_joined.setText(date.today().isoformat())
+        form_layout.addRow("Date Joined:", self.input_date_joined)
 
         form_group.setLayout(form_layout)
         main_layout.addWidget(form_group)
@@ -421,6 +681,13 @@ class MembersPage(QWidget):
         table_font.setBold(True)
         table_title.setFont(table_font)
         main_layout.addWidget(table_title)
+
+        search_row = QHBoxLayout()
+        self.input_member_search = QLineEdit()
+        self.input_member_search.setPlaceholderText("Search by name, staff ID, or phone")
+        self.input_member_search.textChanged.connect(self._filter_members_table)
+        search_row.addWidget(self.input_member_search)
+        main_layout.addLayout(search_row)
         
         self.table_members = QTableWidget()
         self.table_members.setColumnCount(6)
@@ -431,6 +698,7 @@ class MembersPage(QWidget):
         self.table_members.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_members.horizontalHeader().setStretchLastSection(True)
         self.table_members.setColumnHidden(5, True)  # Hide member_id column
+        self.table_members.cellDoubleClicked.connect(self._open_member_profile)
         main_layout.addWidget(self.table_members)
 
         # Delete button
@@ -468,6 +736,11 @@ class MembersPage(QWidget):
         member_data = {
             'staff_number': staff_number,
             'full_name': full_name,
+            'phone': self.input_phone.text().strip(),
+            'bank_name': self.input_bank_name.text().strip(),
+            'account_no': self.input_account_no.text().strip(),
+            'department': self.input_department.text().strip(),
+            'date_joined': self.input_date_joined.text().strip(),
         }
         
         # Add member to database
@@ -476,8 +749,7 @@ class MembersPage(QWidget):
         if success:
             QMessageBox.information(self, "Success", message)
             # Clear inputs
-            self.input_staff_number.clear()
-            self.input_full_name.clear()
+            self._reset_registration_form()
             # Refresh table
             self.load_data()
         else:
@@ -516,17 +788,25 @@ class MembersPage(QWidget):
                 savings = float(member.get('current_savings', 0.0) or 0.0)
                 savings_item = QTableWidgetItem(f"₦{savings:,.2f}")
                 savings_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                savings_item.setForeground(QBrush(QColor("#2ecc71")))
                 self.table_members.setItem(row_idx, 3, savings_item)
 
                 # Total Loans
                 loans = float(member.get('total_loans', 0.0) or 0.0)
                 loans_item = QTableWidgetItem(f"₦{loans:,.2f}")
                 loans_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                if member.get('active_loan_count', 0) > 0 and loans > 0:
+                    loans_item.setForeground(QBrush(QColor("#ff6f61")))
                 self.table_members.setItem(row_idx, 4, loans_item)
 
                 # Hidden member_id
                 id_item = QTableWidgetItem(str(member.get('member_id', '')))
                 self.table_members.setItem(row_idx, 5, id_item)
+
+                if loans > savings or member.get('default_loan_count', 0) > 0:
+                    self._tint_member_row(row_idx, QColor("#f8d7da"))
+
+            self._filter_members_table(self.input_member_search.text())
         
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load members: {str(e)}")
@@ -562,6 +842,53 @@ class MembersPage(QWidget):
             self.load_data()
         else:
             QMessageBox.critical(self, "Error", msg)
+
+    def _reset_registration_form(self) -> None:
+        self.input_staff_number.clear()
+        self.input_full_name.clear()
+        self.input_phone.setText("+234")
+        self.input_bank_name.setText("UBA")
+        self.input_account_no.clear()
+        self.input_department.setText("SLT")
+        self.input_date_joined.setText(date.today().isoformat())
+
+    def _tint_member_row(self, row_idx: int, color: QColor) -> None:
+        for col in range(self.table_members.columnCount()):
+            item = self.table_members.item(row_idx, col)
+            if item:
+                item.setBackground(QBrush(color))
+
+    def _filter_members_table(self, text: str) -> None:
+        query = (text or "").lower()
+        for row in range(self.table_members.rowCount()):
+            staff_item = self.table_members.item(row, 0)
+            name_item = self.table_members.item(row, 1)
+            phone_item = self.table_members.item(row, 2)
+
+            staff_text = staff_item.text().lower() if staff_item else ""
+            name_text = name_item.text().lower() if name_item else ""
+            phone_text = phone_item.text().lower() if phone_item else ""
+
+            match = query in staff_text or query in name_text or query in phone_text
+            self.table_members.setRowHidden(row, not match)
+
+    def _open_member_profile(self, row: int, column: int) -> None:
+        id_item = self.table_members.item(row, 5)
+        if not id_item:
+            return
+
+        try:
+            member_id = int(id_item.text())
+        except ValueError:
+            return
+
+        ok, member = get_member_by_id(self.db_path, member_id)
+        if not ok or not member:
+            QMessageBox.warning(self, "Not Found", "Unable to load member profile.")
+            return
+
+        dialog = MemberProfileDialog(self.db_path, member, self)
+        dialog.exec()
 
 
 class SavingsPage(QWidget):
