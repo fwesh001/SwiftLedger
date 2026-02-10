@@ -222,11 +222,11 @@ class AuditLogPage(QWidget):
         pdf.set_font("Helvetica", "", 7)
         for log in self.all_logs:
             vals = [
-                str(log.get('timestamp', ''))[:19],
-                str(log.get('user', '')),
-                str(log.get('category', '')),
-                str(log.get('description', ''))[:60],
-                str(log.get('status', '')),
+                self._sanitize_pdf_text(str(log.get('timestamp', ''))[:19]),
+                self._sanitize_pdf_text(str(log.get('user', ''))),
+                self._sanitize_pdf_text(str(log.get('category', ''))),
+                self._sanitize_pdf_text(str(log.get('description', ''))[:60]),
+                self._sanitize_pdf_text(str(log.get('status', ''))),
             ]
             for w, v in zip(col_widths, vals):
                 pdf.cell(w, 7, v, border=1)
@@ -239,6 +239,13 @@ class AuditLogPage(QWidget):
 
         pdf.output(path)
         QMessageBox.information(self, "Exported", f"Report saved to:\n{path}")
+
+    @staticmethod
+    def _sanitize_pdf_text(text: str) -> str:
+        """Replace characters not supported by core PDF fonts."""
+        if not text:
+            return ""
+        return text.replace("₦", "NGN ")
 
     def _export_reportlab(self, path: str) -> None:
         from reportlab.lib.pagesizes import A4
