@@ -727,7 +727,7 @@ def update_member_profile(db_path: str, member_id: int, updates: Dict[str, str])
     Returns:
         A tuple (success: bool, message: str)
     """
-    allowed = {"phone", "bank_name", "account_no", "department", "date_joined"}
+    allowed = {"phone", "bank_name", "account_no", "department", "date_joined", "avatar_path"}
     filtered = {k: v for k, v in updates.items() if k in allowed}
     if not filtered:
         return False, "No valid fields to update."
