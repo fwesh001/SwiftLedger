@@ -57,27 +57,63 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
     # ── members ──────────────────────────────────────────────────────
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS members (
-            member_id      INTEGER PRIMARY KEY AUTOINCREMENT,
-            staff_number   TEXT UNIQUE,
-            full_name      TEXT NOT NULL,
-            phone          TEXT,
+            member_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            staff_number    TEXT UNIQUE,
+            full_name       TEXT NOT NULL,
+            phone           TEXT DEFAULT '+234',
+            bank_name       TEXT DEFAULT 'UBA',
+            account_no      TEXT DEFAULT '',
+            department      TEXT DEFAULT 'SLT',
+            date_joined     TEXT DEFAULT (DATE('now')),
             current_savings REAL DEFAULT 0.0,
-            total_loans    REAL DEFAULT 0.0
+            total_loans     REAL DEFAULT 0.0
         );
     """)
 
-    # Backfill columns for existing databases created before staff_number/savings/loans were added.
+    # Backfill columns for existing databases created before KYC fields were added.
     cursor.execute("PRAGMA table_info(members);")
     existing_columns = {row[1] for row in cursor.fetchall()}
-    if "staff_number" not in existing_columns:
-        cursor.execute("ALTER TABLE members ADD COLUMN staff_number TEXT;")
-    if "current_savings" not in existing_columns:
-        cursor.execute("ALTER TABLE members ADD COLUMN current_savings REAL DEFAULT 0.0;")
-    if "total_loans" not in existing_columns:
-        cursor.execute("ALTER TABLE members ADD COLUMN total_loans REAL DEFAULT 0.0;")
-    cursor.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_members_staff_number ON members(staff_number);"
-    )
+    cursor.execute("SAVEPOINT members_migration;")
+    try:
+        if "staff_number" not in existing_columns:
+            cursor.execute("ALTER TABLE members ADD COLUMN staff_number TEXT;")
+        if "phone" not in existing_columns:
+            cursor.execute("ALTER TABLE members ADD COLUMN phone TEXT DEFAULT '+234';")
+        if "bank_name" not in existing_columns:
+            cursor.execute("ALTER TABLE members ADD COLUMN bank_name TEXT DEFAULT 'UBA';")
+        if "account_no" not in existing_columns:
+            cursor.execute("ALTER TABLE members ADD COLUMN account_no TEXT DEFAULT '';")
+        if "department" not in existing_columns:
+            cursor.execute("ALTER TABLE members ADD COLUMN department TEXT DEFAULT 'SLT';")
+        if "date_joined" not in existing_columns:
+            cursor.execute("ALTER TABLE members ADD COLUMN date_joined TEXT;")
+        if "current_savings" not in existing_columns:
+            cursor.execute("ALTER TABLE members ADD COLUMN current_savings REAL DEFAULT 0.0;")
+        if "total_loans" not in existing_columns:
+            cursor.execute("ALTER TABLE members ADD COLUMN total_loans REAL DEFAULT 0.0;")
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_members_staff_number ON members(staff_number);"
+        )
+        cursor.execute("RELEASE members_migration;")
+    except sqlite3.DatabaseError:
+        cursor.execute("ROLLBACK TO members_migration;")
+        cursor.execute("RELEASE members_migration;")
+        raise
+
+    cursor.execute("PRAGMA table_info(members);")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+    if "phone" in existing_columns:
+        cursor.execute("UPDATE members SET phone = '+234' WHERE phone IS NULL OR phone = '';")
+    if "bank_name" in existing_columns:
+        cursor.execute("UPDATE members SET bank_name = 'UBA' WHERE bank_name IS NULL OR bank_name = '';")
+    if "account_no" in existing_columns:
+        cursor.execute("UPDATE members SET account_no = '' WHERE account_no IS NULL;")
+    if "department" in existing_columns:
+        cursor.execute("UPDATE members SET department = 'SLT' WHERE department IS NULL OR department = '';")
+    if "date_joined" in existing_columns:
+        cursor.execute(
+            "UPDATE members SET date_joined = DATE('now') WHERE date_joined IS NULL OR date_joined = ''"
+        )
 
     # ── audit_logs ───────────────────────────────────────────────────
     cursor.execute("""
