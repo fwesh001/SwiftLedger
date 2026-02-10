@@ -630,29 +630,34 @@ class MembersPage(QWidget):
         self.input_phone = QLineEdit()
         self.input_phone.setPlaceholderText("e.g., +2348012345678")
         self.input_phone.setText("+234")
+        self.input_phone.setStyleSheet("QLineEdit { background-color: #ffffff; color: #2c3e50; }")
         form_layout.addRow("Phone Number:", self.input_phone)
 
         # Bank Name input
         self.input_bank_name = QLineEdit()
         self.input_bank_name.setPlaceholderText("e.g., UBA")
         self.input_bank_name.setText("UBA")
+        self.input_bank_name.setStyleSheet("QLineEdit { background-color: #ffffff; color: #2c3e50; }")
         form_layout.addRow("Bank Name:", self.input_bank_name)
 
         # Account Number input
         self.input_account_no = QLineEdit()
         self.input_account_no.setPlaceholderText("e.g., 0123456789")
+        self.input_account_no.setStyleSheet("QLineEdit { background-color: #ffffff; color: #2c3e50; }")
         form_layout.addRow("Account Number:", self.input_account_no)
 
         # Department input
         self.input_department = QLineEdit()
         self.input_department.setPlaceholderText("e.g., SLT")
         self.input_department.setText("SLT")
+        self.input_department.setStyleSheet("QLineEdit { background-color: #ffffff; color: #2c3e50; }")
         form_layout.addRow("Department:", self.input_department)
 
         # Date Joined input
         self.input_date_joined = QLineEdit()
         self.input_date_joined.setPlaceholderText("YYYY-MM-DD")
         self.input_date_joined.setText(date.today().isoformat())
+        self.input_date_joined.setStyleSheet("QLineEdit { background-color: #ffffff; color: #2c3e50; }")
         form_layout.addRow("Date Joined:", self.input_date_joined)
 
         form_group.setLayout(form_layout)
