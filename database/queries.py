@@ -60,6 +60,7 @@ def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
         opening_savings = float(member_data.get('current_savings', 0.0) or 0.0)
         opening_loans = float(member_data.get('total_loans', 0.0) or 0.0)
         date_joined = member_data.get('date_joined') or date.today().isoformat()
+        trans_date = member_data.get('trans_date') or date_joined
         phone = member_data.get('phone') or '+234'
         bank_name = member_data.get('bank_name') or 'UBA'
         account_no = member_data.get('account_no') or ''
@@ -91,10 +92,10 @@ def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
         if opening_savings > 0:
             cursor.execute(
                 """
-                INSERT INTO savings_transactions (member_id, trans_type, amount, running_balance)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO savings_transactions (member_id, trans_date, trans_type, amount, running_balance)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (member_id, 'Opening Balance', opening_savings, opening_savings),
+                (member_id, trans_date, 'Opening Balance', opening_savings, opening_savings),
             )
 
         if opening_loans > 0:
@@ -108,10 +109,10 @@ def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
             due_date = (date.today() + timedelta(days=30 * duration_months)).isoformat()
             cursor.execute(
                 """
-                INSERT INTO loans (member_id, principal, interest_rate, duration_months, status, due_date)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO loans (member_id, principal, interest_rate, duration_months, status, due_date, date_issued)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (member_id, opening_loans, interest_rate, duration_months, 'Active', due_date),
+                (member_id, opening_loans, interest_rate, duration_months, 'Active', due_date, trans_date),
             )
 
         conn.commit()
