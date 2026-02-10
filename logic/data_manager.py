@@ -6,7 +6,7 @@ Provides Excel template generation and member import.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 from database.queries import add_member, get_member_by_staff_number
 
@@ -38,7 +38,7 @@ class BulkDataManager:
             return False
 
         wb = Workbook()
-        ws = wb.active
+        ws = cast(Any, wb.active)
         ws.title = "Members"
 
         header_font = Font(bold=True, color="FFFFFF")
