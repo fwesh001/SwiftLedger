@@ -46,10 +46,7 @@ QPushButton:pressed {
     border: 1px solid #1e1e1e;
 }
 
-QPushButton:focus {
-    outline: 2px solid #3498db;
-    outline-offset: 2px;
-}
+
 
 QPushButton:disabled {
     background-color: #555555;
@@ -214,19 +211,19 @@ QHeaderView::section:pressed {
 
 /* Scroll Bar Styling */
 QScrollBar:vertical {
-    background-color: #1e1e1e;
+    background-color: #3498db;
     width: 12px;
     border: 1px solid #333333;
 }
 
 QScrollBar::handle:vertical {
-    background-color: #555555;
-    border-radius: 6px;
+    background-color: #3498db;
+    border-radius: 10px;
     min-height: 20px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background-color: #707070;
+    background-color: #3498db;
 }
 
 QScrollBar::handle:vertical:pressed {
@@ -254,7 +251,7 @@ QScrollBar::handle:horizontal {
 }
 
 QScrollBar::handle:horizontal:hover {
-    background-color: #707070;
+    background-color: #3498db;
 }
 
 QScrollBar::handle:horizontal:pressed {
