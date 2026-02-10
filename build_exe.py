@@ -22,6 +22,10 @@ def build() -> None:
         "--onefile",
         "--noconsole",
         "--name", "SwiftLedger_v1.0",
+        # ── Output locations ─────────────────────────────────────────
+        "--distpath", "setup",
+        "--workpath", "build/pyinstaller",
+        "--specpath", "build/specs",
         # ── Bundled data ────────────────────────────────────────────
         # Assets folder (styles, icons, images)
         "--add-data", "assets;assets",
@@ -47,7 +51,7 @@ def build() -> None:
     if result.returncode == 0:
         print()
         print("Build succeeded!")
-        print("Output: dist/SwiftLedger_v1.0.exe")
+        print("Output: setup/SwiftLedger_v1.0.exe")
     else:
         print()
         print(f"Build FAILED (exit code {result.returncode})")
