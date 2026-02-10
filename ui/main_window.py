@@ -373,13 +373,18 @@ class MemberProfileDialog(QDialog):
 
         # Header
         header = QHBoxLayout()
-        avatar = QLabel("USER")
+        avatar = QLabel()
         avatar.setFixedSize(72, 72)
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        avatar_path = self.member_data.get('avatar_path') or str(Path(__file__).parent.parent.joinpath('assets', 'default_avatar.svg').as_posix())
         avatar.setStyleSheet(
-            "QLabel { background-color: #dfe6e9; border-radius: 36px; color: #2c3e50; "
-            "font-weight: bold; letter-spacing: 1px; }"
+            f"QLabel {{ border-radius: 36px; background-image: url('{avatar_path}'); "
+            "background-position: center; background-repeat: no-repeat; }}"
         )
+        self._avatar_label = avatar
+        upload_btn = QPushButton("Upload Photo")
+        upload_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        upload_btn.clicked.connect(self._upload_photo)
         header.addWidget(avatar)
 
         header_text = QVBoxLayout()
@@ -395,6 +400,7 @@ class MemberProfileDialog(QDialog):
         header_text.addWidget(staff_label)
         header_text.addStretch()
         header.addLayout(header_text)
+        header.addWidget(upload_btn)
         header.addStretch()
         outer.addLayout(header)
 
