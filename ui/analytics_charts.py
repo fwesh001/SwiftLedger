@@ -226,7 +226,7 @@ class LTSRiskGauge(QWidget):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
 
-        if MATPLOTLIB_AVAILABLE:
+        if MATPLOTLIB_AVAILABLE and Figure is not None and FigureCanvas is not None:
             self.fig = Figure(figsize=(4, 3), dpi=80, facecolor='#1e1e1e')
             self.canvas = FigureCanvas(self.fig)
             layout.addWidget(self.canvas)
