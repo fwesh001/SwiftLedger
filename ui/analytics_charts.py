@@ -99,7 +99,7 @@ class InteractiveMonthlyChart(QWidget):
         self._refresh_chart()
 
     def _refresh_chart(self) -> None:
-        if not MATPLOTLIB_AVAILABLE:
+        if not MATPLOTLIB_AVAILABLE or Figure is None:
             return
 
         from logic.analytics import get_monthly_trend
@@ -121,6 +121,28 @@ class InteractiveMonthlyChart(QWidget):
         # Stacked bars
         bars_savings = ax.bar(x_pos, savings, bar_width, label='Savings', color=self.COLORS['savings'])
         bars_loans = ax.bar(x_pos, loans, bar_width, bottom=savings, label='Loans', color=self.COLORS['loans'])
+
+        ax.set_xlabel('Month', color=self.COLORS['text'], fontsize=10)
+        ax.set_ylabel('Amount (₦)', color=self.COLORS['text'], fontsize=10)
+        ax.set_title('Monthly Savings vs Loans Trend', color=self.COLORS['text'], fontsize=12, fontweight='bold')
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(months, rotation=45, ha='right', color=self.COLORS['text'], fontsize=9)
+        ax.tick_params(axis='y', colors=self.COLORS['text'])
+        ax.set_facecolor(self.COLORS['bg'])
+        ax.grid(axis='y', alpha=0.3, linestyle='--', color=self.COLORS['text'])
+        ax.legend(facecolor=self.COLORS['bg'], edgecolor=self.COLORS['text'], labelcolor=self.COLORS['text'])
+
+        # Store bar references for click detection
+        self.bar_data = {
+            'months': months,
+            'savings': savings,
+            'loans': loans,
+            'bars_savings': bars_savings,
+            'bars_loans': bars_loans,
+        }
+
+        self.fig.tight_layout()
+        self.canvas.draw()
 
         ax.set_xlabel('Month', color=self.COLORS['text'], fontsize=10)
         ax.set_ylabel('Amount (₦)', color=self.COLORS['text'], fontsize=10)
