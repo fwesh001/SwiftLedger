@@ -141,9 +141,24 @@ class DashboardPage(QWidget):
 
         main_layout.addWidget(dividend_group)
 
-        # ── Alerts + Visuals row ────────────────────────────────────
-        alerts_row = QHBoxLayout()
-        alerts_row.setSpacing(16)
+        # ── Interactive Monthly Trend Chart ──────────────────────────
+        trend_group = QGroupBox("Monthly Trends")
+        trend_group.setFont(QFont("Arial", 12))
+        trend_layout = QVBoxLayout(trend_group)
+        self.monthly_chart = InteractiveMonthlyChart(self.db_path)
+        trend_layout.addWidget(self.monthly_chart)
+        main_layout.addWidget(trend_group)
+
+        # ── LTS Risk Gauge + Alerts row ──────────────────────────────
+        gauge_alerts_row = QHBoxLayout()
+        gauge_alerts_row.setSpacing(16)
+
+        gauge_group = QGroupBox("Loan-to-Savings Ratio")
+        gauge_group.setFont(QFont("Arial", 12))
+        gauge_layout = QVBoxLayout(gauge_group)
+        self.lts_gauge = LTSRiskGauge(self.db_path)
+        gauge_layout.addWidget(self.lts_gauge)
+        gauge_alerts_row.addWidget(gauge_group)
 
         alerts_group = QGroupBox("Loan Alerts")
         alerts_group.setFont(QFont("Arial", 12))
@@ -151,7 +166,25 @@ class DashboardPage(QWidget):
         self.list_overdue = QListWidget()
         self.list_overdue.setMinimumHeight(120)
         alerts_layout.addWidget(self.list_overdue)
-        alerts_row.addWidget(alerts_group)
+        gauge_alerts_row.addWidget(alerts_group)
+
+        main_layout.addLayout(gauge_alerts_row)
+
+        # ── Liquidity Status + Financial Health ─────────────────────
+        status_health_row = QHBoxLayout()
+        status_health_row.setSpacing(16)
+
+        liquidity_group = QGroupBox("Liquidity Status")
+        liquidity_group.setFont(QFont("Arial", 12))
+        liquidity_layout = QVBoxLayout(liquidity_group)
+        self.lbl_available_cash = QLabel("Available Cash: ₦0.00")
+        self.lbl_available_cash.setStyleSheet("color: #27ae60; font-weight: bold;")
+        self.lbl_outstanding_loans = QLabel("Outstanding Loans: ₦0.00")
+        self.lbl_outstanding_loans.setStyleSheet("color: #ff6f61; font-weight: bold;")
+        liquidity_layout.addWidget(self.lbl_available_cash)
+        liquidity_layout.addWidget(self.lbl_outstanding_loans)
+        liquidity_layout.addStretch()
+        status_health_row.addWidget(liquidity_group)
 
         health_group = QGroupBox("Financial Health")
         health_group.setFont(QFont("Arial", 12))
@@ -163,9 +196,9 @@ class DashboardPage(QWidget):
         self.chart_layout.addWidget(self.chart_placeholder)
         health_layout = QVBoxLayout(health_group)
         health_layout.addWidget(self.chart_container)
-        alerts_row.addWidget(health_group)
+        status_health_row.addWidget(health_group)
 
-        main_layout.addLayout(alerts_row)
+        main_layout.addLayout(status_health_row)
 
         # ── Quick Start Guide ───────────────────────────────────────
         help_group = QGroupBox("Quick Start Guide")
