@@ -77,7 +77,7 @@ class InteractiveMonthlyChart(QWidget):
         layout.addLayout(range_layout)
 
         # Chart container
-        if MATPLOTLIB_AVAILABLE:
+        if MATPLOTLIB_AVAILABLE and Figure is not None and FigureCanvas is not None:
             self.fig = Figure(figsize=(10, 4), dpi=80, facecolor=self.COLORS['bg'])
             self.canvas = FigureCanvas(self.fig)
             self.canvas.mpl_connect('button_press_event', self._on_bar_click)
