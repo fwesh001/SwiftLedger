@@ -27,6 +27,12 @@ def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
             - 'staff_number': Unique staff ID (required)
             - 'full_name': Member's full name (required)
             - 'phone': Member's phone number (optional)
+            - 'bank_name': Member's bank name (optional)
+            - 'account_no': Member's account number (optional)
+            - 'department': Member's department (optional)
+            - 'date_joined': Member's date joined (YYYY-MM-DD, optional)
+            - 'current_savings': Opening savings balance (optional)
+            - 'total_loans': Opening loan balance (optional)
 
     Returns:
         A tuple (success: bool, message: str)
@@ -49,22 +55,65 @@ def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
         cursor = conn.cursor()
 
         cursor.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("BEGIN;")
+
+        opening_savings = float(member_data.get('current_savings', 0.0) or 0.0)
+        opening_loans = float(member_data.get('total_loans', 0.0) or 0.0)
+        date_joined = member_data.get('date_joined') or date.today().isoformat()
+        phone = member_data.get('phone') or '+234'
+        bank_name = member_data.get('bank_name') or 'UBA'
+        account_no = member_data.get('account_no') or ''
+        department = member_data.get('department') or 'SLT'
 
         cursor.execute(
             """
-            INSERT INTO members (staff_number, full_name, phone, current_savings, total_loans)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO members (
+                staff_number, full_name, phone, bank_name, account_no, department, date_joined,
+                current_savings, total_loans
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 member_data['staff_number'],
                 member_data['full_name'],
-                member_data.get('phone', ''),
-                float(member_data.get('current_savings', 0.0)),
-                float(member_data.get('total_loans', 0.0)),
+                phone,
+                bank_name,
+                account_no,
+                department,
+                date_joined,
+                opening_savings,
+                opening_loans,
             ),
         )
 
         member_id = cursor.lastrowid
+
+        if opening_savings > 0:
+            cursor.execute(
+                """
+                INSERT INTO savings_transactions (member_id, trans_type, amount, running_balance)
+                VALUES (?, ?, ?, ?)
+                """,
+                (member_id, 'Opening Balance', opening_savings, opening_savings),
+            )
+
+        if opening_loans > 0:
+            settings_ok, settings = get_system_settings(db_path)
+            interest_rate = 12.0
+            duration_months = 24
+            if settings_ok and settings:
+                interest_rate = float(settings.get('default_interest_rate', interest_rate))
+                duration_months = int(settings.get('default_duration', duration_months))
+
+            due_date = (date.today() + timedelta(days=30 * duration_months)).isoformat()
+            cursor.execute(
+                """
+                INSERT INTO loans (member_id, principal, interest_rate, duration_months, status, due_date)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (member_id, opening_loans, interest_rate, duration_months, 'Active', due_date),
+            )
+
         conn.commit()
 
         _safe_log_event(
@@ -118,7 +167,9 @@ def get_all_members(db_path: str) -> Tuple[bool, List[Dict]]:
 
     Returns:
         A tuple (success: bool, members: List[Dict])
-        Each member dict contains: member_id, staff_number, full_name, phone, current_savings, total_loans
+        Each member dict contains: member_id, staff_number, full_name, phone, bank_name,
+        account_no, department, date_joined, current_savings, total_loans, default_loan_count,
+        active_loan_count
     """
     conn = None
     try:
@@ -128,9 +179,15 @@ def get_all_members(db_path: str) -> Tuple[bool, List[Dict]]:
 
         cursor.execute(
             """
-            SELECT member_id, staff_number, full_name, phone, current_savings, total_loans
-            FROM members
-            ORDER BY member_id DESC
+            SELECT
+                m.member_id, m.staff_number, m.full_name, m.phone, m.bank_name,
+                m.account_no, m.department, m.date_joined, m.current_savings, m.total_loans,
+                (SELECT COUNT(1) FROM loans l WHERE l.member_id = m.member_id AND l.status = 'Default')
+                    AS default_loan_count,
+                (SELECT COUNT(1) FROM loans l WHERE l.member_id = m.member_id AND l.status = 'Active')
+                    AS active_loan_count
+            FROM members m
+            ORDER BY m.member_id DESC
             """
         )
 
@@ -594,7 +651,8 @@ def get_member_by_id(db_path: str, member_id: int) -> Tuple[bool, Optional[Dict]
         
         cursor.execute(
             """
-            SELECT member_id, staff_number, full_name, phone, current_savings, total_loans
+                 SELECT member_id, staff_number, full_name, phone, bank_name, account_no,
+                     department, date_joined, current_savings, total_loans
             FROM members
             WHERE member_id = ?
             """,
@@ -635,7 +693,8 @@ def get_member_by_staff_number(db_path: str, staff_number: str) -> Tuple[bool, O
 
         cursor.execute(
             """
-            SELECT member_id, staff_number, full_name, phone, current_savings, total_loans
+                 SELECT member_id, staff_number, full_name, phone, bank_name, account_no,
+                     department, date_joined, current_savings, total_loans
             FROM members
             WHERE staff_number = ?
             """,
@@ -651,6 +710,63 @@ def get_member_by_staff_number(db_path: str, staff_number: str) -> Tuple[bool, O
     except Exception:
         return False, None
 
+    finally:
+        if conn:
+            conn.close()
+
+
+def update_member_profile(db_path: str, member_id: int, updates: Dict[str, str]) -> Tuple[bool, str]:
+    """
+    Update editable member profile fields.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        member_id: The member's ID.
+        updates: Dictionary of fields to update.
+
+    Returns:
+        A tuple (success: bool, message: str)
+    """
+    allowed = {"phone", "bank_name", "account_no", "department", "date_joined"}
+    filtered = {k: v for k, v in updates.items() if k in allowed}
+    if not filtered:
+        return False, "No valid fields to update."
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+
+        set_clause = ", ".join(f"{col} = ?" for col in filtered)
+        values = list(filtered.values()) + [member_id]
+        cursor.execute(
+            f"UPDATE members SET {set_clause} WHERE member_id = ?",
+            values,
+        )
+
+        if cursor.rowcount == 0:
+            conn.rollback()
+            return False, f"Member ID {member_id} not found."
+
+        conn.commit()
+        _safe_log_event(
+            user="Admin",
+            category="Members",
+            description=f"Member profile updated for ID {member_id}",
+            status="Success",
+            db_path=db_path,
+        )
+        return True, "Member profile updated successfully."
+
+    except sqlite3.DatabaseError as e:
+        if conn:
+            conn.rollback()
+        return False, f"Database error: {str(e)}"
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return False, f"Unexpected error: {str(e)}"
     finally:
         if conn:
             conn.close()
