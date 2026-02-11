@@ -139,9 +139,32 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             trans_type      TEXT NOT NULL,
             amount          REAL NOT NULL,
             running_balance REAL NOT NULL,
+            payment_mode    TEXT DEFAULT 'Salary Deduction',
             FOREIGN KEY(member_id) REFERENCES members(member_id)
         );
     """)
+
+    cursor.execute("PRAGMA table_info(savings_transactions);")
+    savings_columns = {row[1] for row in cursor.fetchall()}
+    cursor.execute("SAVEPOINT savings_migration;")
+    try:
+        if "payment_mode" not in savings_columns:
+            cursor.execute(
+                "ALTER TABLE savings_transactions ADD COLUMN payment_mode TEXT DEFAULT 'Salary Deduction';"
+            )
+        cursor.execute("RELEASE savings_migration;")
+    except sqlite3.DatabaseError:
+        cursor.execute("ROLLBACK TO savings_migration;")
+        cursor.execute("RELEASE savings_migration;")
+        raise
+
+    cursor.execute("PRAGMA table_info(savings_transactions);")
+    savings_columns = {row[1] for row in cursor.fetchall()}
+    if "payment_mode" in savings_columns:
+        cursor.execute(
+            "UPDATE savings_transactions SET payment_mode = 'Salary Deduction' "
+            "WHERE payment_mode IS NULL OR payment_mode = ''"
+        )
 
     # ── loans ───────────────────────────────────────────────────────
     cursor.execute("""
