@@ -308,8 +308,8 @@ class ReportsPage(QWidget):
         # Savings table
         pdf.set_font("Helvetica", "B", 11)
         pdf.cell(0, 8, "Savings Transactions", new_x="LMARGIN", new_y="NEXT")
-        col_w = [40, 28, 32, 36]
-        headers = ["Date", "Type", "Amount", "Balance"]
+        col_w = [34, 28, 30, 30, 32]
+        headers = ["Date", "Type", "Mode", "Amount", "Balance"]
         pdf.set_font("Helvetica", "B", 8)
         pdf.set_fill_color(44, 62, 80)
         pdf.set_text_color(255, 255, 255)
@@ -326,6 +326,10 @@ class ReportsPage(QWidget):
                 pdf.set_fill_color(255, 255, 255)
 
             ttype = str(tx.get("trans_type", ""))
+            type_label = {
+                "Lodgment": "Deposit (+)",
+                "Deduction": "Withdrawal (-)",
+            }.get(ttype, ttype)
             if ttype == "Lodgment":
                 pdf.set_text_color(39, 174, 96)
             elif ttype == "Deduction":
@@ -335,7 +339,8 @@ class ReportsPage(QWidget):
 
             vals = [
                 str(tx.get("trans_date", ""))[:19],
-                ttype,
+                type_label,
+                str(tx.get("payment_mode", "Salary Deduction")),
                 f"NGN {float(tx.get('amount', 0)):,.2f}",
                 f"NGN {float(tx.get('running_balance', 0)):,.2f}",
             ]
