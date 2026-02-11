@@ -1213,10 +1213,23 @@ class SavingsPage(QWidget):
         self.input_amount.setPrefix("₦")
         form_layout.addRow("Amount:", self.input_amount)
         
-        # Transaction type
+        # Transaction type and payment mode
         self.combo_type = QComboBox()
-        self.combo_type.addItems(["Lodgment", "Deduction"])
-        form_layout.addRow("Type:", self.combo_type)
+        self.combo_type.addItem("Deposit (+)", "Lodgment")
+        self.combo_type.addItem("Withdrawal (-)", "Deduction")
+
+        self.combo_mode = QComboBox()
+        self.combo_mode.addItems(["Bank Transfer", "Cash", "Salary Deduction"])
+        self.combo_mode.currentTextChanged.connect(self._handle_payment_mode_change)
+
+        type_mode_layout = QHBoxLayout()
+        type_mode_layout.setContentsMargins(0, 0, 0, 0)
+        type_mode_layout.addWidget(self.combo_type)
+        type_mode_layout.addWidget(QLabel("Mode:"))
+        type_mode_layout.addWidget(self.combo_mode)
+        type_mode_widget = QWidget()
+        type_mode_widget.setLayout(type_mode_layout)
+        form_layout.addRow("Type:", type_mode_widget)
         
         form_group.setLayout(form_layout)
         main_layout.addWidget(form_group)
@@ -1260,14 +1273,14 @@ class SavingsPage(QWidget):
         main_layout.addWidget(history_title)
         
         self.table_savings = QTableWidget()
-        self.table_savings.setColumnCount(5)
+        self.table_savings.setColumnCount(6)
         self.table_savings.setHorizontalHeaderLabels([
-            "Date", "Type", "Amount", "Running Balance", "ID"
+            "Date", "Type", "Mode", "Amount", "Running Balance", "ID"
         ])
         self.table_savings.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_savings.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_savings.horizontalHeader().setStretchLastSection(True)
-        self.table_savings.setColumnHidden(4, True)  # Hide ID column
+        self.table_savings.setColumnHidden(5, True)  # Hide ID column
         main_layout.addWidget(self.table_savings)
         
         self.setLayout(main_layout)
@@ -1331,16 +1344,19 @@ class SavingsPage(QWidget):
                 self.table_savings.insertRow(row_idx)
 
                 date_item = QTableWidgetItem(str(item.get('trans_date', '')))
-                type_item = QTableWidgetItem(str(item.get('trans_type', '')))
+                type_label = self._format_savings_type(str(item.get('trans_type', '')))
+                mode_item = QTableWidgetItem(str(item.get('payment_mode', 'Salary Deduction')))
+                type_item = QTableWidgetItem(type_label)
                 amount_item = QTableWidgetItem(f"₦{float(item.get('amount', 0.0)):,.2f}")
                 balance_item = QTableWidgetItem(f"₦{float(item.get('running_balance', 0.0)):,.2f}")
                 id_item = QTableWidgetItem(str(item.get('id', '')))
 
                 self.table_savings.setItem(row_idx, 0, date_item)
                 self.table_savings.setItem(row_idx, 1, type_item)
-                self.table_savings.setItem(row_idx, 2, amount_item)
-                self.table_savings.setItem(row_idx, 3, balance_item)
-                self.table_savings.setItem(row_idx, 4, id_item)
+                self.table_savings.setItem(row_idx, 2, mode_item)
+                self.table_savings.setItem(row_idx, 3, amount_item)
+                self.table_savings.setItem(row_idx, 4, balance_item)
+                self.table_savings.setItem(row_idx, 5, id_item)
 
             self.label_total_savings.setText(f"Total Savings: ₦{total_savings:,.2f}")
 
@@ -1355,14 +1371,21 @@ class SavingsPage(QWidget):
             return
         
         amount = self.input_amount.value()
-        trans_type = self.combo_type.currentText()
+        trans_type = self.combo_type.currentData() or self.combo_type.currentText()
+        payment_mode = self.combo_mode.currentText()
         
         if amount <= 0:
             QMessageBox.warning(self, "Invalid Input", "Amount must be greater than 0.")
             return
         
         # Add saving to database
-        success, message = add_saving(self.db_path, self.current_member_id, amount, trans_type)
+        success, message = add_saving(
+            self.db_path,
+            self.current_member_id,
+            amount,
+            trans_type,
+            payment_mode,
+        )
         
         if success:
             QMessageBox.information(self, "Success", message)
@@ -1379,10 +1402,28 @@ class SavingsPage(QWidget):
         self.current_member_name = None
         self.input_search.clear()
         self.input_amount.setValue(0)
+        self.combo_mode.setCurrentIndex(0)
+        self.combo_type.setEnabled(True)
         self.label_member_name.setText("Name: Not Selected")
         self.label_total_savings.setText("Total Savings: ₦0.00")
         self.table_savings.setRowCount(0)
         self.btn_post.setEnabled(False)
+
+    def _format_savings_type(self, trans_type: str) -> str:
+        labels = {
+            "Lodgment": "Deposit (+)",
+            "Deduction": "Withdrawal (-)",
+        }
+        return labels.get(trans_type, trans_type)
+
+    def _handle_payment_mode_change(self, mode: str) -> None:
+        if mode == "Salary Deduction":
+            deposit_index = self.combo_type.findData("Lodgment")
+            if deposit_index >= 0:
+                self.combo_type.setCurrentIndex(deposit_index)
+            self.combo_type.setEnabled(False)
+        else:
+            self.combo_type.setEnabled(True)
 
 
 class LoansPage(QWidget):
