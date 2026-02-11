@@ -92,10 +92,19 @@ def add_member(db_path: str, member_data: Dict[str, str]) -> Tuple[bool, str]:
         if opening_savings > 0:
             cursor.execute(
                 """
-                INSERT INTO savings_transactions (member_id, trans_date, trans_type, amount, running_balance)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO savings_transactions (
+                    member_id, trans_date, trans_type, amount, running_balance, payment_mode
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (member_id, trans_date, 'Opening Balance', opening_savings, opening_savings),
+                (
+                    member_id,
+                    trans_date,
+                    'Opening Balance',
+                    opening_savings,
+                    opening_savings,
+                    'Salary Deduction',
+                ),
             )
 
         if opening_loans > 0:
@@ -773,7 +782,13 @@ def update_member_profile(db_path: str, member_id: int, updates: Dict[str, str])
             conn.close()
 
 
-def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tuple[bool, str]:
+def add_saving(
+    db_path: str,
+    member_id: int,
+    amount: float,
+    category: str,
+    payment_mode: str = "Cash",
+) -> Tuple[bool, str]:
     """
     Update a member's current savings balance.
 
@@ -782,6 +797,7 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
         member_id: The ID of the member.
         amount: The savings amount (positive number).
         category: Either 'Deduction' or 'Lodgment'.
+        payment_mode: 'Bank Transfer', 'Cash', or 'Salary Deduction'.
 
     Returns:
         A tuple (success: bool, message: str)
@@ -806,6 +822,27 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
         )
         return False, "Amount must be a positive number."
 
+    valid_payment_modes = ["Bank Transfer", "Cash", "Salary Deduction"]
+    if payment_mode not in valid_payment_modes:
+        _safe_log_event(
+            user="Admin",
+            category="Savings",
+            description=f"Savings transaction rejected (invalid payment mode: {payment_mode})",
+            status="Failed",
+            db_path=db_path,
+        )
+        return False, "Invalid payment mode."
+
+    if payment_mode == "Salary Deduction" and category != "Lodgment":
+        _safe_log_event(
+            user="Admin",
+            category="Savings",
+            description="Savings transaction rejected (salary deduction with withdrawal)",
+            status="Failed",
+            db_path=db_path,
+        )
+        return False, "Salary Deduction must be a deposit."
+
     if not isinstance(member_id, int) or member_id <= 0:
         _safe_log_event(
             user="Admin",
@@ -816,12 +853,44 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
         )
         return False, "Invalid member ID."
 
-    delta = amount if category == 'Lodgment' else -amount
-
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT COALESCE(current_savings, 0.0)
+            FROM members
+            WHERE member_id = ?
+            """,
+            (member_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            _safe_log_event(
+                user="Admin",
+                category="Savings",
+                description=f"Savings transaction failed (member_id {member_id} not found)",
+                status="Failed",
+                db_path=db_path,
+            )
+            return False, f"Error: Member ID {member_id} does not exist."
+
+        current_savings = float(row[0] or 0.0)
+        if category == "Deduction" and amount > current_savings:
+            _safe_log_event(
+                user="Admin",
+                category="Savings",
+                description=(
+                    f"Savings withdrawal rejected (insufficient funds for member_id {member_id})"
+                ),
+                status="Failed",
+                db_path=db_path,
+            )
+            return False, "Withdrawal exceeds current savings balance."
+
+        delta = amount if category == "Lodgment" else -amount
 
         cursor.execute(
             """
@@ -831,17 +900,6 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
             """,
             (delta, member_id),
         )
-
-        if cursor.rowcount == 0:
-            conn.rollback()
-            _safe_log_event(
-                user="Admin",
-                category="Savings",
-                description=f"Savings transaction failed (member_id {member_id} not found)",
-                status="Failed",
-                db_path=db_path,
-            )
-            return False, f"Error: Member ID {member_id} does not exist."
 
         cursor.execute(
             """
@@ -856,10 +914,12 @@ def add_saving(db_path: str, member_id: int, amount: float, category: str) -> Tu
 
         cursor.execute(
             """
-            INSERT INTO savings_transactions (member_id, trans_type, amount, running_balance)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO savings_transactions (
+                member_id, trans_type, amount, running_balance, payment_mode
+            )
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (member_id, category, amount, running_balance),
+            (member_id, category, amount, running_balance, payment_mode),
         )
 
         conn.commit()
@@ -915,7 +975,7 @@ def get_member_savings(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
 
         cursor.execute(
             """
-            SELECT id, trans_date, trans_type, amount, running_balance
+            SELECT id, trans_date, trans_type, amount, running_balance, payment_mode
             FROM savings_transactions
             WHERE member_id = ?
             ORDER BY id DESC
