@@ -33,3 +33,12 @@ setup/SwiftLedger_v1.0.exe
 setup/uninstall.exe
 SwiftLedger.spec
 SwiftLedger_Installer.nsi
+SwiftLedger_Installer_1.0.0.exe
+build/SwiftLedger/Analysis-00.toc
+build/SwiftLedger/base_library.zip
+build/SwiftLedger/PYZ-00.pyz
+build/SwiftLedger/PYZ-00.toc
+build/SwiftLedger/SwiftLedger.pkg
+build/SwiftLedger/warn-SwiftLedger.txt
+build/SwiftLedger/xref-SwiftLedger.html
+tests/conftest.py
