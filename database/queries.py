@@ -192,15 +192,16 @@ def get_all_members(db_path: str) -> Tuple[bool, List[Dict]]:
             SELECT
                 m.member_id, m.staff_number, m.full_name, m.phone, m.bank_name,
                 m.account_no, m.department, m.date_joined, m.avatar_path,
-                (SELECT COALESCE(
-                    SUM(
-                        CASE 
-                            WHEN trans_type = 'Deduction' THEN -amount 
-                            ELSE amount 
+                (
+                    SELECT COALESCE(SUM(
+                        CASE
+                            WHEN st.trans_type IN ('Lodgment', 'Opening Balance') THEN st.amount
+                            WHEN st.trans_type = 'Deduction' THEN -st.amount
+                            ELSE 0
                         END
-                    ), 0.0)
-                 FROM savings_transactions
-                 WHERE member_id = m.member_id
+                    ), 0)
+                    FROM savings_transactions st
+                    WHERE st.member_id = m.member_id
                 ) AS current_savings,
                 m.total_loans,
                 (SELECT COUNT(1) FROM loans l WHERE l.member_id = m.member_id AND l.status = 'Default')
@@ -286,10 +287,7 @@ def delete_member(db_path: str, member_id: int) -> Tuple[bool, str]:
 
 def get_total_savings(db_path: str, member_id: int) -> Tuple[bool, float]:
     """
-    Retrieve current savings for a member by summing all transactions.
-
-    Calculates the running balance from the savings_transactions ledger,
-    ensuring the true current balance is always returned.
+    Retrieve current savings for a member.
 
     Returns (True, amount) on success or (False, 0.0) on error.
     """
@@ -299,17 +297,15 @@ def get_total_savings(db_path: str, member_id: int) -> Tuple[bool, float]:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT COALESCE(
-                (SELECT SUM(
-                    CASE 
-                        WHEN trans_type = 'Deduction' THEN -amount 
-                        ELSE amount 
-                    END
-                 )
-                 FROM savings_transactions
-                 WHERE member_id = ?),
-                0.0
-            )
+            SELECT COALESCE(SUM(
+                CASE
+                    WHEN trans_type IN ('Lodgment', 'Opening Balance') THEN amount
+                    WHEN trans_type = 'Deduction' THEN -amount
+                    ELSE 0
+                END
+            ), 0.0)
+            FROM savings_transactions
+            WHERE member_id = ?
             """,
             (member_id,),
         )
@@ -683,13 +679,10 @@ def get_member_by_id(db_path: str, member_id: int) -> Tuple[bool, Optional[Dict]
         
         cursor.execute(
             """
-            SELECT m.member_id, m.staff_number, m.full_name, m.phone, m.bank_name, m.account_no,
-                m.department, m.date_joined, m.avatar_path,
-                (SELECT COALESCE(SUM(CASE WHEN trans_type = 'Deduction' THEN -amount ELSE amount END), 0.0)
-                 FROM savings_transactions WHERE member_id = m.member_id) AS current_savings,
-                m.total_loans
-            FROM members m
-            WHERE m.member_id = ?
+                     SELECT member_id, staff_number, full_name, phone, bank_name, account_no,
+                         department, date_joined, avatar_path, current_savings, total_loans
+            FROM members
+            WHERE member_id = ?
             """,
             (member_id,),
         )
@@ -728,13 +721,10 @@ def get_member_by_staff_number(db_path: str, staff_number: str) -> Tuple[bool, O
 
         cursor.execute(
             """
-            SELECT m.member_id, m.staff_number, m.full_name, m.phone, m.bank_name, m.account_no,
-                m.department, m.date_joined, m.avatar_path,
-                (SELECT COALESCE(SUM(CASE WHEN trans_type = 'Deduction' THEN -amount ELSE amount END), 0.0)
-                 FROM savings_transactions WHERE member_id = m.member_id) AS current_savings,
-                m.total_loans
-            FROM members m
-            WHERE m.staff_number = ?
+                     SELECT member_id, staff_number, full_name, phone, bank_name, account_no,
+                         department, date_joined, avatar_path, current_savings, total_loans
+            FROM members
+            WHERE staff_number = ?
             """,
             (staff_number,),
         )
@@ -1054,14 +1044,8 @@ def get_society_stats(db_path: str) -> Tuple[bool, Dict]:
         
         # 2. Total Savings (sum of current_savings from all members)
         cursor.execute("""
-            SELECT COALESCE(
-                SUM(
-                    CASE 
-                        WHEN trans_type = 'Deduction' THEN -amount 
-                        ELSE amount 
-                    END
-                ), 0.0)
-            FROM savings_transactions
+            SELECT COALESCE(SUM(current_savings), 0.0)
+            FROM members
         """)
         total_savings = float(cursor.fetchone()[0] or 0.0)
         
