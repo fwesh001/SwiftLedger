@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+.vscode/
+notes.md
+TESTING.md
+tests/test_ten_member_math_audit.py
+SwiftLedger_Installer_1.0.0.exe
+tests/conftest.py
+build/
+dist/
+setup/
+*.exe
+*.pkg
