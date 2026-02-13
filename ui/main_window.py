@@ -1375,7 +1375,6 @@ class SavingsPage(QWidget):
                 amount_item.setFont(bold_font)
                 amount_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 balance_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
             self.label_total_savings.setText(f"Total Savings: ₦{total_savings:,.2f}")
 
         except Exception as e:
