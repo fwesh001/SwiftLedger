@@ -1351,6 +1351,25 @@ class SavingsPage(QWidget):
                 balance_item = QTableWidgetItem(f"₦{float(item.get('running_balance', 0.0)):,.2f}")
                 id_item = QTableWidgetItem(str(item.get('id', '')))
 
+                trans_type = str(item.get('trans_type', ''))
+                if trans_type == "Lodgment":
+                    color = QColor("#2ecc71")
+                elif trans_type == "Deduction":
+                    color = QColor("#e74c3c")
+                else:
+                    color = None
+
+                if color:
+                    bold_font = type_item.font()
+                    bold_font.setBold(True)
+                    type_item.setFont(bold_font)
+                    amount_item.setFont(bold_font)
+                    type_item.setForeground(QBrush(color))
+                    amount_item.setForeground(QBrush(color))
+
+                amount_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                balance_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
                 self.table_savings.setItem(row_idx, 0, date_item)
                 self.table_savings.setItem(row_idx, 1, type_item)
                 self.table_savings.setItem(row_idx, 2, mode_item)
@@ -1358,23 +1377,6 @@ class SavingsPage(QWidget):
                 self.table_savings.setItem(row_idx, 4, balance_item)
                 self.table_savings.setItem(row_idx, 5, id_item)
 
-                trans_type = str(item.get('trans_type', ''))
-                if trans_type in ['Lodgment', 'Opening Balance']:
-                    color = QColor('#2ecc71')
-                elif trans_type == 'Deduction':
-                    color = QColor('#e74c3c')
-                else:
-                    color = QColor('#ffffff')
-
-                bold_font = QFont()
-                bold_font.setBold(True)
-
-                type_item.setForeground(color)
-                type_item.setFont(bold_font)
-                amount_item.setForeground(color)
-                amount_item.setFont(bold_font)
-                amount_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                balance_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.label_total_savings.setText(f"Total Savings: ₦{total_savings:,.2f}")
 
         except Exception as e:
