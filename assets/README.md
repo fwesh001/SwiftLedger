@@ -1,4 +1,4 @@
-```markdown
+
 # assets — Static Resources
 
 This folder holds static resources used by SwiftLedger: styles, icons, and optional branding images.
@@ -16,4 +16,3 @@ Guidelines
 - Avoid committing very large binary files; prefer external storage or Git LFS for large logos.
 - Keep style customizations centralized in `styles.qss` for consistent theming.
 
-```
