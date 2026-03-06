@@ -104,6 +104,24 @@ class AboutPage(QWidget):
 
         main.addWidget(info_group)
 
+        # ── About SwiftLedger ──────────────────────────────────────
+        about_group = QGroupBox("About SwiftLedger")
+        about_group.setFont(QFont("Arial", 12))
+        about_layout = QVBoxLayout(about_group)
+
+        about_text = QLabel(
+            "SwiftLedger helps savings groups and cooperatives manage member "
+            "records, contributions, loans, and dividends in one secure desktop "
+            "app. It is built to keep bookkeeping transparent, reduce manual "
+            "errors, and make day-to-day financial tracking simpler for "
+            "administrators and members."
+        )
+        about_text.setWordWrap(True)
+        about_text.setStyleSheet("font-size: 13px; line-height: 1.6; padding: 10px;")
+        about_layout.addWidget(about_text)
+
+        main.addWidget(about_group)
+
         # ── Developer section ────────────────────────────────────────
         dev_group = QGroupBox("About the Developer")
         dev_group.setFont(QFont("Arial", 12))
