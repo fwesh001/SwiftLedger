@@ -1,4 +1,3 @@
-```markdown
 # SwiftLedger
 
 SwiftLedger is a local desktop application for managing small thrift societies and cooperatives. It provides member management, savings transaction tracking, loan origination and repayment scheduling, PDF reporting, and an audit trail — all in a compact PySide6 (Qt) GUI.
@@ -55,4 +54,3 @@ Troubleshooting
 
 See `database/README.md`, `ui/README.md`, and `assets/README.md` for module-specific details.
 
-```markdown
