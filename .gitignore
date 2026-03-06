@@ -29,3 +29,4 @@ setup/
 *.temp
 Thumbs.db
 .DS_Store
+SwiftLedger_Installer.nsi

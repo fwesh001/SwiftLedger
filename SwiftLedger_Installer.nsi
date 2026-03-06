@@ -65,3 +65,4 @@ Section "Uninstall"
     DeleteRegKey HKCU "Software\SwiftLedger"
     DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\SwiftLedger"
 SectionEnd
+ 
