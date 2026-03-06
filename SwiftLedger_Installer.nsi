@@ -9,7 +9,7 @@
 ; Basic Settings
 ; ─────────────────────────────────────────────────────────────────
 Name "SwiftLedger 1.0.0"
-OutFile "c:\Users\zabdiel\Desktop\SwiftLedger\SwiftLedger_Installer_1.0.0.exe"
+OutFile "C:\Users\zabdiel\Desktop\SwiftLedger\SwiftLedger_Installer_1.0.0.exe"
 InstallDir "$PROGRAMFILES\SwiftLedger"
 InstallDirRegKey HKCU "Software\SwiftLedger" "Install_Dir"
 
@@ -30,7 +30,7 @@ Section "Install"
     SetOutPath "$INSTDIR"
     
     ; Copy executable
-    File "c:\Users\zabdiel\Desktop\SwiftLedger\dist\SwiftLedger.exe"
+    File "C:\Users\zabdiel\Desktop\SwiftLedger\dist\SwiftLedger.exe"
     
     ; Create shortcuts
     CreateDirectory "$SMPROGRAMS\SwiftLedger"
