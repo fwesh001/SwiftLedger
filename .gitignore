@@ -3,8 +3,18 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 *.db
+*.sqlite
+*.sqlite3
+*.db-journal
 .vscode/
+.idea/
 notes.md
 TESTING.md
 tests/test_ten_member_math_audit.py
@@ -14,3 +24,8 @@ dist/
 setup/
 *.exe
 *.pkg
+*.log
+*.tmp
+*.temp
+Thumbs.db
+.DS_Store
