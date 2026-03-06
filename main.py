@@ -13,7 +13,7 @@ from database.db_init import init_db
 from ui.login_screen import LoginScreen
 from ui.main_window import MainWindow
 from ui.wizard import FirstRunWizard
-from utils import get_asset_path
+from utils import get_asset_path, get_database_path
 
 
 class AppController:
@@ -83,7 +83,7 @@ if __name__ == "__main__":
         app.setWindowIcon(QIcon(icon_path))
 
     # 3. Launch with first-run + auth gate
-    controller = AppController(app)
+    controller = AppController(app, db_path=get_database_path())
     controller.start()
     
     sys.exit(app.exec())
