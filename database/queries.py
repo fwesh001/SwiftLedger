@@ -633,6 +633,113 @@ def add_loan_product(
             conn.close()
 
 
+def update_loan_product(
+    db_path: str,
+    product_id: int,
+    name: str,
+    max_amount: float,
+    interest_rate: float,
+    duration_months: int,
+) -> Tuple[bool, str]:
+    """Update an existing loan product definition."""
+    if product_id <= 0:
+        return False, "Invalid product ID."
+    if not name.strip():
+        return False, "Product name is required."
+    if max_amount < 0:
+        return False, "Max amount cannot be negative."
+    if interest_rate < 0:
+        return False, "Interest rate cannot be negative."
+    if duration_months <= 0:
+        return False, "Duration must be at least 1 month."
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE loan_products
+            SET name = ?,
+                max_amount = ?,
+                interest_rate = ?,
+                duration_months = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE product_id = ?
+            """,
+            (name.strip(), float(max_amount), float(interest_rate), int(duration_months), int(product_id)),
+        )
+        if cursor.rowcount == 0:
+            conn.rollback()
+            return False, "Loan product not found."
+
+        conn.commit()
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=(
+                f"Loan product updated: {name.strip()} "
+                f"(max ₦{max_amount:,.2f}, {interest_rate:.2f}%/{duration_months}m)"
+            ),
+            status="Success",
+            db_path=db_path,
+        )
+        return True, "Loan product updated successfully."
+    except sqlite3.IntegrityError:
+        return False, "A loan product with this name already exists."
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return False, f"Failed to update product: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
+def set_loan_product_active(
+    db_path: str,
+    product_id: int,
+    is_active: bool,
+) -> Tuple[bool, str]:
+    """Activate or deactivate a loan product."""
+    if product_id <= 0:
+        return False, "Invalid product ID."
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE loan_products
+            SET is_active = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE product_id = ?
+            """,
+            (1 if is_active else 0, int(product_id)),
+        )
+        if cursor.rowcount == 0:
+            conn.rollback()
+            return False, "Loan product not found."
+
+        conn.commit()
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=f"Loan product {'activated' if is_active else 'deactivated'} (id={product_id})",
+            status="Success",
+            db_path=db_path,
+        )
+        return True, f"Loan product {'activated' if is_active else 'deactivated'} successfully."
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return False, f"Failed to update product status: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
 def _persist_repayment_schedule(
     cursor: sqlite3.Cursor,
     loan_id: int,
