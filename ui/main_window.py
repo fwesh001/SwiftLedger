@@ -1232,6 +1232,11 @@ class SavingsPage(QWidget):
         type_mode_widget = QWidget()
         type_mode_widget.setLayout(type_mode_layout)
         form_layout.addRow("Type:", type_mode_widget)
+
+        self.input_transfer_ref = QLineEdit()
+        self.input_transfer_ref.setPlaceholderText("Optional transfer reference ID")
+        self.input_transfer_ref.setVisible(False)
+        form_layout.addRow("Transfer Ref:", self.input_transfer_ref)
         
         form_group.setLayout(form_layout)
         main_layout.addWidget(form_group)
@@ -1275,14 +1280,14 @@ class SavingsPage(QWidget):
         main_layout.addWidget(history_title)
         
         self.table_savings = QTableWidget()
-        self.table_savings.setColumnCount(6)
+        self.table_savings.setColumnCount(7)
         self.table_savings.setHorizontalHeaderLabels([
-            "Date", "Type", "Mode", "Amount", "Running Balance", "ID"
+            "Date", "Type", "Mode", "Transfer Ref", "Amount", "Running Balance", "ID"
         ])
         self.table_savings.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_savings.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_savings.horizontalHeader().setStretchLastSection(True)
-        self.table_savings.setColumnHidden(5, True)  # Hide ID column
+        self.table_savings.setColumnHidden(6, True)  # Hide ID column
         main_layout.addWidget(self.table_savings)
         
         self.setLayout(main_layout)
@@ -1307,6 +1312,7 @@ class SavingsPage(QWidget):
             self.label_total_savings.setText("Total Savings: ₦0.00")
             self.table_savings.setRowCount(0)
             self.btn_post.setEnabled(False)
+            self._update_transaction_types_for_member(False)
             return
         
         # Store member info
@@ -1318,6 +1324,7 @@ class SavingsPage(QWidget):
         
         # Load and display savings
         self.load_savings_data()
+        self._update_transaction_types_for_member(has_active_loans(self.db_path, self.current_member_id))
         
         # Enable post button
         self.btn_post.setEnabled(True)
@@ -1349,6 +1356,7 @@ class SavingsPage(QWidget):
                 type_label = self._format_savings_type(str(item.get('trans_type', '')))
                 mode_item = QTableWidgetItem(str(item.get('payment_mode', 'Salary Deduction')))
                 type_item = QTableWidgetItem(type_label)
+                transfer_item = QTableWidgetItem(str(item.get('transfer_reference', '') or ''))
                 amount_item = QTableWidgetItem(f"₦{float(item.get('amount', 0.0)):,.2f}")
                 balance_item = QTableWidgetItem(f"₦{float(item.get('running_balance', 0.0)):,.2f}")
                 id_item = QTableWidgetItem(str(item.get('id', '')))
@@ -1375,9 +1383,10 @@ class SavingsPage(QWidget):
                 self.table_savings.setItem(row_idx, 0, date_item)
                 self.table_savings.setItem(row_idx, 1, type_item)
                 self.table_savings.setItem(row_idx, 2, mode_item)
-                self.table_savings.setItem(row_idx, 3, amount_item)
-                self.table_savings.setItem(row_idx, 4, balance_item)
-                self.table_savings.setItem(row_idx, 5, id_item)
+                self.table_savings.setItem(row_idx, 3, transfer_item)
+                self.table_savings.setItem(row_idx, 4, amount_item)
+                self.table_savings.setItem(row_idx, 5, balance_item)
+                self.table_savings.setItem(row_idx, 6, id_item)
 
             self.label_total_savings.setText(f"Total Savings: ₦{total_savings:,.2f}")
 
@@ -1394,24 +1403,35 @@ class SavingsPage(QWidget):
         amount = self.input_amount.value()
         trans_type = self.combo_type.currentData() or self.combo_type.currentText()
         payment_mode = self.combo_mode.currentText()
+        transfer_reference = self.input_transfer_ref.text().strip()
         
         if amount <= 0:
             QMessageBox.warning(self, "Invalid Input", "Amount must be greater than 0.")
             return
         
-        # Add saving to database
-        success, message = add_saving(
-            self.db_path,
-            self.current_member_id,
-            amount,
-            trans_type,
-            payment_mode,
-        )
+        if trans_type == "Loan Repayment":
+            success, message = post_loan_repayment(
+                self.db_path,
+                self.current_member_id,
+                amount,
+                payment_mode,
+                transfer_reference,
+            )
+        else:
+            success, message = add_saving(
+                self.db_path,
+                self.current_member_id,
+                amount,
+                trans_type,
+                payment_mode,
+                transfer_reference,
+            )
         
         if success:
             QMessageBox.information(self, "Success", message)
             # Clear amount field
             self.input_amount.setValue(0)
+            self.input_transfer_ref.clear()
             # Refresh savings history
             self.load_savings_data()
         else:
@@ -1424,7 +1444,10 @@ class SavingsPage(QWidget):
         self.input_search.clear()
         self.input_amount.setValue(0)
         self.combo_mode.setCurrentIndex(0)
+        self.input_transfer_ref.clear()
+        self.input_transfer_ref.setVisible(False)
         self.combo_type.setEnabled(True)
+        self._update_transaction_types_for_member(False)
         self.label_member_name.setText("Name: Not Selected")
         self.label_total_savings.setText("Total Savings: ₦0.00")
         self.table_savings.setRowCount(0)
@@ -1434,17 +1457,35 @@ class SavingsPage(QWidget):
         labels = {
             "Lodgment": "Deposit (+)",
             "Deduction": "Withdrawal (-)",
+            "Loan Repayment": "Loan Repayment",
         }
         return labels.get(trans_type, trans_type)
 
     def _handle_payment_mode_change(self, mode: str) -> None:
+        self.input_transfer_ref.setVisible(mode == "Bank Transfer")
         if mode == "Salary Deduction":
+            current_type = self.combo_type.currentData()
+            if current_type != "Loan Repayment":
+                deposit_index = self.combo_type.findData("Lodgment")
+                if deposit_index >= 0:
+                    self.combo_type.setCurrentIndex(deposit_index)
+                self.combo_type.setEnabled(False)
+            else:
+                self.combo_type.setEnabled(False)
+        else:
+            self.combo_type.setEnabled(True)
+
+    def _update_transaction_types_for_member(self, has_loan: bool) -> None:
+        loan_idx = self.combo_type.findData("Loan Repayment")
+        if has_loan and loan_idx < 0:
+            self.combo_type.addItem("Loan Repayment", "Loan Repayment")
+        if not has_loan and loan_idx >= 0:
+            self.combo_type.removeItem(loan_idx)
+
+        if self.combo_type.findData("Lodgment") >= 0 and self.combo_type.currentIndex() < 0:
             deposit_index = self.combo_type.findData("Lodgment")
             if deposit_index >= 0:
                 self.combo_type.setCurrentIndex(deposit_index)
-            self.combo_type.setEnabled(False)
-        else:
-            self.combo_type.setEnabled(True)
 
 
 class LoansPage(QWidget):
@@ -1460,6 +1501,7 @@ class LoansPage(QWidget):
         self.loan_multiplier = 2.0
         self.default_interest_rate = 12.0
         self.default_duration = 24
+        self.selected_product_id = None
         
         # Create main layout
         main_layout = QVBoxLayout(self)
@@ -1511,12 +1553,17 @@ class LoansPage(QWidget):
         max_eligible_font = QFont("Arial", 11)
         max_eligible_font.setBold(True)
         self.label_max_eligible.setFont(max_eligible_font)
+
+        self.label_total_loans_view = QLabel("Loan Summary: Issued ₦0.00 | Repaid ₦0.00 | Outstanding ₦0.00")
+        self.label_total_loans_view.setFont(QFont("Arial", 10))
         
         eligibility_layout.addWidget(self.label_member_name)
         eligibility_layout.addStretch()
         eligibility_layout.addWidget(self.label_total_savings)
         eligibility_layout.addStretch()
         eligibility_layout.addWidget(self.label_max_eligible)
+        eligibility_layout.addStretch()
+        eligibility_layout.addWidget(self.label_total_loans_view)
         eligibility_group.setLayout(eligibility_layout)
         main_layout.addWidget(eligibility_group)
         
@@ -1536,6 +1583,18 @@ class LoansPage(QWidget):
         self.input_principal.setPrefix("₦")
         self.input_principal.valueChanged.connect(self.validate_principal)
         form_layout.addRow("Requested Principal:", self.input_principal)
+
+        self.combo_loan_product = QComboBox()
+        form_layout.addRow("Loan Plan:", self.combo_loan_product)
+
+        product_btn_row = QHBoxLayout()
+        self.btn_add_custom_loan = QPushButton("Add Custom Loan")
+        self.btn_add_custom_loan.clicked.connect(self.add_custom_loan_product)
+        product_btn_row.addWidget(self.btn_add_custom_loan)
+        product_btn_row.addStretch()
+        product_btn_widget = QWidget()
+        product_btn_widget.setLayout(product_btn_row)
+        form_layout.addRow("Custom Product:", product_btn_widget)
         
         # Interest rate input
         self.input_interest_rate = QDoubleSpinBox()
@@ -1631,6 +1690,8 @@ class LoansPage(QWidget):
         
         # Load system settings
         self.load_system_settings()
+        self.load_loan_products()
+        self.combo_loan_product.currentIndexChanged.connect(self._on_product_changed)
     
     def load_system_settings(self) -> None:
         """Load system settings for loan defaults."""
@@ -1641,6 +1702,107 @@ class LoansPage(QWidget):
             self.default_duration = int(settings.get('default_duration', 24))
             self.input_interest_rate.setValue(self.default_interest_rate)
             self.input_duration.setValue(self.default_duration)
+
+    def load_loan_products(self) -> None:
+        self.combo_loan_product.blockSignals(True)
+        self.combo_loan_product.clear()
+        self.combo_loan_product.addItem("Default Policy", None)
+        ok, products = get_loan_products(self.db_path, active_only=True)
+        if ok:
+            for product in products:
+                label = (
+                    f"{product['name']} | Max ₦{float(product['max_amount']):,.2f} | "
+                    f"{float(product['interest_rate']):.2f}% | {int(product['duration_months'])}m"
+                )
+                self.combo_loan_product.addItem(label, int(product['product_id']))
+        self.combo_loan_product.blockSignals(False)
+
+    def _on_product_changed(self) -> None:
+        product_id = self.combo_loan_product.currentData()
+        self.selected_product_id = int(product_id) if product_id else None
+        if self.selected_product_id is None:
+            self.input_interest_rate.setValue(self.default_interest_rate)
+            self.input_duration.setValue(self.default_duration)
+            return
+
+        ok, products = get_loan_products(self.db_path, active_only=False)
+        if not ok:
+            return
+        for product in products:
+            if int(product.get('product_id', 0)) == self.selected_product_id:
+                self.input_interest_rate.setValue(float(product.get('interest_rate', self.default_interest_rate)))
+                self.input_duration.setValue(int(product.get('duration_months', self.default_duration)))
+                break
+
+    def add_custom_loan_product(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add Custom Loan Product")
+        layout = QVBoxLayout(dialog)
+
+        form = QFormLayout()
+        input_name = QLineEdit()
+        input_name.setPlaceholderText("Name")
+        input_max = QDoubleSpinBox()
+        input_max.setRange(0.0, 100_000_000.0)
+        input_max.setPrefix("₦")
+        input_max.setDecimals(2)
+        input_max.setSingleStep(1000.0)
+        input_rate = QDoubleSpinBox()
+        input_rate.setRange(0.0, 100.0)
+        input_rate.setSuffix("%")
+        input_rate.setDecimals(2)
+        input_rate.setValue(self.default_interest_rate)
+        input_duration = QSpinBox()
+        input_duration.setRange(1, 120)
+        input_duration.setSuffix(" months")
+        input_duration.setValue(self.default_duration)
+
+        form.addRow("Name:", input_name)
+        form.addRow("Max amount:", input_max)
+        form.addRow("Rate:", input_rate)
+        form.addRow("Duration:", input_duration)
+        layout.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        btn_cancel = QPushButton("Cancel")
+        btn_save = QPushButton("Save")
+        btn_cancel.clicked.connect(dialog.reject)
+        btn_save.clicked.connect(dialog.accept)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_cancel)
+        btn_row.addWidget(btn_save)
+        layout.addLayout(btn_row)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        success, message = add_loan_product(
+            self.db_path,
+            input_name.text().strip(),
+            input_max.value(),
+            input_rate.value(),
+            input_duration.value(),
+        )
+        if not success:
+            QMessageBox.warning(self, "Could Not Save", message)
+            return
+
+        self.load_loan_products()
+        QMessageBox.information(self, "Saved", "Custom loan product added.")
+
+    def _refresh_member_loan_totals(self) -> None:
+        if self.current_member_id is None:
+            self.label_total_loans_view.setText("Loan Summary: Issued ₦0.00 | Repaid ₦0.00 | Outstanding ₦0.00")
+            return
+        ok, totals = get_member_loan_totals(self.db_path, self.current_member_id)
+        if not ok:
+            return
+        self.label_total_loans_view.setText(
+            "Loan Summary: "
+            f"Issued ₦{totals.get('total_issued', 0.0):,.2f} | "
+            f"Repaid ₦{totals.get('total_repaid', 0.0):,.2f} | "
+            f"Outstanding ₦{totals.get('outstanding_principal', 0.0):,.2f}"
+        )
     
     def search_member(self) -> None:
         """Search for a member by staff number."""
@@ -1683,6 +1845,7 @@ class LoansPage(QWidget):
         
         # Load active loans
         self.load_active_loans()
+        self._refresh_member_loan_totals()
         
         # Enable validation and preview buttons
         self.btn_validate.setEnabled(True)
@@ -1817,7 +1980,14 @@ class LoansPage(QWidget):
             return
         
         # Apply for loan
-        success, message = apply_for_loan(self.db_path, self.current_member_id, principal, interest_rate, duration)
+        success, message = apply_for_loan(
+            self.db_path,
+            self.current_member_id,
+            principal,
+            interest_rate,
+            duration,
+            self.selected_product_id,
+        )
         
         if success:
             QMessageBox.information(self, "Success", message)
@@ -1827,6 +1997,7 @@ class LoansPage(QWidget):
             self.input_duration.setValue(self.default_duration)
             # Reload active loans
             self.load_active_loans()
+            self._refresh_member_loan_totals()
             # Reset validation status
             self.label_validation_status.setText("")
         else:
@@ -1880,6 +2051,8 @@ class LoansPage(QWidget):
                 # Date Issued
                 date_item = QTableWidgetItem(str(loan['date_issued']))
                 self.table_loans.setItem(row_idx, 4, date_item)
+
+            self._refresh_member_loan_totals()
         
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load loans: {str(e)}")
@@ -1897,6 +2070,7 @@ class LoansPage(QWidget):
         self.label_member_name.setText("Member: Not Selected")
         self.label_total_savings.setText("Total Savings: ₦0.00")
         self.label_max_eligible.setText("Max Eligible Loan: ₦0.00")
+        self.label_total_loans_view.setText("Loan Summary: Issued ₦0.00 | Repaid ₦0.00 | Outstanding ₦0.00")
         self.label_validation_status.setText("")
         self.table_loans.setRowCount(0)
         self.btn_validate.setEnabled(False)
@@ -2060,6 +2234,9 @@ class MainWindow(QMainWindow):
 
         # Connect settings signal for live theme/scale updates
         self.settings_page.settings_changed.connect(self.apply_stylesheet)
+        self.settings_page.settings_changed.connect(self.loans_page.load_system_settings)
+        self.settings_page.settings_changed.connect(self.loans_page.load_loan_products)
+        self.settings_page.settings_changed.connect(self.dashboard_page.refresh_dashboard)
         
         self.stacked_widget.addWidget(self.dashboard_page)   # 0
         self.stacked_widget.addWidget(self.members_page)     # 1
