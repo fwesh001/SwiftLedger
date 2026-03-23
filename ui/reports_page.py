@@ -32,7 +32,7 @@ from database.queries import (
     get_system_settings, get_member_by_staff_number,
     get_member_savings, get_member_loans, get_society_stats,
     get_all_members,
-    get_member_statement_data, get_society_report_stats,
+    get_member_statement_data, get_society_report_stats, search_members,
 )
 from database.db_init import log_event
 
@@ -322,12 +322,12 @@ class ReportsPage(QWidget):
 
         Returns (pdf_object, member_dict) or (None, None) on failure.
         """
-        ok, member = get_member_by_staff_number(self.db_path, staff)
-        if not ok or not member:
-            QMessageBox.warning(self, "Not Found", f"No member with staff number '{staff}'.")
+        ok, members = search_members(self.db_path, staff)
+        if not ok or not members:
+            QMessageBox.warning(self, "Not Found", f"No member found matching '{staff}'.")
             return None, None
 
-        member = dict(member)
+        member = dict(members[0])  # Use first match if multiple results
 
         FPDF = self._get_fpdf()
         if not FPDF:
