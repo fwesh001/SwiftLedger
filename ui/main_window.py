@@ -2632,6 +2632,7 @@ class MainWindow(QMainWindow):
         """Create the left sidebar with navigation buttons."""
         
         sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
         sidebar.setMinimumWidth(200)
         sidebar.setMaximumWidth(200)
         
