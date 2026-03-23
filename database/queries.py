@@ -420,7 +420,6 @@ def get_system_settings(db_path: str) -> Tuple[bool, Optional[Dict]]:
         'phone': '',
         'email': '',
         'min_monthly_saving': 0.0,
-        'max_loan_amount': 0.0,
         'default_interest_rate': 12.0,
         'loan_multiplier': 2.0,
         'default_duration': 24,
@@ -869,7 +868,6 @@ def apply_for_loan(
 
     loan_multiplier = float(settings.get('loan_multiplier', 2.0))
     min_monthly_saving = float(settings.get('min_monthly_saving', 0.0))
-    configured_max_loan = float(settings.get('max_loan_amount', 0.0))
 
     ok, total_savings = get_total_savings(db_path, member_id)
     if not ok:
@@ -883,8 +881,6 @@ def apply_for_loan(
         return False, "Failed to calculate total savings"
 
     max_allowed = loan_multiplier * total_savings
-    if configured_max_loan > 0:
-        max_allowed = min(max_allowed, configured_max_loan)
 
     if min_monthly_saving > 0 and total_savings < min_monthly_saving:
         return False, (
