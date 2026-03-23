@@ -29,7 +29,7 @@ from database.queries import (
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
     get_society_stats, check_overdue_loans, delete_member, update_member_profile,
     get_loan_products, add_loan_product, post_loan_repayment, get_member_loan_totals,
-    has_active_loans, search_members,
+    has_active_loans, search_members, get_repayment_dashboard_rows,
 )
 from logic.analytics import (
     get_monthly_snapshot, get_monthly_trend, calculate_lts_ratio, get_liquidity_status
@@ -1693,12 +1693,56 @@ class LoansPage(QWidget):
         self.table_loans.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_loans.horizontalHeader().setStretchLastSection(True)
         main_layout.addWidget(self.table_loans)
+
+        # Repayment Status Dashboard
+        repayments_title = QLabel("Repayment Status Dashboard")
+        repayments_font = QFont("Arial", 12)
+        repayments_font.setBold(True)
+        repayments_title.setFont(repayments_font)
+        main_layout.addWidget(repayments_title)
+
+        repayments_filter_row = QHBoxLayout()
+        self.combo_repay_scope = QComboBox()
+        self.combo_repay_scope.addItems(["Current Member", "All Members"])
+        repayments_filter_row.addWidget(QLabel("Scope:"))
+        repayments_filter_row.addWidget(self.combo_repay_scope)
+
+        self.combo_repay_status = QComboBox()
+        self.combo_repay_status.addItems(["All", "Pending", "Partial", "Paid", "Overdue"])
+        repayments_filter_row.addWidget(QLabel("Status:"))
+        repayments_filter_row.addWidget(self.combo_repay_status)
+
+        self.repay_date_from = QLineEdit()
+        self.repay_date_from.setPlaceholderText("From (YYYY-MM-DD)")
+        repayments_filter_row.addWidget(self.repay_date_from)
+
+        self.repay_date_to = QLineEdit()
+        self.repay_date_to.setPlaceholderText("To (YYYY-MM-DD)")
+        repayments_filter_row.addWidget(self.repay_date_to)
+
+        self.btn_refresh_repayments = QPushButton("Refresh")
+        self.btn_refresh_repayments.clicked.connect(self.load_repayment_dashboard)
+        repayments_filter_row.addWidget(self.btn_refresh_repayments)
+        repayments_filter_row.addStretch()
+        main_layout.addLayout(repayments_filter_row)
+
+        self.table_repayments = QTableWidget()
+        self.table_repayments.setColumnCount(9)
+        self.table_repayments.setHorizontalHeaderLabels([
+            "Member", "Loan", "Installment", "Due Date", "Paid Date",
+            "Total Due", "Total Paid", "Outstanding", "Status"
+        ])
+        self.table_repayments.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_repayments.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table_repayments.horizontalHeader().setStretchLastSection(True)
+        main_layout.addWidget(self.table_repayments)
         
         self.setLayout(main_layout)
         
         # Load system settings
         self.load_system_settings()
         self.load_loan_products()
+        self.load_repayment_dashboard()
         self.combo_loan_product.currentIndexChanged.connect(self._on_product_changed)
     
     def load_system_settings(self) -> None:
@@ -1875,6 +1919,7 @@ class LoansPage(QWidget):
         
         # Load active loans
         self.load_active_loans()
+        self.load_repayment_dashboard()
         self._refresh_member_loan_totals()
         
         # Enable validation and preview buttons
@@ -2027,11 +2072,71 @@ class LoansPage(QWidget):
             self.input_duration.setValue(self.default_duration)
             # Reload active loans
             self.load_active_loans()
+            self.load_repayment_dashboard()
             self._refresh_member_loan_totals()
             # Reset validation status
             self.label_validation_status.setText("")
         else:
             QMessageBox.critical(self, "Error", message)
+
+    def load_repayment_dashboard(self) -> None:
+        """Load repayment status rows with current dashboard filters."""
+        member_scope = self.combo_repay_scope.currentText() if hasattr(self, "combo_repay_scope") else "Current Member"
+        member_id = self.current_member_id if member_scope == "Current Member" else None
+        status_filter = self.combo_repay_status.currentText() if hasattr(self, "combo_repay_status") else "All"
+        start_date = self.repay_date_from.text().strip() if hasattr(self, "repay_date_from") else ""
+        end_date = self.repay_date_to.text().strip() if hasattr(self, "repay_date_to") else ""
+
+        if member_scope == "Current Member" and member_id is None:
+            self.table_repayments.setRowCount(0)
+            return
+
+        ok, rows = get_repayment_dashboard_rows(
+            self.db_path,
+            member_id=member_id,
+            status_filter=status_filter,
+            start_date=start_date or None,
+            end_date=end_date or None,
+        )
+        if not ok:
+            QMessageBox.warning(self, "Repayments", "Failed to load repayment dashboard data.")
+            return
+
+        self.table_repayments.setRowCount(0)
+        for row_idx, item in enumerate(rows):
+            self.table_repayments.insertRow(row_idx)
+
+            member_text = f"{item.get('full_name', '')} ({item.get('staff_number', '')})"
+            self.table_repayments.setItem(row_idx, 0, QTableWidgetItem(member_text))
+            self.table_repayments.setItem(row_idx, 1, QTableWidgetItem(str(item.get("loan_id", ""))))
+            self.table_repayments.setItem(row_idx, 2, QTableWidgetItem(str(item.get("installment_no", ""))))
+            self.table_repayments.setItem(row_idx, 3, QTableWidgetItem(str(item.get("due_date", ""))[:10]))
+            self.table_repayments.setItem(row_idx, 4, QTableWidgetItem(str(item.get("payment_date", ""))[:10]))
+
+            total_due = float(item.get("total_due", 0.0) or 0.0)
+            total_paid = float(item.get("total_paid", 0.0) or 0.0)
+            outstanding = max(0.0, total_due - total_paid)
+
+            due_item = QTableWidgetItem(f"₦{total_due:,.2f}")
+            paid_item = QTableWidgetItem(f"₦{total_paid:,.2f}")
+            out_item = QTableWidgetItem(f"₦{outstanding:,.2f}")
+            due_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            paid_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            out_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+            self.table_repayments.setItem(row_idx, 5, due_item)
+            self.table_repayments.setItem(row_idx, 6, paid_item)
+            self.table_repayments.setItem(row_idx, 7, out_item)
+
+            status = str(item.get("dashboard_status", ""))
+            status_item = QTableWidgetItem(status)
+            if status == "Paid":
+                status_item.setForeground(Qt.GlobalColor.green)
+            elif status == "Partial":
+                status_item.setForeground(Qt.GlobalColor.blue)
+            elif status == "Overdue":
+                status_item.setForeground(Qt.GlobalColor.red)
+            self.table_repayments.setItem(row_idx, 8, status_item)
     
     def load_active_loans(self) -> None:
         """Load and display active loans for the current member."""
@@ -2083,6 +2188,7 @@ class LoansPage(QWidget):
                 self.table_loans.setItem(row_idx, 4, date_item)
 
             self._refresh_member_loan_totals()
+            self.load_repayment_dashboard()
         
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load loans: {str(e)}")
@@ -2103,6 +2209,7 @@ class LoansPage(QWidget):
         self.label_total_loans_view.setText("Loan Summary: Issued ₦0.00 | Repaid ₦0.00 | Outstanding ₦0.00")
         self.label_validation_status.setText("")
         self.table_loans.setRowCount(0)
+        self.table_repayments.setRowCount(0)
         self.btn_validate.setEnabled(False)
         self.btn_preview.setEnabled(False)
         self.btn_submit.setEnabled(False)
