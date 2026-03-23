@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QHeaderView
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.queries import (
@@ -151,6 +152,7 @@ class ReportsPage(QWidget):
         self.btn_member_pdf.clicked.connect(self._generate_member_pdf)
 
         member_actions = QHBoxLayout()
+        member_actions.setSpacing(12)
         member_actions.addWidget(self.btn_member_preview)
         member_actions.addWidget(self.btn_member_pdf)
         ledger_form.addRow(member_actions)
@@ -184,6 +186,7 @@ class ReportsPage(QWidget):
         self.btn_society_pdf.clicked.connect(self._generate_society_pdf)
 
         summary_actions = QHBoxLayout()
+        summary_actions.setSpacing(12)
         summary_actions.addWidget(self.btn_society_preview)
         summary_actions.addWidget(self.btn_society_pdf)
         summary_layout.addLayout(summary_actions)
@@ -444,6 +447,14 @@ class ReportsPage(QWidget):
         table.horizontalHeader().setStretchLastSection(True)
         table.verticalHeader().setVisible(False)
         table.setAlternatingRowColors(True)
+        header = table.horizontalHeader()
+        if len(headers) == 2:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        else:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            for idx in range(1, len(headers)):
+                header.setSectionResizeMode(idx, QHeaderView.ResizeMode.Stretch)
 
         table.setRowCount(len(rows))
         for row_idx, row in enumerate(rows):
