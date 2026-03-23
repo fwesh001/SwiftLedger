@@ -1686,6 +1686,83 @@ def get_member_loan_repayments(
             conn.close()
 
 
+def get_repayment_dashboard_rows(
+    db_path: str,
+    member_id: Optional[int] = None,
+    status_filter: str = "All",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Tuple[bool, List[Dict]]:
+    """Return repayment rows for dashboard with optional filters and computed overdue status."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        query = (
+            """
+            SELECT
+                lr.repayment_id,
+                lr.loan_id,
+                lr.member_id,
+                m.staff_number,
+                m.full_name,
+                lr.installment_no,
+                lr.due_date,
+                lr.payment_date,
+                lr.principal_due,
+                lr.interest_due,
+                lr.total_due,
+                lr.principal_paid,
+                lr.interest_paid,
+                lr.total_paid,
+                lr.status,
+                CASE
+                    WHEN LOWER(COALESCE(lr.status, '')) != 'paid'
+                         AND lr.due_date IS NOT NULL
+                         AND DATE(lr.due_date) < DATE('now')
+                    THEN 'Overdue'
+                    WHEN LOWER(COALESCE(lr.status, '')) = 'paid'
+                    THEN 'Paid'
+                    WHEN LOWER(COALESCE(lr.status, '')) = 'partial'
+                    THEN 'Partial'
+                    ELSE 'Pending'
+                END AS dashboard_status
+            FROM loan_repayments lr
+            JOIN members m ON m.member_id = lr.member_id
+            WHERE 1=1
+            """
+        )
+        params: List[object] = []
+
+        if member_id is not None:
+            query += " AND lr.member_id = ?"
+            params.append(int(member_id))
+        if start_date:
+            query += " AND DATE(COALESCE(lr.payment_date, lr.due_date)) >= DATE(?)"
+            params.append(start_date)
+        if end_date:
+            query += " AND DATE(COALESCE(lr.payment_date, lr.due_date)) <= DATE(?)"
+            params.append(end_date)
+
+        query += " ORDER BY DATE(COALESCE(lr.due_date, lr.payment_date)) ASC, lr.installment_no ASC"
+
+        cursor.execute(query, params)
+        rows = [dict(row) for row in cursor.fetchall()]
+
+        normalized = (status_filter or "All").strip().lower()
+        if normalized and normalized != "all":
+            rows = [row for row in rows if str(row.get("dashboard_status", "")).lower() == normalized]
+
+        return True, rows
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
+
+
 def get_member_savings(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
     """
     Retrieve the last 10 savings transactions for a member.
