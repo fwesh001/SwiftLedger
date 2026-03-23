@@ -29,7 +29,7 @@ from database.queries import (
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
     get_society_stats, check_overdue_loans, delete_member, update_member_profile,
     get_loan_products, add_loan_product, post_loan_repayment, get_member_loan_totals,
-    has_active_loans,
+    has_active_loans, search_members,
 )
 from logic.analytics import (
     get_monthly_snapshot, get_monthly_trend, calculate_lts_ratio, get_liquidity_status
@@ -1293,19 +1293,19 @@ class SavingsPage(QWidget):
         self.setLayout(main_layout)
     
     def search_member(self) -> None:
-        """Search for a member by staff number and load their info."""
+        """Search for a member by staff number, name, or phone and load their info."""
         
-        staff_number = self.input_search.text().strip()
+        query = self.input_search.text().strip()
         
-        if not staff_number:
-            QMessageBox.warning(self, "Invalid Input", "Please enter a staff number.")
+        if not query:
+            QMessageBox.warning(self, "Invalid Input", "Please enter a search term.")
             return
         
-        # Search for member
-        success, member = get_member_by_staff_number(self.db_path, staff_number)
+        # Search for members (multi-field: staff, name, phone)
+        success, members = search_members(self.db_path, query)
         
-        if not success or not member:
-            QMessageBox.warning(self, "Not Found", f"No member found with staff number '{staff_number}'.")
+        if not success or not members:
+            QMessageBox.warning(self, "Not Found", f"No member found matching '{query}'.")
             self.current_member_id = None
             self.current_member_name = None
             self.label_member_name.setText("Name: Not Selected")
@@ -1314,6 +1314,9 @@ class SavingsPage(QWidget):
             self.btn_post.setEnabled(False)
             self._update_transaction_types_for_member(False)
             return
+        
+        # If multiple results, use the first one
+        member = members[0]
         
         # Store member info
         self.current_member_id = member['member_id']
@@ -1329,7 +1332,10 @@ class SavingsPage(QWidget):
         # Enable post button
         self.btn_post.setEnabled(True)
         
-        QMessageBox.information(self, "Success", f"Member found: {member['full_name']}")
+        if len(members) > 1:
+            QMessageBox.information(self, "Success", f"Found {len(members)} matches. Loaded: {member['full_name']}")
+        else:
+            QMessageBox.information(self, "Success", f"Member found: {member['full_name']}")
     
     def load_savings_data(self) -> None:
         """Load and display current savings balance for the member."""
@@ -1723,6 +1729,7 @@ class LoansPage(QWidget):
         if self.selected_product_id is None:
             self.input_interest_rate.setValue(self.default_interest_rate)
             self.input_duration.setValue(self.default_duration)
+            self.input_principal.setValue(0)
             return
 
         ok, products = get_loan_products(self.db_path, active_only=False)
@@ -1732,6 +1739,9 @@ class LoansPage(QWidget):
             if int(product.get('product_id', 0)) == self.selected_product_id:
                 self.input_interest_rate.setValue(float(product.get('interest_rate', self.default_interest_rate)))
                 self.input_duration.setValue(int(product.get('duration_months', self.default_duration)))
+                # Auto-fill principal with product's max amount
+                max_amount = float(product.get('max_loan_amount', 0))
+                self.input_principal.setValue(max_amount)
                 break
 
     def add_custom_loan_product(self) -> None:
@@ -1805,17 +1815,17 @@ class LoansPage(QWidget):
         )
     
     def search_member(self) -> None:
-        """Search for a member by staff number."""
-        staff_number = self.input_search.text().strip()
+        """Search for a member by staff number, name, or phone."""
+        query = self.input_search.text().strip()
         
-        if not staff_number:
-            QMessageBox.warning(self, "Invalid Input", "Please enter a staff number.")
+        if not query:
+            QMessageBox.warning(self, "Invalid Input", "Please enter a search term.")
             return
 
-        success, member = get_member_by_staff_number(self.db_path, staff_number)
+        success, members = search_members(self.db_path, query)
 
-        if not success or not member:
-            QMessageBox.warning(self, "Not Found", f"No member found with staff number '{staff_number}'.")
+        if not success or not members:
+            QMessageBox.warning(self, "Not Found", f"No member found matching '{query}'.")
             self.current_member_id = None
             self.current_member_name = None
             self.label_member_name.setText("Member: Not Selected")
@@ -1826,6 +1836,9 @@ class LoansPage(QWidget):
             self.btn_preview.setEnabled(False)
             self.btn_submit.setEnabled(False)
             return
+        
+        # If multiple results, use the first one
+        member = members[0]
         
         self.current_member_id = member['member_id']
         self.current_member_name = member['full_name']
