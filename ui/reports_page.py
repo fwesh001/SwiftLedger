@@ -481,6 +481,12 @@ class ReportsPage(QWidget):
         content_layout.addWidget(QLabel(f"Reporting Period: {filters.get('start_date')} to {filters.get('end_date')}"))
         content_layout.addWidget(QLabel(f"Current Savings: NGN {float(member.get('current_savings', 0) or 0):,.2f}"))
         content_layout.addWidget(QLabel(f"Outstanding Loans: NGN {float(member.get('total_loans', 0) or 0):,.2f}"))
+        total_repaid = sum(float(loan.get("total_repaid", 0) or 0) for loan in loans)
+        total_due = sum(float(repayment.get("total_due", 0) or 0) for repayment in repayments)
+        total_paid = sum(float(repayment.get("total_paid", 0) or 0) for repayment in repayments)
+        repayment_outstanding = max(0.0, total_due - total_paid)
+        content_layout.addWidget(QLabel(f"Total Repaid (Loans): NGN {total_repaid:,.2f}"))
+        content_layout.addWidget(QLabel(f"Repayment Outstanding: NGN {repayment_outstanding:,.2f}"))
 
         if bool(filters.get("include_savings", True)):
             content_layout.addWidget(QLabel("Savings Transactions"))
@@ -665,8 +671,14 @@ class ReportsPage(QWidget):
         pdf.set_font("Helvetica", "", 10)
         savings_bal = float(member.get("current_savings", 0) or 0)
         loans_bal = float(member.get("total_loans", 0) or 0)
+        total_repaid = sum(float(loan.get("total_repaid", 0) or 0) for loan in loans)
+        total_due = sum(float(repayment.get("total_due", 0) or 0) for repayment in repayments)
+        total_paid = sum(float(repayment.get("total_paid", 0) or 0) for repayment in repayments)
+        repayment_outstanding = max(0.0, total_due - total_paid)
         pdf.cell(0, 6, f"Current Savings: NGN {savings_bal:,.2f}   |   Outstanding Loans: NGN {loans_bal:,.2f}",
                  new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, f"Total Repaid (Loans): NGN {total_repaid:,.2f}   |   Repayment Outstanding: NGN {repayment_outstanding:,.2f}",
+             new_x="LMARGIN", new_y="NEXT")
         pdf.cell(0, 6, f"Reporting Period: {start_date} to {end_date}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
