@@ -39,10 +39,12 @@ from ui.analytics_charts import InteractiveMonthlyChart, LTSRiskGauge
 from ui.audit_page import AuditLogPage
 from ui.about_page import AboutPage
 from ui.settings_page import SettingsPage
-from ui.widgets import SearchFilterWidget
+from ui.widgets import SearchFilterWidget, UppercaseLineEdit
 from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
 from logic.data_manager import BulkDataManager
+
+QLineEdit = UppercaseLineEdit
 
 
 class DashboardPage(QWidget):
