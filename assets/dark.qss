@@ -1,4 +1,4 @@
-/* SwiftLedger Dark Theme */
+/* SwiftLedger Dark Theme (Restored Legacy Palette) */
 
 QMainWindow, QStackedWidget, QWidget {
     background-color: #1e1e1e;
@@ -23,10 +23,6 @@ QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox, QTextEdit {
     padding: 6px;
     border-radius: 3px;
     min-height: 28px;
-}
-
-QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextEdit:focus {
-    border: 1px solid #3498db;
 }
 
 QTableWidget {
@@ -89,7 +85,7 @@ QScrollArea {
     border: none;
 }
 
-QCheckBox, QSlider, QTabWidget, QTabBar::tab {
+QCheckBox, QSlider {
     color: #ecf0f1;
 }
 
@@ -99,13 +95,14 @@ QTabWidget::pane {
 }
 
 QTabBar::tab {
-    background: #2b2b2b;
-    border: 1px solid #34495e;
+    background-color: #34495e;
+    color: #ecf0f1;
+    border: 1px solid #2c3e50;
     border-bottom: none;
-    padding: 8px 14px;
+    padding: 7px 14px;
 }
 
 QTabBar::tab:selected {
-    background: #34495e;
+    background-color: #3d566e;
     font-weight: bold;
 }
