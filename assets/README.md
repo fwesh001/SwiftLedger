@@ -4,7 +4,9 @@
 This folder holds static resources used by SwiftLedger: styles, icons, and optional branding images.
 
 Contents
-- `styles.qss` — central QSS stylesheet used by the app. Modify here for app-wide theme changes.
+- `dark.qss` — dark theme stylesheet template used by the app.
+- `light.qss` — light theme stylesheet template used by the app.
+- `styles.qss` — legacy stylesheet retained for backward compatibility.
 - `icons/` (recommended) — store SVG icons used by UI elements.
 - `images/` (recommended) — place raster images or organization logos here if required.
 
@@ -14,5 +16,5 @@ PDF fonts & Unicode
 Guidelines
 - Keep icons as SVG for scalability.
 - Avoid committing very large binary files; prefer external storage or Git LFS for large logos.
-- Keep style customizations centralized in `styles.qss` for consistent theming.
+- Keep style customizations centralized in `dark.qss` and `light.qss` for consistent theming.
 
