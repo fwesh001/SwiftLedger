@@ -9,7 +9,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QCheckBox, QSlider, QMessageBox,
-    QSpinBox, QComboBox, QScrollArea, QFrame, QLineEdit,
+    QSpinBox, QComboBox, QScrollArea, QFrame, QLineEdit, QDoubleSpinBox,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
@@ -101,6 +101,67 @@ class SettingsPage(QWidget):
         toggle_form.addRow(self.chk_alerts)
 
         main.addWidget(toggle_group)
+
+        # ── Organization & Loan Policy ─────────────────────────────
+        policy_group = QGroupBox("Organization & Loan Policy")
+        policy_group.setFont(QFont("Arial", 12))
+        policy_form = QFormLayout(policy_group)
+        policy_form.setContentsMargins(14, 20, 14, 14)
+        policy_form.setSpacing(12)
+
+        self.input_society_name = QLineEdit()
+        self.input_society_name.setMinimumHeight(32)
+        policy_form.addRow("Society Name:", self.input_society_name)
+
+        self.input_address = QLineEdit()
+        self.input_address.setMinimumHeight(32)
+        policy_form.addRow("Address:", self.input_address)
+
+        self.input_city_state = QLineEdit()
+        self.input_city_state.setMinimumHeight(32)
+        policy_form.addRow("City/State:", self.input_city_state)
+
+        self.input_phone = QLineEdit()
+        self.input_phone.setMinimumHeight(32)
+        policy_form.addRow("Phone:", self.input_phone)
+
+        self.input_email = QLineEdit()
+        self.input_email.setMinimumHeight(32)
+        policy_form.addRow("Email:", self.input_email)
+
+        self.input_loan_multiplier = QDoubleSpinBox()
+        self.input_loan_multiplier.setRange(0.1, 10.0)
+        self.input_loan_multiplier.setSingleStep(0.1)
+        self.input_loan_multiplier.setDecimals(2)
+        policy_form.addRow("Loan Multiplier:", self.input_loan_multiplier)
+
+        self.input_min_monthly_saving = QDoubleSpinBox()
+        self.input_min_monthly_saving.setRange(0.0, 10_000_000.0)
+        self.input_min_monthly_saving.setSingleStep(100.0)
+        self.input_min_monthly_saving.setPrefix("₦")
+        self.input_min_monthly_saving.setDecimals(2)
+        policy_form.addRow("Min Savings (eligibility):", self.input_min_monthly_saving)
+
+        self.input_max_loan_amount = QDoubleSpinBox()
+        self.input_max_loan_amount.setRange(0.0, 100_000_000.0)
+        self.input_max_loan_amount.setSingleStep(1000.0)
+        self.input_max_loan_amount.setPrefix("₦")
+        self.input_max_loan_amount.setDecimals(2)
+        policy_form.addRow("Global Max Loan (0 = no cap):", self.input_max_loan_amount)
+
+        self.input_default_interest = QDoubleSpinBox()
+        self.input_default_interest.setRange(0.0, 100.0)
+        self.input_default_interest.setSingleStep(0.25)
+        self.input_default_interest.setSuffix("%")
+        self.input_default_interest.setDecimals(2)
+        policy_form.addRow("Default Interest Rate:", self.input_default_interest)
+
+        self.input_default_duration = QSpinBox()
+        self.input_default_duration.setRange(1, 120)
+        self.input_default_duration.setSuffix(" months")
+        policy_form.addRow("Default Loan Duration:", self.input_default_duration)
+
+        main.addWidget(policy_group)
 
         # ── Security group ──────────────────────────────────────────
         sec_group = QGroupBox("Security")
@@ -226,6 +287,17 @@ class SettingsPage(QWidget):
         self.slider_timeout.setValue(timeout)
         self.spin_timeout.setValue(timeout)
 
+        self.input_society_name.setText(str(settings.get('society_name') or ''))
+        self.input_address.setText(str(settings.get('address') or settings.get('street') or ''))
+        self.input_city_state.setText(str(settings.get('city_state') or ''))
+        self.input_phone.setText(str(settings.get('phone') or ''))
+        self.input_email.setText(str(settings.get('email') or ''))
+        self.input_loan_multiplier.setValue(float(settings.get('loan_multiplier', 2.0) or 2.0))
+        self.input_min_monthly_saving.setValue(float(settings.get('min_monthly_saving', 0.0) or 0.0))
+        self.input_max_loan_amount.setValue(float(settings.get('max_loan_amount', 0.0) or 0.0))
+        self.input_default_interest.setValue(float(settings.get('default_interest_rate', 12.0) or 12.0))
+        self.input_default_duration.setValue(int(settings.get('default_duration', 24) or 24))
+
         self.current_auth_hash = str(settings.get("auth_hash") or "")
         mode = str(settings.get("security_mode") or "pin").lower().replace(" ", "_")
         mode_label = "System Auth" if mode == "system_auth" else mode.capitalize()
@@ -267,6 +339,18 @@ class SettingsPage(QWidget):
             'text_scale': round(self.slider_scale.value() / 100.0, 2),
             'timeout_minutes': self.spin_timeout.value(),
             'security_mode': mode,
+            'society_name': self.input_society_name.text().strip(),
+            'address': self.input_address.text().strip(),
+            'street': self.input_address.text().strip(),
+            'city_state': self.input_city_state.text().strip(),
+            'phone': self.input_phone.text().strip(),
+            'email': self.input_email.text().strip(),
+            'loan_multiplier': round(self.input_loan_multiplier.value(), 2),
+            'min_monthly_saving': round(self.input_min_monthly_saving.value(), 2),
+            'max_loan_amount': round(self.input_max_loan_amount.value(), 2),
+            'default_interest_rate': round(self.input_default_interest.value(), 2),
+            'default_duration': int(self.input_default_duration.value()),
+            'updated_at': __import__('datetime').datetime.now().isoformat(timespec='seconds'),
         }
 
         if new_cred and mode in ("pin", "password"):
