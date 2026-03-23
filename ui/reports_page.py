@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QDateEdit, QCheckBox, QComboBox,
 )
 from PySide6.QtCore import Qt, QDate
+from PySide6.QtCore import Qt, QDate, QUrl
 from PySide6.QtGui import QFont
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
