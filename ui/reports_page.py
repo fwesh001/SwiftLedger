@@ -534,7 +534,18 @@ class ReportsPage(QWidget):
         if not FPDF:
             return None
 
-        ok, stats = get_society_stats(self.db_path)
+        filters = self._current_filters()
+        start_date = str(filters.get("start_date") or "")
+        end_date = str(filters.get("end_date") or "")
+
+        ok, stats = get_society_report_stats(
+            self.db_path,
+            start_date=start_date,
+            end_date=end_date,
+            include_savings=bool(filters.get("include_savings", True)),
+            include_loans=bool(filters.get("include_loans", True)),
+            include_repayments=bool(filters.get("include_repayments", True)),
+        )
         if not ok:
             QMessageBox.critical(self, "Error", "Could not load society statistics.")
             return None
@@ -562,9 +573,12 @@ class ReportsPage(QWidget):
         pdf.ln(2)
         pdf.set_font("Helvetica", "", 11)
         lines = [
+            f"Reporting Period: {start_date} to {end_date}",
             f"Total Members: {stats.get('total_members', 0)}",
             f"Total Savings: NGN {stats.get('total_savings', 0):,.2f}",
             f"Total Loans Disbursed: NGN {stats.get('total_loans_disbursed', 0):,.2f}",
+            f"Total Loan Repayments: NGN {stats.get('total_repayments', 0):,.2f}",
+            f"Average Loan Duration: {stats.get('average_duration_months', 0):,.2f} months",
             f"Projected Interest: NGN {stats.get('total_projected_interest', 0):,.2f}",
             f"Members' Dividend (60%): NGN {stats.get('members_dividend_share', 0):,.2f}",
             f"Society Reserve (40%): NGN {stats.get('society_dividend_share', 0):,.2f}",
@@ -655,6 +669,11 @@ class ReportsPage(QWidget):
     # ── Preview (build -> temp file -> in-app viewer) ────────────────
 
     def _preview_member_pdf(self) -> None:
+        scope = self.combo_scope.currentText()
+        if scope == "Society":
+            QMessageBox.information(self, "Scope Filter", "Current scope is Society. Switch scope to Member or Both to preview member reports.")
+            return
+
         staff = self.input_staff.text().strip()
         if not staff:
             QMessageBox.warning(self, "Input Required", "Enter a staff number.")
@@ -680,6 +699,11 @@ class ReportsPage(QWidget):
             pass
 
     def _preview_society_pdf(self) -> None:
+        scope = self.combo_scope.currentText()
+        if scope == "Member":
+            QMessageBox.information(self, "Scope Filter", "Current scope is Member. Switch scope to Society or Both to preview society reports.")
+            return
+
         pdf = self._build_society_pdf(self.monthly_chart)
         if pdf is None:
             return
@@ -701,6 +725,11 @@ class ReportsPage(QWidget):
     # ── Save (build -> file dialog -> write) ─────────────────────────
 
     def _generate_member_pdf(self) -> None:
+        scope = self.combo_scope.currentText()
+        if scope == "Society":
+            QMessageBox.information(self, "Scope Filter", "Current scope is Society. Switch scope to Member or Both to export member reports.")
+            return
+
         staff = self.input_staff.text().strip()
         if not staff:
             QMessageBox.warning(self, "Input Required", "Enter a staff number.")
@@ -731,6 +760,11 @@ class ReportsPage(QWidget):
         QMessageBox.information(self, "Exported", f"Statement saved to:\n{path}")
 
     def _generate_society_pdf(self) -> None:
+        scope = self.combo_scope.currentText()
+        if scope == "Member":
+            QMessageBox.information(self, "Scope Filter", "Current scope is Member. Switch scope to Society or Both to export society reports.")
+            return
+
         pdf = self._build_society_pdf(self.monthly_chart)
         if pdf is None:
             return
