@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
+from PySide6.QtWidgets import QHeaderView
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.queries import get_all_logs
@@ -68,11 +69,13 @@ class AuditLogPage(QWidget):
 
         self.btn_refresh = QPushButton("⟳  Refresh")
         self.btn_refresh.setMinimumWidth(100)
+        self.btn_refresh.setMinimumHeight(34)
         self.btn_refresh.clicked.connect(self.refresh_logs)
         filter_row.addWidget(self.btn_refresh)
 
         self.btn_export = QPushButton("Export Log to PDF")
         self.btn_export.setMinimumWidth(140)
+        self.btn_export.setMinimumHeight(34)
         self.btn_export.clicked.connect(self.export_to_pdf)
         filter_row.addWidget(self.btn_export)
 
@@ -87,6 +90,14 @@ class AuditLogPage(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setAlternatingRowColors(True)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self.table.setColumnWidth(0, 180)
         self.table.setColumnWidth(1, 120)
         self.table.setColumnWidth(2, 120)
