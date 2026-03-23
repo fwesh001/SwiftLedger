@@ -229,6 +229,72 @@ def get_all_members(db_path: str) -> Tuple[bool, List[Dict]]:
             conn.close()
 
 
+def search_members(db_path: str, query: str) -> Tuple[bool, List[Dict]]:
+    """
+    Search for members by staff number, name, or phone (case-insensitive, partial match).
+
+    Args:
+        db_path: Path to the SQLite database file.
+        query: Search term (will match against staff_number, full_name, or phone).
+
+    Returns:
+        A tuple (success: bool, members: List[Dict])
+        Each member dict contains the same fields as get_all_members.
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        search_term = f"%{query}%"
+        cursor.execute(
+            """
+            SELECT
+                m.member_id, m.staff_number, m.full_name, m.phone, m.bank_name,
+                m.account_no, m.department, m.date_joined, m.avatar_path,
+                (
+                    SELECT COALESCE(SUM(
+                        CASE
+                            WHEN st.trans_type IN ('Lodgment', 'Opening Balance') THEN st.amount
+                            WHEN st.trans_type = 'Deduction' THEN -st.amount
+                            ELSE 0
+                        END
+                    ), 0)
+                    FROM savings_transactions st
+                    WHERE st.member_id = m.member_id
+                ) AS current_savings,
+                m.total_loans,
+                (SELECT COUNT(1) FROM loans l WHERE l.member_id = m.member_id AND l.status = 'Default')
+                    AS default_loan_count,
+                (SELECT COUNT(1) FROM loans l WHERE l.member_id = m.member_id AND l.status = 'Active')
+                    AS active_loan_count
+            FROM members m
+            WHERE 
+                LOWER(m.staff_number) LIKE LOWER(?)
+                OR LOWER(m.full_name) LIKE LOWER(?)
+                OR LOWER(m.phone) LIKE LOWER(?)
+            ORDER BY m.member_id DESC
+            """,
+            (search_term, search_term, search_term),
+        )
+
+        rows = cursor.fetchall()
+        members = [dict(row) for row in rows]
+
+        return True, members
+
+    except sqlite3.DatabaseError:
+        return False, []
+
+    except Exception:
+        return False, []
+
+    finally:
+        if conn:
+            conn.close()
+
+
 def delete_member(db_path: str, member_id: int) -> Tuple[bool, str]:
     """
     Delete a member and their related transactions/loans.
