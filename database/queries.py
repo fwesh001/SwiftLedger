@@ -229,13 +229,14 @@ def get_all_members(db_path: str) -> Tuple[bool, List[Dict]]:
             conn.close()
 
 
-def search_members(db_path: str, query: str) -> Tuple[bool, List[Dict]]:
+def search_members(db_path: str, query: str, filter_field: str = "all") -> Tuple[bool, List[Dict]]:
     """
     Search for members by staff number, name, or phone (case-insensitive, partial match).
 
     Args:
         db_path: Path to the SQLite database file.
-        query: Search term (will match against staff_number, full_name, or phone).
+        query: Search term (will match against selected field(s)).
+        filter_field: Which field to search: 'all' (default), 'staff_number', 'full_name', or 'phone'.
 
     Returns:
         A tuple (success: bool, members: List[Dict])
@@ -248,8 +249,27 @@ def search_members(db_path: str, query: str) -> Tuple[bool, List[Dict]]:
         cursor = conn.cursor()
 
         search_term = f"%{query}%"
-        cursor.execute(
+        
+        # Build WHERE clause based on filter_field
+        if filter_field == "staff_number":
+            where_clause = "LOWER(m.staff_number) LIKE LOWER(?)"
+            params = (search_term,)
+        elif filter_field == "full_name":
+            where_clause = "LOWER(m.full_name) LIKE LOWER(?)"
+            params = (search_term,)
+        elif filter_field == "phone":
+            where_clause = "LOWER(m.phone) LIKE LOWER(?)"
+            params = (search_term,)
+        else:  # "all" or any other value
+            where_clause = """
+                LOWER(m.staff_number) LIKE LOWER(?)
+                OR LOWER(m.full_name) LIKE LOWER(?)
+                OR LOWER(m.phone) LIKE LOWER(?)
             """
+            params = (search_term, search_term, search_term)
+        
+        cursor.execute(
+            f"""
             SELECT
                 m.member_id, m.staff_number, m.full_name, m.phone, m.bank_name,
                 m.account_no, m.department, m.date_joined, m.avatar_path,
@@ -270,13 +290,10 @@ def search_members(db_path: str, query: str) -> Tuple[bool, List[Dict]]:
                 (SELECT COUNT(1) FROM loans l WHERE l.member_id = m.member_id AND l.status = 'Active')
                     AS active_loan_count
             FROM members m
-            WHERE 
-                LOWER(m.staff_number) LIKE LOWER(?)
-                OR LOWER(m.full_name) LIKE LOWER(?)
-                OR LOWER(m.phone) LIKE LOWER(?)
+            WHERE {where_clause}
             ORDER BY m.member_id DESC
             """,
-            (search_term, search_term, search_term),
+            params,
         )
 
         rows = cursor.fetchall()
