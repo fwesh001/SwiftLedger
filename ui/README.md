@@ -26,7 +26,7 @@ PDF preview
 - If preview is unavailable, the app falls back to saving the PDF and opening it in an external viewer.
 
 Styling
-- The global stylesheet is in `assets/styles.qss`. Adjust variables there for consistent theming.
+- The active themes are `assets/dark.qss` and `assets/light.qss`, applied through `ui/theme_manager.py`.
 
 Developer tips
 - Keep page logic thin: call into `database/queries.py` and `logic/*` for business rules.
