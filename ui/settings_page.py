@@ -36,6 +36,14 @@ class SettingsPage(QWidget):
     # Emitted after the user clicks Apply so MainWindow can re-theme live
     settings_changed = Signal()
 
+    def _apply_form_rhythm(self, layout: QFormLayout) -> None:
+        """Apply consistent spacing/alignment rhythm for form rows."""
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setHorizontalSpacing(16)
+        layout.setVerticalSpacing(10)
+        layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+
     def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
         self.db_path = db_path
@@ -70,8 +78,7 @@ class SettingsPage(QWidget):
         appear_group = QGroupBox("Appearance")
         appear_group.setFont(QFont("Arial", 12))
         appear_form = QFormLayout(appear_group)
-        appear_form.setContentsMargins(14, 20, 14, 14)
-        appear_form.setSpacing(16)
+        self._apply_form_rhythm(appear_form)
 
         # Theme
         self.combo_theme = QComboBox()
@@ -100,8 +107,7 @@ class SettingsPage(QWidget):
         toggle_group = QGroupBox("Feature Toggles")
         toggle_group.setFont(QFont("Arial", 12))
         toggle_form = QFormLayout(toggle_group)
-        toggle_form.setContentsMargins(14, 20, 14, 14)
-        toggle_form.setSpacing(16)
+        self._apply_form_rhythm(toggle_form)
 
         self.chk_charts = QCheckBox("Show Financial Charts on Dashboard")
         self.chk_charts.setFont(QFont("Arial", 11))
@@ -117,8 +123,7 @@ class SettingsPage(QWidget):
         policy_group = QGroupBox("Organization & Loan Policy")
         policy_group.setFont(QFont("Arial", 12))
         policy_form = QFormLayout(policy_group)
-        policy_form.setContentsMargins(14, 20, 14, 14)
-        policy_form.setSpacing(12)
+        self._apply_form_rhythm(policy_form)
 
         self.input_society_name = QLineEdit()
         self.input_society_name.setMinimumHeight(32)
@@ -229,8 +234,7 @@ class SettingsPage(QWidget):
         sec_group = QGroupBox("Security")
         sec_group.setFont(QFont("Arial", 12))
         sec_form = QFormLayout(sec_group)
-        sec_form.setContentsMargins(14, 20, 14, 14)
-        sec_form.setSpacing(16)
+        self._apply_form_rhythm(sec_form)
 
         # Security mode
         self.combo_security_mode = QComboBox()
@@ -410,6 +414,7 @@ class SettingsPage(QWidget):
         layout = QVBoxLayout(dialog)
 
         form = QFormLayout()
+        self._apply_form_rhythm(form)
         input_name = QLineEdit()
         input_name.setPlaceholderText("Product Name")
 
