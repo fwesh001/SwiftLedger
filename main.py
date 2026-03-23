@@ -13,6 +13,7 @@ from database.db_init import init_db
 from ui.login_screen import LoginScreen
 from ui.main_window import MainWindow
 from ui.wizard import FirstRunWizard
+from ui.theme_manager import build_theme_stylesheet
 from utils import get_asset_path, get_database_path
 
 
@@ -71,11 +72,8 @@ class AppController:
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    # ── Load global stylesheet from assets/ ─────────────────────────
-    qss_path = get_asset_path(os.path.join("assets", "styles.qss"))
-    if os.path.isfile(qss_path):
-        with open(qss_path, "r", encoding="utf-8") as fh:
-            app.setStyleSheet(fh.read())
+    # ── Load default app theme until persisted settings are applied ─
+    app.setStyleSheet(build_theme_stylesheet(theme="dark", text_scale=1.0))
 
     # ── Set application window icon ─────────────────────────────────
     icon_path = get_asset_path(os.path.join("assets", "app_icon.ico"))
