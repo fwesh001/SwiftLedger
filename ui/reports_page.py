@@ -1212,7 +1212,7 @@ def generate_and_open_user_guide(society_data: Dict[str, str]) -> Optional[str]:
     pdf.ln(10)
     pdf.set_font("Helvetica", "B", 14)
     pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 10, f"Official User Guide for {society_name}", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.multi_cell(0, 10, f"Official User Guide for {society_name}", align="C")
 
     pdf.ln(20)
     pdf.set_font("Helvetica", "I", 11)
