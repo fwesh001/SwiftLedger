@@ -1290,20 +1290,32 @@ class SavingsPage(QWidget):
         
         self.setLayout(main_layout)
     
+    def _on_search_query_changed(self, filter_type: str, query: str) -> None:
+        """Handle search query changes with debounce."""
+        # Restart debounce timer on each keystroke
+        self.search_debounce_timer.stop()
+        if query.strip():
+            self.search_debounce_timer.start(300)  # 300ms debounce
+    
     def search_member(self) -> None:
-        """Search for a member by staff number, name, or phone and load their info."""
-        
-        query = self.input_search.text().strip()
+        """Search for a member based on current filter widget state."""
+        query = self.search_widget.get_query()
+        filter_type = self.search_widget.get_filter_type()
         
         if not query:
-            QMessageBox.warning(self, "Invalid Input", "Please enter a search term.")
+            self.current_member_id = None
+            self.current_member_name = None
+            self.label_member_name.setText("Name: Not Selected")
+            self.label_total_savings.setText("Total Savings: ₦0.00")
+            self.table_savings.setRowCount(0)
+            self.btn_post.setEnabled(False)
+            self._update_transaction_types_for_member(False)
             return
         
-        # Search for members (multi-field: staff, name, phone)
-        success, members = search_members(self.db_path, query)
+        # Search for members with filter
+        success, members = search_members(self.db_path, query, filter_field=filter_type)
         
         if not success or not members:
-            QMessageBox.warning(self, "Not Found", f"No member found matching '{query}'.")
             self.current_member_id = None
             self.current_member_name = None
             self.label_member_name.setText("Name: Not Selected")
@@ -1329,11 +1341,6 @@ class SavingsPage(QWidget):
         
         # Enable post button
         self.btn_post.setEnabled(True)
-        
-        if len(members) > 1:
-            QMessageBox.information(self, "Success", f"Found {len(members)} matches. Loaded: {member['full_name']}")
-        else:
-            QMessageBox.information(self, "Success", f"Member found: {member['full_name']}")
     
     def load_savings_data(self) -> None:
         """Load and display current savings balance for the member."""
@@ -1445,7 +1452,7 @@ class SavingsPage(QWidget):
         """Clear the active member context and reset UI widgets."""
         self.current_member_id = None
         self.current_member_name = None
-        self.input_search.clear()
+        self.search_widget.clear()
         self.input_amount.setValue(0)
         self.combo_mode.setCurrentIndex(0)
         self.input_transfer_ref.clear()
