@@ -1856,6 +1856,56 @@ def get_society_report_stats(
             conn.close()
 
 
+def get_report_date_bounds(db_path: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """Return earliest and latest reportable dates across savings, loans and repayments."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT MIN(report_date), MAX(report_date)
+            FROM (
+                SELECT DATE(trans_date) AS report_date
+                FROM savings_transactions
+                WHERE trans_date IS NOT NULL
+
+                UNION ALL
+
+                SELECT DATE(date_issued) AS report_date
+                FROM loans
+                WHERE date_issued IS NOT NULL
+
+                UNION ALL
+
+                SELECT DATE(due_date) AS report_date
+                FROM loan_repayments
+                WHERE due_date IS NOT NULL
+
+                UNION ALL
+
+                SELECT DATE(payment_date) AS report_date
+                FROM loan_repayments
+                WHERE payment_date IS NOT NULL
+            )
+            WHERE report_date IS NOT NULL
+            """
+        )
+        row = cursor.fetchone()
+        if not row:
+            return True, None, None
+
+        min_date = row[0]
+        max_date = row[1]
+        return True, min_date, max_date
+    except Exception:
+        return False, None, None
+    finally:
+        if conn:
+            conn.close()
+
+
 def get_all_logs(db_path: str) -> Tuple[bool, List[Dict]]:
     """
     Retrieve all audit log entries, newest first.
