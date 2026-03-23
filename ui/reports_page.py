@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QDateEdit, QCheckBox, QComboBox,
 )
 from PySide6.QtCore import Qt, QDate
-from PySide6.QtCore import Qt, QDate, QUrl
+from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -297,8 +297,7 @@ class ReportsPage(QWidget):
         layout = QVBoxLayout(dialog)
 
         pdf_doc = QPdfDocument(dialog)
-        file_url = QUrl.fromLocalFile(path)
-        status = pdf_doc.load(file_url)
+        status = pdf_doc.load(path)
         if status != QPdfDocument.Status.Ready:
             QMessageBox.warning(self, "Preview Error", f"Unable to load PDF file.\nPath: {path}\nStatus: {status}")
             return
