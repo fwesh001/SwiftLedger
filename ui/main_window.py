@@ -1816,18 +1816,33 @@ class LoansPage(QWidget):
             f"Outstanding ₦{totals.get('outstanding_principal', 0.0):,.2f}"
         )
     
+    def _on_search_query_changed(self, filter_type: str, query: str) -> None:
+        """Handle search query changes with debounce."""
+        # Restart debounce timer on each keystroke
+        self.search_debounce_timer.stop()
+        if query.strip():
+            self.search_debounce_timer.start(300)  # 300ms debounce
+    
     def search_member(self) -> None:
-        """Search for a member by staff number, name, or phone."""
-        query = self.input_search.text().strip()
+        """Search for a member based on current filter widget state."""
+        query = self.search_widget.get_query()
+        filter_type = self.search_widget.get_filter_type()
         
         if not query:
-            QMessageBox.warning(self, "Invalid Input", "Please enter a search term.")
+            self.current_member_id = None
+            self.current_member_name = None
+            self.label_member_name.setText("Member: Not Selected")
+            self.label_total_savings.setText("Total Savings: ₦0.00")
+            self.label_max_eligible.setText("Max Eligible Loan: ₦0.00")
+            self.table_loans.setRowCount(0)
+            self.btn_validate.setEnabled(False)
+            self.btn_preview.setEnabled(False)
+            self.btn_submit.setEnabled(False)
             return
 
-        success, members = search_members(self.db_path, query)
+        success, members = search_members(self.db_path, query, filter_field=filter_type)
 
         if not success or not members:
-            QMessageBox.warning(self, "Not Found", f"No member found matching '{query}'.")
             self.current_member_id = None
             self.current_member_name = None
             self.label_member_name.setText("Member: Not Selected")
@@ -2078,7 +2093,7 @@ class LoansPage(QWidget):
         self.current_member_name = None
         self.total_savings = 0.0
         self.max_eligible_amount = 0.0
-        self.input_search.clear()
+        self.search_widget.clear()
         self.input_principal.setValue(0)
         self.input_interest_rate.setValue(self.default_interest_rate)
         self.input_duration.setValue(self.default_duration)
