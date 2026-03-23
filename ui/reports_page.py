@@ -34,7 +34,7 @@ from database.queries import (
     get_system_settings, get_member_by_staff_number,
     get_member_savings, get_member_loans, get_society_stats,
     get_all_members,
-    get_member_statement_data, get_society_report_stats, search_members,
+    get_member_statement_data, get_society_report_stats, search_members, get_report_date_bounds,
 )
 from database.db_init import log_event
 from ui.widgets import SearchFilterWidget
@@ -87,6 +87,7 @@ class ReportsPage(QWidget):
         self.date_to.setCalendarPopup(True)
         self.date_to.setDate(QDate.currentDate())
         filter_form.addRow("To:", self.date_to)
+        self._initialize_date_filters()
 
         toggle_row = QHBoxLayout()
         self.chk_include_savings = QCheckBox("Savings")
@@ -232,6 +233,19 @@ class ReportsPage(QWidget):
             "include_repayments": self.chk_include_repayments.isChecked(),
             "include_duration": self.chk_include_duration.isChecked(),
         }
+    def _initialize_date_filters(self) -> None:
+        """Set default report dates to actual data range when available."""
+        ok, min_date, max_date = get_report_date_bounds(self.db_path)
+        if not ok or not min_date:
+            return
+
+        min_qdate = QDate.fromString(str(min_date), "yyyy-MM-dd")
+        max_qdate = QDate.fromString(str(max_date), "yyyy-MM-dd")
+
+        if min_qdate.isValid():
+            self.date_from.setDate(min_qdate)
+        if max_qdate.isValid():
+            self.date_to.setDate(max_qdate)
 
     def _add_header(self, pdf, info: dict) -> None:
         """Add dynamic branded header (logo or styled society name)."""
