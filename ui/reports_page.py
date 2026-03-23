@@ -329,6 +329,25 @@ class ReportsPage(QWidget):
         except Exception:
             return False
 
+    def _on_member_search_changed(self, filter_type: str, query: str) -> None:
+        """Auto-search for member when search query changes and display name."""
+        if not query.strip():
+            self.label_selected_member.setText("Member: Not selected")
+            return
+        
+        # Search for matching members
+        success, members = search_members(self.db_path, query, filter_field=filter_type)
+        
+        if success and members:
+            member = members[0]  # Use first match
+            member_name = member.get('full_name', 'Unknown')
+            if len(members) > 1:
+                self.label_selected_member.setText(f"Member: {member_name} (+{len(members)-1} more)")
+            else:
+                self.label_selected_member.setText(f"Member: {member_name}")
+        else:
+            self.label_selected_member.setText("Member: Not found")
+
     # ── Build PDF objects (shared by preview & save) ─────────────────
 
     def _build_member_pdf(self, staff: str):
@@ -339,24 +358,6 @@ class ReportsPage(QWidget):
         """
         ok, members = search_members(self.db_path, staff)
         if not ok or not members:
-            def _on_member_search_changed(self, filter_type: str, query: str) -> None:
-                """Auto-search for member when search query changes and display name."""
-                if not query.strip():
-                    self.label_selected_member.setText("Member: Not selected")
-                    return
-        
-                # Search for matching members
-                success, members = search_members(self.db_path, query, filter_field=filter_type)
-        
-                if success and members:
-                    member = members[0]  # Use first match
-                    member_name = member.get('full_name', 'Unknown')
-                    if len(members) > 1:
-                        self.label_selected_member.setText(f"Member: {member_name} (+{len(members)-1} more)")
-                    else:
-                        self.label_selected_member.setText(f"Member: {member_name}")
-                else:
-                    self.label_selected_member.setText("Member: Not found")
             QMessageBox.warning(self, "Not Found", f"No member found matching '{staff}'.")
             return None, None
 
