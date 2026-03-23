@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QHeaderView
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.db_init import save_settings, log_event
@@ -188,23 +189,35 @@ class SettingsPage(QWidget):
         self.table_loan_products.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_loan_products.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_loan_products.horizontalHeader().setStretchLastSection(True)
+        self.table_loan_products.verticalHeader().setVisible(False)
+        self.table_loan_products.setAlternatingRowColors(True)
+        products_header = self.table_loan_products.horizontalHeader()
+        products_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        products_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        products_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        products_header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        products_header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self.table_loan_products.setColumnHidden(5, True)
         products_layout.addWidget(self.table_loan_products)
 
         products_btn_row = QHBoxLayout()
         self.btn_product_add = QPushButton("Add")
+        self.btn_product_add.setMinimumWidth(90)
         self.btn_product_add.clicked.connect(self._add_loan_product)
         products_btn_row.addWidget(self.btn_product_add)
 
         self.btn_product_edit = QPushButton("Edit")
+        self.btn_product_edit.setMinimumWidth(90)
         self.btn_product_edit.clicked.connect(self._edit_loan_product)
         products_btn_row.addWidget(self.btn_product_edit)
 
         self.btn_product_toggle = QPushButton("Activate/Deactivate")
+        self.btn_product_toggle.setMinimumWidth(170)
         self.btn_product_toggle.clicked.connect(self._toggle_loan_product_status)
         products_btn_row.addWidget(self.btn_product_toggle)
 
         self.btn_product_refresh = QPushButton("Refresh")
+        self.btn_product_refresh.setMinimumWidth(100)
         self.btn_product_refresh.clicked.connect(self._load_loan_products_table)
         products_btn_row.addWidget(self.btn_product_refresh)
         products_btn_row.addStretch()
