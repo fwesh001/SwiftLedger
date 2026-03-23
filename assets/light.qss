@@ -1,0 +1,114 @@
+/* SwiftLedger Light Theme */
+
+QMainWindow, QStackedWidget, QWidget {
+    background-color: #f5f7fb;
+    color: #1f2937;
+    font-size: {{FONT_SIZE}}px;
+}
+
+QFrame#sidebar {
+    background-color: #e8eef5;
+    border-right: 1px solid #c7d2df;
+}
+
+QLabel {
+    color: #1f2937;
+    background-color: transparent;
+    font-size: {{FONT_SIZE}}px;
+}
+
+QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox, QTextEdit {
+    background-color: #ffffff;
+    color: #1f2937;
+    border: 1px solid #cfd8e3;
+    padding: 6px;
+    border-radius: 4px;
+    min-height: 28px;
+}
+
+QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTextEdit:focus {
+    border: 1px solid #3b82f6;
+}
+
+QTableWidget {
+    background-color: #ffffff;
+    color: #1f2937;
+    gridline-color: #e5e7eb;
+    alternate-background-color: #f8fafc;
+    selection-background-color: #dbeafe;
+}
+
+QTableWidget QHeaderView::section {
+    background-color: #e5edf6;
+    color: #1f2937;
+    padding: 8px;
+    border: 1px solid #cfd8e3;
+    font-weight: bold;
+}
+
+QGroupBox {
+    border: 1px solid #d7e0ea;
+    border-radius: 6px;
+    margin-top: 12px;
+    padding: 14px 10px 10px 10px;
+    color: #1f2937;
+    background-color: #ffffff;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 4px;
+    color: #475569;
+}
+
+QPushButton {
+    background-color: #edf2f7;
+    color: #1f2937;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 7px 14px;
+    min-height: 32px;
+}
+
+QPushButton:hover {
+    background-color: #e2e8f0;
+}
+
+QPushButton:disabled {
+    color: #94a3b8;
+    background-color: #f1f5f9;
+}
+
+QListWidget {
+    background-color: #ffffff;
+    color: #1f2937;
+    border: 1px solid #d1d5db;
+}
+
+QScrollArea {
+    background-color: #f5f7fb;
+    border: none;
+}
+
+QCheckBox, QSlider, QTabWidget, QTabBar::tab {
+    color: #1f2937;
+}
+
+QTabWidget::pane {
+    border: 1px solid #d7e0ea;
+    top: -1px;
+    background: #ffffff;
+}
+
+QTabBar::tab {
+    background: #eef3f9;
+    border: 1px solid #d7e0ea;
+    border-bottom: none;
+    padding: 8px 14px;
+}
+
+QTabBar::tab:selected {
+    background: #ffffff;
+    font-weight: bold;
+}
