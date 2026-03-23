@@ -335,7 +335,7 @@ def save_settings(data_dict: Dict[str, object], db_path: str = DB_PATH) -> None:
         "society_name", "street", "address", "city_state", "phone", "email",
         "reg_no", "logo_path", "security_mode", "auth_hash",
         "timeout_minutes", "show_charts", "show_alerts",
-        "theme", "text_scale", "min_monthly_saving", "max_loan_amount",
+        "theme", "text_scale", "min_monthly_saving",
         "default_interest_rate", "loan_multiplier", "default_duration", "updated_at",
     }
 
