@@ -23,8 +23,9 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QLineEdit, QMessageBox,
     QFileDialog, QDateEdit, QCheckBox, QComboBox,
+    QDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem,
+    QAbstractItemView, QListWidget, QScrollArea,
 )
-from PySide6.QtCore import Qt, QDate
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
 
@@ -346,6 +347,235 @@ class ReportsPage(QWidget):
                 self.label_selected_member.setText(f"Member: {member_name}")
         else:
             self.label_selected_member.setText("Member: Not found")
+
+    def _validate_scope(self, target: str, for_export: bool = False) -> bool:
+        scope = self.combo_scope.currentText()
+        action = "export" if for_export else "preview"
+        if target == "member" and scope == "Society":
+            QMessageBox.information(
+                self,
+                "Scope Filter",
+                f"Current scope is Society. Switch scope to Member or Both to {action} member reports.",
+            )
+            return False
+        if target == "society" and scope == "Member":
+            QMessageBox.information(
+                self,
+                "Scope Filter",
+                f"Current scope is Member. Switch scope to Society or Both to {action} society reports.",
+            )
+            return False
+        return True
+
+    def _validate_date_range(self) -> bool:
+        if self.date_from.date() > self.date_to.date():
+            QMessageBox.warning(self, "Invalid Date Range", "Start date cannot be after end date.")
+            return False
+        return True
+
+    def _select_member_dialog(self, members) -> Optional[Dict]:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Member")
+        dialog.resize(560, 420)
+
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Multiple members matched your search. Select one:"))
+
+        list_widget = QListWidget(dialog)
+        for member in members:
+            staff = str(member.get("staff_number", ""))
+            name = str(member.get("full_name", ""))
+            phone = str(member.get("phone", ""))
+            list_widget.addItem(f"{staff} | {name} | {phone}")
+        list_widget.setCurrentRow(0)
+        layout.addWidget(list_widget)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+
+        selected_index = list_widget.currentRow()
+        if selected_index < 0 or selected_index >= len(members):
+            return None
+
+        return dict(members[selected_index])
+
+    def _resolve_member_for_preview(self) -> Optional[Dict]:
+        query = self.search_member_widget.get_query().strip()
+        if not query:
+            QMessageBox.warning(self, "Input Required", "Enter a staff number, name, or phone.")
+            return None
+
+        filter_type = self.search_member_widget.get_filter_type()
+        ok, members = search_members(self.db_path, query, filter_field=filter_type)
+        if not ok or not members:
+            QMessageBox.warning(self, "Not Found", f"No member found matching '{query}'.")
+            return None
+
+        if len(members) == 1:
+            return dict(members[0])
+
+        return self._select_member_dialog(members)
+
+    def _build_preview_table(self, headers, rows) -> QTableWidget:
+        table = QTableWidget()
+        table.setColumnCount(len(headers))
+        table.setHorizontalHeaderLabels(headers)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.horizontalHeader().setStretchLastSection(True)
+        table.verticalHeader().setVisible(False)
+        table.setAlternatingRowColors(True)
+
+        table.setRowCount(len(rows))
+        for row_idx, row in enumerate(rows):
+            for col_idx, value in enumerate(row):
+                item = QTableWidgetItem(str(value))
+                if isinstance(value, (int, float)):
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                table.setItem(row_idx, col_idx, item)
+        return table
+
+    def _open_member_table_preview(self, member: Dict, savings_txns, loans, repayments, filters: Dict[str, object]) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Member Statement Preview")
+        dialog.resize(1100, 760)
+
+        root = QVBoxLayout(dialog)
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+
+        content_layout.addWidget(QLabel(f"Member: {member.get('full_name', '')} ({member.get('staff_number', '')})"))
+        content_layout.addWidget(QLabel(f"Phone: {member.get('phone', '') or 'N/A'}"))
+        content_layout.addWidget(QLabel(f"Reporting Period: {filters.get('start_date')} to {filters.get('end_date')}"))
+        content_layout.addWidget(QLabel(f"Current Savings: NGN {float(member.get('current_savings', 0) or 0):,.2f}"))
+        content_layout.addWidget(QLabel(f"Outstanding Loans: NGN {float(member.get('total_loans', 0) or 0):,.2f}"))
+
+        if bool(filters.get("include_savings", True)):
+            content_layout.addWidget(QLabel("Savings Transactions"))
+            savings_rows = [
+                [
+                    str(tx.get("trans_date", ""))[:10],
+                    str(tx.get("trans_type", "")),
+                    str(tx.get("payment_mode", "")),
+                    f"NGN {float(tx.get('amount', 0) or 0):,.2f}",
+                    f"NGN {float(tx.get('running_balance', 0) or 0):,.2f}",
+                ]
+                for tx in savings_txns
+            ]
+            if not savings_rows:
+                savings_rows = [["-", "No savings records found", "-", "-", "-"]]
+            content_layout.addWidget(self._build_preview_table(
+                ["Date", "Type", "Mode", "Amount", "Balance"],
+                savings_rows,
+            ))
+
+        if bool(filters.get("include_loans", True)):
+            content_layout.addWidget(QLabel("Loan Records"))
+            loan_rows = [
+                [
+                    str(loan.get("loan_id", "")),
+                    f"NGN {float(loan.get('principal', 0) or 0):,.2f}",
+                    f"{float(loan.get('interest_rate', 0) or 0):.2f}%",
+                    f"{int(loan.get('duration_months', 0) or 0)}",
+                    str(loan.get("status", "")),
+                    str(loan.get("date_issued", ""))[:10],
+                    f"NGN {float(loan.get('total_repaid', 0) or 0):,.2f}",
+                ]
+                for loan in loans
+            ]
+            if not loan_rows:
+                loan_rows = [["-", "No loan records found", "-", "-", "-", "-", "-"]]
+            content_layout.addWidget(self._build_preview_table(
+                ["Loan ID", "Principal", "Rate", "Duration(m)", "Status", "Date Issued", "Total Repaid"],
+                loan_rows,
+            ))
+
+        if bool(filters.get("include_repayments", True)):
+            content_layout.addWidget(QLabel("Loan Repayments"))
+            repayment_rows = [
+                [
+                    str(repayment.get("repayment_id", "")),
+                    str(repayment.get("loan_id", "")),
+                    str(repayment.get("due_date", ""))[:10],
+                    str(repayment.get("status", "")),
+                    f"NGN {float(repayment.get('total_due', 0) or 0):,.2f}",
+                    f"NGN {float(repayment.get('total_paid', 0) or 0):,.2f}",
+                    f"NGN {max(0.0, float(repayment.get('total_due', 0) or 0) - float(repayment.get('total_paid', 0) or 0)):,.2f}",
+                ]
+                for repayment in repayments
+            ]
+            if not repayment_rows:
+                repayment_rows = [["-", "-", "No repayment records found", "-", "-", "-", "-"]]
+            content_layout.addWidget(self._build_preview_table(
+                ["Repay #", "Loan", "Due Date", "Status", "Total Due", "Paid", "Outstanding"],
+                repayment_rows,
+            ))
+
+        scroll.setWidget(content)
+        root.addWidget(scroll)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.accept)
+        root.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        dialog.exec()
+
+    def _open_society_table_preview(self, stats: Dict, members, filters: Dict[str, object]) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Society Summary Preview")
+        dialog.resize(1100, 760)
+
+        root = QVBoxLayout(dialog)
+        scroll = QScrollArea(dialog)
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+
+        content_layout.addWidget(QLabel("Financial Summary"))
+        summary_rows = [
+            ["Reporting Period", f"{filters.get('start_date')} to {filters.get('end_date')}"] ,
+            ["Total Members", str(stats.get("total_members", 0))],
+            ["Total Savings", f"NGN {float(stats.get('total_savings', 0) or 0):,.2f}"],
+            ["Total Loans Disbursed", f"NGN {float(stats.get('total_loans_disbursed', 0) or 0):,.2f}"],
+            ["Total Loan Repayments", f"NGN {float(stats.get('total_repayments', 0) or 0):,.2f}"],
+            ["Average Loan Duration", f"{float(stats.get('average_duration_months', 0) or 0):,.2f} months"],
+            ["Projected Interest", f"NGN {float(stats.get('total_projected_interest', 0) or 0):,.2f}"],
+            ["Members' Dividend (60%)", f"NGN {float(stats.get('members_dividend_share', 0) or 0):,.2f}"],
+            ["Society Reserve (40%)", f"NGN {float(stats.get('society_dividend_share', 0) or 0):,.2f}"],
+        ]
+        content_layout.addWidget(self._build_preview_table(["Metric", "Value"], summary_rows))
+
+        content_layout.addWidget(QLabel("Member Roster"))
+        member_rows = [
+            [
+                str(member.get("staff_number", "")),
+                str(member.get("full_name", "")),
+                str(member.get("phone", "") or ""),
+                f"NGN {float(member.get('current_savings', 0) or 0):,.2f}",
+                f"NGN {float(member.get('total_loans', 0) or 0):,.2f}",
+            ]
+            for member in members
+        ]
+        if not member_rows:
+            member_rows = [["-", "No members found", "-", "-", "-"]]
+        content_layout.addWidget(self._build_preview_table(
+            ["Staff #", "Name", "Phone", "Savings", "Loans"],
+            member_rows,
+        ))
+
+        scroll.setWidget(content)
+        root.addWidget(scroll)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.accept)
+        root.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        dialog.exec()
 
     # ── Build PDF objects (shared by preview & save) ─────────────────
 
@@ -702,75 +932,65 @@ class ReportsPage(QWidget):
     # ── Preview (build -> temp file -> in-app viewer) ────────────────
 
     def _preview_member_pdf(self) -> None:
-        scope = self.combo_scope.currentText()
-        if scope == "Society":
-            QMessageBox.information(self, "Scope Filter", "Current scope is Society. Switch scope to Member or Both to preview member reports.")
+        if not self._validate_scope("member", for_export=False):
+            return
+        if not self._validate_date_range():
             return
 
-        staff = self.search_member_widget.get_query()
-        if not staff:
-            QMessageBox.warning(self, "Input Required", "Enter a staff number or name.")
+        member = self._resolve_member_for_preview()
+        if not member:
             return
 
-        # Validate date range
-        if self.date_from.date() > self.date_to.date():
-            QMessageBox.warning(self, "Invalid Date Range", "Start date cannot be after end date.")
+        member_id = member.get("member_id")
+        if not member_id:
+            QMessageBox.warning(self, "Error", "Selected member has no valid ID.")
             return
 
-        pdf, member = self._build_member_pdf(staff)
-        if pdf is None:
-            return
+        filters = self._current_filters()
+        ok_stmt, stmt_data = get_member_statement_data(
+            self.db_path,
+            int(member_id),
+            start_date=str(filters.get("start_date") or ""),
+            end_date=str(filters.get("end_date") or ""),
+        )
+        if ok_stmt:
+            savings_txns = list(stmt_data.get("savings", []))
+            loans = list(stmt_data.get("loans", []))
+            repayments = list(stmt_data.get("repayments", []))
+        else:
+            _, savings_txns = get_member_savings(self.db_path, int(member_id))
+            _, loans = get_member_loans(self.db_path, int(member_id))
+            repayments = []
 
-        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, prefix="sl_preview_")
-        tmp_path = tmp.name
-        tmp.close()
-        if not self._write_pdf_to_path(pdf, tmp_path):
-            QMessageBox.warning(self, "Preview Error", "Unable to write preview file.")
-            return
-
-        self._open_pdf_preview(tmp_path)
-
-        # Clean up temp file after dialog closes
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+        self._open_member_table_preview(member, savings_txns, loans, repayments, filters)
 
     def _preview_society_pdf(self) -> None:
-        scope = self.combo_scope.currentText()
-        if scope == "Member":
-            QMessageBox.information(self, "Scope Filter", "Current scope is Member. Switch scope to Society or Both to preview society reports.")
+        if not self._validate_scope("society", for_export=False):
+            return
+        if not self._validate_date_range():
             return
 
-        # Validate date range
-        if self.date_from.date() > self.date_to.date():
-            QMessageBox.warning(self, "Invalid Date Range", "Start date cannot be after end date.")
+        filters = self._current_filters()
+        ok_stats, stats = get_society_report_stats(
+            self.db_path,
+            start_date=str(filters.get("start_date") or ""),
+            end_date=str(filters.get("end_date") or ""),
+            include_savings=bool(filters.get("include_savings", True)),
+            include_loans=bool(filters.get("include_loans", True)),
+            include_repayments=bool(filters.get("include_repayments", True)),
+        )
+        if not ok_stats:
+            QMessageBox.critical(self, "Error", "Could not load society statistics.")
             return
 
-        pdf = self._build_society_pdf(self.monthly_chart)
-        if pdf is None:
-            return
-
-        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, prefix="sl_preview_")
-        tmp_path = tmp.name
-        tmp.close()
-        if not self._write_pdf_to_path(pdf, tmp_path):
-            QMessageBox.warning(self, "Preview Error", "Unable to write preview file.")
-            return
-
-        self._open_pdf_preview(tmp_path)
-
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+        ok_members, members = get_all_members(self.db_path)
+        member_rows = members if ok_members and members else []
+        self._open_society_table_preview(stats, member_rows, filters)
 
     # ── Save (build -> file dialog -> write) ─────────────────────────
 
     def _generate_member_pdf(self) -> None:
-        scope = self.combo_scope.currentText()
-        if scope == "Society":
-            QMessageBox.information(self, "Scope Filter", "Current scope is Society. Switch scope to Member or Both to export member reports.")
+        if not self._validate_scope("member", for_export=True):
             return
 
         staff = self.search_member_widget.get_query()
@@ -778,9 +998,7 @@ class ReportsPage(QWidget):
             QMessageBox.warning(self, "Input Required", "Enter a staff number or name.")
             return
 
-        # Validate date range
-        if self.date_from.date() > self.date_to.date():
-            QMessageBox.warning(self, "Invalid Date Range", "Start date cannot be after end date.")
+        if not self._validate_date_range():
             return
 
         pdf, member = self._build_member_pdf(staff)
@@ -808,14 +1026,10 @@ class ReportsPage(QWidget):
         QMessageBox.information(self, "Exported", f"Statement saved to:\n{path}")
 
     def _generate_society_pdf(self) -> None:
-        scope = self.combo_scope.currentText()
-        if scope == "Member":
-            QMessageBox.information(self, "Scope Filter", "Current scope is Member. Switch scope to Society or Both to export society reports.")
+        if not self._validate_scope("society", for_export=True):
             return
 
-        # Validate date range
-        if self.date_from.date() > self.date_to.date():
-            QMessageBox.warning(self, "Invalid Date Range", "Start date cannot be after end date.")
+        if not self._validate_date_range():
             return
 
         pdf = self._build_society_pdf(self.monthly_chart)
