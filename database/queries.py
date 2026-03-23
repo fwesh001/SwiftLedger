@@ -1215,6 +1215,288 @@ def add_saving(
             conn.close()
 
 
+def get_member_loan_totals(db_path: str, member_id: int) -> Tuple[bool, Dict[str, float]]:
+    """Return total issued, repaid and outstanding principal for a member's loans."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(SUM(principal), 0.0) AS total_issued,
+                COALESCE(SUM(total_repaid), 0.0) AS total_repaid,
+                COALESCE(SUM(MAX(0, principal - COALESCE(principal_paid, 0.0))), 0.0) AS outstanding_principal
+            FROM loans
+            WHERE member_id = ?
+            """,
+            (member_id,),
+        )
+        row = cursor.fetchone() or (0.0, 0.0, 0.0)
+        return True, {
+            "total_issued": float(row[0] or 0.0),
+            "total_repaid": float(row[1] or 0.0),
+            "outstanding_principal": float(row[2] or 0.0),
+        }
+    except Exception:
+        return False, {"total_issued": 0.0, "total_repaid": 0.0, "outstanding_principal": 0.0}
+    finally:
+        if conn:
+            conn.close()
+
+
+def has_active_loans(db_path: str, member_id: int) -> bool:
+    """Return True if member currently has at least one active/defaulted/overdue loan."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT 1
+            FROM loans
+            WHERE member_id = ?
+              AND status IN ('Active', 'Overdue', 'Default')
+              AND MAX(0, principal - COALESCE(principal_paid, 0.0)) > 0
+            LIMIT 1
+            """,
+            (member_id,),
+        )
+        return cursor.fetchone() is not None
+    except Exception:
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def post_loan_repayment(
+    db_path: str,
+    member_id: int,
+    amount: float,
+    payment_mode: str = "Cash",
+    transfer_reference: str = "",
+) -> Tuple[bool, str]:
+    """Apply repayment amount against pending installments for active loans."""
+    if amount <= 0:
+        return False, "Repayment amount must be greater than 0."
+
+    transfer_reference = (transfer_reference or "").strip()
+    valid_payment_modes = ["Bank Transfer", "Cash", "Salary Deduction"]
+    if payment_mode not in valid_payment_modes:
+        return False, "Invalid payment mode."
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("BEGIN;")
+
+        cursor.execute(
+            "SELECT COALESCE(current_savings, 0.0) FROM members WHERE member_id = ?",
+            (member_id,),
+        )
+        mrow = cursor.fetchone()
+        if not mrow:
+            conn.rollback()
+            return False, f"Error: Member ID {member_id} does not exist."
+        current_savings = float(mrow[0] or 0.0)
+
+        cursor.execute(
+            """
+            SELECT
+                lr.repayment_id,
+                lr.loan_id,
+                lr.principal_due,
+                lr.interest_due,
+                lr.principal_paid,
+                lr.interest_paid,
+                lr.total_due,
+                lr.total_paid
+            FROM loan_repayments lr
+            JOIN loans l ON l.loan_id = lr.loan_id
+            WHERE lr.member_id = ?
+              AND l.status IN ('Active', 'Overdue', 'Default')
+              AND lr.status IN ('Pending', 'Partial')
+            ORDER BY DATE(COALESCE(lr.due_date, l.date_issued)) ASC, lr.installment_no ASC
+            """,
+            (member_id,),
+        )
+        installments = cursor.fetchall()
+        if not installments:
+            conn.rollback()
+            return False, "No pending loan repayments found for this member."
+
+        remaining = float(amount)
+        principal_component = 0.0
+        interest_component = 0.0
+
+        for row in installments:
+            if remaining <= 0:
+                break
+            repayment_id, loan_id, principal_due, interest_due, principal_paid, interest_paid, total_due, total_paid = row
+
+            principal_due = float(principal_due or 0.0)
+            interest_due = float(interest_due or 0.0)
+            principal_paid = float(principal_paid or 0.0)
+            interest_paid = float(interest_paid or 0.0)
+            total_due = float(total_due or 0.0)
+            total_paid = float(total_paid or 0.0)
+
+            remaining_interest = max(0.0, interest_due - interest_paid)
+            remaining_principal = max(0.0, principal_due - principal_paid)
+            remaining_installment = max(0.0, total_due - total_paid)
+            if remaining_installment <= 0:
+                continue
+
+            to_apply = min(remaining, remaining_installment)
+            applied_interest = min(to_apply, remaining_interest)
+            applied_principal = min(to_apply - applied_interest, remaining_principal)
+
+            new_interest_paid = interest_paid + applied_interest
+            new_principal_paid = principal_paid + applied_principal
+            new_total_paid = total_paid + to_apply
+            status = "Paid" if new_total_paid + 0.005 >= total_due else "Partial"
+
+            cursor.execute(
+                """
+                UPDATE loan_repayments
+                SET principal_paid = ?,
+                    interest_paid = ?,
+                    total_paid = ?,
+                    status = ?,
+                    payment_date = CASE WHEN ? = 'Paid' THEN CURRENT_TIMESTAMP ELSE payment_date END
+                WHERE repayment_id = ?
+                """,
+                (new_principal_paid, new_interest_paid, new_total_paid, status, status, repayment_id),
+            )
+
+            cursor.execute(
+                """
+                UPDATE loans
+                SET principal_paid = COALESCE(principal_paid, 0.0) + ?,
+                    interest_paid = COALESCE(interest_paid, 0.0) + ?,
+                    total_repaid = COALESCE(total_repaid, 0.0) + ?
+                WHERE loan_id = ?
+                """,
+                (applied_principal, applied_interest, to_apply, loan_id),
+            )
+
+            principal_component += applied_principal
+            interest_component += applied_interest
+            remaining -= to_apply
+
+        applied_total = round(amount - remaining, 2)
+        if applied_total <= 0:
+            conn.rollback()
+            return False, "Repayment could not be applied."
+
+        cursor.execute(
+            """
+            UPDATE loans
+            SET status = CASE
+                WHEN principal_paid >= principal THEN 'Paid'
+                ELSE status
+            END
+            WHERE member_id = ?
+            """,
+            (member_id,),
+        )
+
+        cursor.execute(
+            """
+            UPDATE members
+            SET total_loans = (
+                SELECT COALESCE(SUM(MAX(0, principal - COALESCE(principal_paid, 0.0))), 0.0)
+                FROM loans
+                WHERE member_id = ?
+            )
+            WHERE member_id = ?
+            """,
+            (member_id, member_id),
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO savings_transactions (
+                member_id, trans_type, amount, running_balance, payment_mode, transfer_reference
+            )
+            VALUES (?, 'Loan Repayment', ?, ?, ?, ?)
+            """,
+            (member_id, applied_total, current_savings, payment_mode, transfer_reference),
+        )
+
+        conn.commit()
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=(
+                f"Loan repayment posted for member_id {member_id}: ₦{applied_total:,.2f} "
+                f"(principal ₦{principal_component:,.2f}, interest ₦{interest_component:,.2f})"
+            ),
+            status="Success",
+            db_path=db_path,
+        )
+        return True, f"Loan repayment posted successfully. Amount applied: ₦{applied_total:,.2f}"
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=f"Loan repayment failed for member_id {member_id} (error: {e})",
+            status="Failed",
+            db_path=db_path,
+        )
+        return False, f"Failed to post repayment: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_member_loan_repayments(
+    db_path: str,
+    member_id: int,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Tuple[bool, List[Dict]]:
+    """Return repayment rows for a member with optional date filters."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        query = (
+            """
+            SELECT repayment_id, loan_id, installment_no, due_date,
+                   principal_due, interest_due, total_due,
+                   principal_paid, interest_paid, total_paid, status, payment_date
+            FROM loan_repayments
+            WHERE member_id = ?
+            """
+        )
+        params: List[object] = [member_id]
+        if start_date:
+            query += " AND DATE(COALESCE(payment_date, due_date)) >= DATE(?)"
+            params.append(start_date)
+        if end_date:
+            query += " AND DATE(COALESCE(payment_date, due_date)) <= DATE(?)"
+            params.append(end_date)
+        query += " ORDER BY repayment_id DESC"
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        return True, [dict(row) for row in rows]
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
+
+
 def get_member_savings(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
     """
     Retrieve the last 10 savings transactions for a member.
@@ -1227,7 +1509,7 @@ def get_member_savings(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
 
         cursor.execute(
             """
-            SELECT id, trans_date, trans_type, amount, running_balance, payment_mode
+            SELECT id, trans_date, trans_type, amount, running_balance, payment_mode, transfer_reference
             FROM savings_transactions
             WHERE member_id = ?
             ORDER BY id DESC
@@ -1316,6 +1598,177 @@ def get_society_stats(db_path: str) -> Tuple[bool, Dict]:
     except Exception as e:
         return False, {}
     
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_member_statement_data(
+    db_path: str,
+    member_id: int,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Tuple[bool, Dict]:
+    """Return member statement sections with optional date filters."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        params: List[object] = [member_id]
+        savings_query = (
+            """
+            SELECT id, trans_date, trans_type, amount, running_balance, payment_mode, transfer_reference
+            FROM savings_transactions
+            WHERE member_id = ?
+            """
+        )
+        if start_date:
+            savings_query += " AND DATE(trans_date) >= DATE(?)"
+            params.append(start_date)
+        if end_date:
+            savings_query += " AND DATE(trans_date) <= DATE(?)"
+            params.append(end_date)
+        savings_query += " ORDER BY id DESC"
+        cursor.execute(savings_query, params)
+        savings = [dict(row) for row in cursor.fetchall()]
+
+        loan_params: List[object] = [member_id]
+        loan_query = (
+            """
+            SELECT loan_id, principal, interest_rate, duration_months, status, date_issued,
+                   principal_paid, interest_paid, total_repaid
+            FROM loans
+            WHERE member_id = ?
+            """
+        )
+        if start_date:
+            loan_query += " AND DATE(date_issued) >= DATE(?)"
+            loan_params.append(start_date)
+        if end_date:
+            loan_query += " AND DATE(date_issued) <= DATE(?)"
+            loan_params.append(end_date)
+        loan_query += " ORDER BY loan_id DESC"
+        cursor.execute(loan_query, loan_params)
+        loans = [dict(row) for row in cursor.fetchall()]
+
+        repay_params: List[object] = [member_id]
+        repay_query = (
+            """
+            SELECT repayment_id, loan_id, installment_no, due_date,
+                   principal_due, interest_due, total_due,
+                   principal_paid, interest_paid, total_paid, status, payment_date
+            FROM loan_repayments
+            WHERE member_id = ?
+            """
+        )
+        if start_date:
+            repay_query += " AND DATE(COALESCE(payment_date, due_date)) >= DATE(?)"
+            repay_params.append(start_date)
+        if end_date:
+            repay_query += " AND DATE(COALESCE(payment_date, due_date)) <= DATE(?)"
+            repay_params.append(end_date)
+        repay_query += " ORDER BY repayment_id DESC"
+        cursor.execute(repay_query, repay_params)
+        repayments = [dict(row) for row in cursor.fetchall()]
+
+        return True, {
+            "savings": savings,
+            "loans": loans,
+            "repayments": repayments,
+        }
+    except Exception:
+        return False, {"savings": [], "loans": [], "repayments": []}
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_society_report_stats(
+    db_path: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    include_savings: bool = True,
+    include_loans: bool = True,
+    include_repayments: bool = True,
+) -> Tuple[bool, Dict]:
+    """Return period-based society totals for dynamic reports."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) FROM members")
+        total_members = int(cursor.fetchone()[0] or 0)
+
+        total_savings = 0.0
+        if include_savings:
+            savings_query = (
+                """
+                SELECT COALESCE(SUM(
+                    CASE
+                        WHEN trans_type IN ('Lodgment', 'Opening Balance') THEN amount
+                        WHEN trans_type = 'Deduction' THEN -amount
+                        ELSE 0
+                    END
+                ), 0.0)
+                FROM savings_transactions
+                WHERE 1=1
+                """
+            )
+            params: List[object] = []
+            if start_date:
+                savings_query += " AND DATE(trans_date) >= DATE(?)"
+                params.append(start_date)
+            if end_date:
+                savings_query += " AND DATE(trans_date) <= DATE(?)"
+                params.append(end_date)
+            cursor.execute(savings_query, params)
+            total_savings = float(cursor.fetchone()[0] or 0.0)
+
+        total_loans_disbursed = 0.0
+        avg_duration = 0.0
+        if include_loans:
+            loan_query = "SELECT COALESCE(SUM(principal), 0.0), COALESCE(AVG(duration_months), 0.0) FROM loans WHERE 1=1"
+            loan_params: List[object] = []
+            if start_date:
+                loan_query += " AND DATE(date_issued) >= DATE(?)"
+                loan_params.append(start_date)
+            if end_date:
+                loan_query += " AND DATE(date_issued) <= DATE(?)"
+                loan_params.append(end_date)
+            cursor.execute(loan_query, loan_params)
+            loan_row = cursor.fetchone() or (0.0, 0.0)
+            total_loans_disbursed = float(loan_row[0] or 0.0)
+            avg_duration = float(loan_row[1] or 0.0)
+
+        total_repayments = 0.0
+        if include_repayments:
+            repay_query = "SELECT COALESCE(SUM(total_paid), 0.0) FROM loan_repayments WHERE status IN ('Partial', 'Paid')"
+            repay_params: List[object] = []
+            if start_date:
+                repay_query += " AND DATE(COALESCE(payment_date, due_date)) >= DATE(?)"
+                repay_params.append(start_date)
+            if end_date:
+                repay_query += " AND DATE(COALESCE(payment_date, due_date)) <= DATE(?)"
+                repay_params.append(end_date)
+            cursor.execute(repay_query, repay_params)
+            total_repayments = float(cursor.fetchone()[0] or 0.0)
+
+        projected_interest = round(total_loans_disbursed * 0.12, 2)
+        return True, {
+            "total_members": total_members,
+            "total_savings": round(total_savings, 2),
+            "total_loans_disbursed": round(total_loans_disbursed, 2),
+            "total_repayments": round(total_repayments, 2),
+            "average_duration_months": round(avg_duration, 2),
+            "total_projected_interest": projected_interest,
+            "members_dividend_share": round(projected_interest * 0.60, 2),
+            "society_dividend_share": round(projected_interest * 0.40, 2),
+        }
+    except Exception:
+        return False, {}
     finally:
         if conn:
             conn.close()
