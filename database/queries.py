@@ -1763,6 +1763,118 @@ def get_repayment_dashboard_rows(
             conn.close()
 
 
+def get_repayment_dashboard_summary(
+    db_path: str,
+    member_id: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Tuple[bool, Dict[str, float]]:
+    """Return aggregated repayment KPIs for dashboard cards."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        query = (
+            """
+            SELECT
+                COUNT(*) AS total_installments,
+                COALESCE(SUM(COALESCE(total_due, 0.0)), 0.0) AS total_due,
+                COALESCE(SUM(COALESCE(total_paid, 0.0)), 0.0) AS total_paid,
+                COALESCE(SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(status, '')) != 'paid'
+                             AND due_date IS NOT NULL
+                             AND DATE(due_date) < DATE('now')
+                        THEN 1 ELSE 0
+                    END
+                ), 0) AS overdue_count,
+                COALESCE(SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(status, '')) = 'paid' THEN 1 ELSE 0
+                    END
+                ), 0) AS paid_count,
+                COALESCE(SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(status, '')) = 'partial' THEN 1 ELSE 0
+                    END
+                ), 0) AS partial_count,
+                COALESCE(SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(status, '')) NOT IN ('paid', 'partial')
+                             AND (due_date IS NULL OR DATE(due_date) >= DATE('now'))
+                        THEN 1 ELSE 0
+                    END
+                ), 0) AS pending_count,
+                COALESCE(SUM(
+                    CASE
+                        WHEN LOWER(COALESCE(status, '')) != 'paid'
+                             AND due_date IS NOT NULL
+                             AND DATE(due_date) >= DATE('now')
+                             AND DATE(due_date) <= DATE('now', '+7 day')
+                        THEN 1 ELSE 0
+                    END
+                ), 0) AS due_this_week_count
+            FROM loan_repayments
+            WHERE 1=1
+            """
+        )
+        params: List[object] = []
+
+        if member_id is not None:
+            query += " AND member_id = ?"
+            params.append(int(member_id))
+        if start_date:
+            query += " AND DATE(COALESCE(payment_date, due_date)) >= DATE(?)"
+            params.append(start_date)
+        if end_date:
+            query += " AND DATE(COALESCE(payment_date, due_date)) <= DATE(?)"
+            params.append(end_date)
+
+        cursor.execute(query, params)
+        row = cursor.fetchone() or (0, 0.0, 0.0, 0, 0, 0, 0, 0)
+
+        total_installments = float(row[0] or 0.0)
+        total_due = float(row[1] or 0.0)
+        total_paid = float(row[2] or 0.0)
+        overdue_count = float(row[3] or 0.0)
+        paid_count = float(row[4] or 0.0)
+        partial_count = float(row[5] or 0.0)
+        pending_count = float(row[6] or 0.0)
+        due_this_week_count = float(row[7] or 0.0)
+        total_outstanding = max(0.0, total_due - total_paid)
+        collection_rate = (total_paid / total_due * 100.0) if total_due > 0 else 0.0
+
+        return True, {
+            "total_installments": total_installments,
+            "total_due": round(total_due, 2),
+            "total_paid": round(total_paid, 2),
+            "total_outstanding": round(total_outstanding, 2),
+            "overdue_count": overdue_count,
+            "paid_count": paid_count,
+            "partial_count": partial_count,
+            "pending_count": pending_count,
+            "due_this_week_count": due_this_week_count,
+            "collection_rate": round(collection_rate, 2),
+        }
+    except Exception:
+        return False, {
+            "total_installments": 0.0,
+            "total_due": 0.0,
+            "total_paid": 0.0,
+            "total_outstanding": 0.0,
+            "overdue_count": 0.0,
+            "paid_count": 0.0,
+            "partial_count": 0.0,
+            "pending_count": 0.0,
+            "due_this_week_count": 0.0,
+            "collection_rate": 0.0,
+        }
+    finally:
+        if conn:
+            conn.close()
+
+
 def get_member_savings(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
     """
     Retrieve the last 10 savings transactions for a member.
