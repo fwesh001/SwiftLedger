@@ -1286,6 +1286,14 @@ class SavingsPage(QWidget):
         self.table_savings.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_savings.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_savings.horizontalHeader().setStretchLastSection(True)
+        self.table_savings.verticalHeader().setVisible(False)
+        self.table_savings.setAlternatingRowColors(True)
+        self.table_savings.setColumnWidth(0, 130)
+        self.table_savings.setColumnWidth(1, 130)
+        self.table_savings.setColumnWidth(2, 140)
+        self.table_savings.setColumnWidth(3, 170)
+        self.table_savings.setColumnWidth(4, 140)
+        self.table_savings.setColumnWidth(5, 160)
         self.table_savings.setColumnHidden(6, True)  # Hide ID column
         main_layout.addWidget(self.table_savings)
         
@@ -1693,6 +1701,12 @@ class LoansPage(QWidget):
         self.table_loans.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_loans.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_loans.horizontalHeader().setStretchLastSection(True)
+        self.table_loans.verticalHeader().setVisible(False)
+        self.table_loans.setAlternatingRowColors(True)
+        self.table_loans.setColumnWidth(0, 100)
+        self.table_loans.setColumnWidth(1, 170)
+        self.table_loans.setColumnWidth(2, 120)
+        self.table_loans.setColumnWidth(3, 110)
         main_layout.addWidget(self.table_loans)
 
         # Repayment Status Dashboard
@@ -1722,10 +1736,12 @@ class LoansPage(QWidget):
         repayments_filter_row.addWidget(self.repay_date_to)
 
         self.btn_refresh_repayments = QPushButton("Refresh")
+        self.btn_refresh_repayments.setMinimumWidth(100)
         self.btn_refresh_repayments.clicked.connect(self.load_repayment_dashboard)
         repayments_filter_row.addWidget(self.btn_refresh_repayments)
 
         self.btn_export_repayments = QPushButton("Export CSV")
+        self.btn_export_repayments.setMinimumWidth(120)
         self.btn_export_repayments.clicked.connect(self.export_repayment_dashboard_csv)
         repayments_filter_row.addWidget(self.btn_export_repayments)
         repayments_filter_row.addStretch()
@@ -1736,6 +1752,10 @@ class LoansPage(QWidget):
         self.label_repay_due_week = QLabel("Due in 7 days: 0")
         self.label_repay_collection = QLabel("Collection Rate: 0.00%")
         self.label_repay_outstanding = QLabel("Outstanding: ₦0.00")
+        self.label_repay_overdue.setFont(QFont("Arial", 10))
+        self.label_repay_due_week.setFont(QFont("Arial", 10))
+        self.label_repay_collection.setFont(QFont("Arial", 10))
+        self.label_repay_outstanding.setFont(QFont("Arial", 10))
         kpi_row.addWidget(self.label_repay_overdue)
         kpi_row.addStretch()
         kpi_row.addWidget(self.label_repay_due_week)
@@ -1763,6 +1783,7 @@ class LoansPage(QWidget):
         action_row.addWidget(self.input_repay_ref)
 
         self.btn_post_selected_repayment = QPushButton("Post for Selected Row")
+        self.btn_post_selected_repayment.setMinimumWidth(170)
         self.btn_post_selected_repayment.clicked.connect(self.post_selected_repayment)
         action_row.addWidget(self.btn_post_selected_repayment)
         action_row.addStretch()
@@ -1777,6 +1798,18 @@ class LoansPage(QWidget):
         self.table_repayments.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_repayments.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_repayments.horizontalHeader().setStretchLastSection(True)
+        self.table_repayments.verticalHeader().setVisible(False)
+        self.table_repayments.setAlternatingRowColors(True)
+        repay_header = self.table_repayments.horizontalHeader()
+        repay_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        repay_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        repay_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        repay_header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        repay_header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        repay_header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        repay_header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        repay_header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)
+        repay_header.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)
         main_layout.addWidget(self.table_repayments)
         
         self.setLayout(main_layout)
@@ -2627,18 +2660,21 @@ class MainWindow(QMainWindow):
                     background-color: #ffffff;
                     color: #2c3e50;
                     border: 1px solid #b2bec3;
-                    padding: 5px;
+                    padding: 6px;
                     border-radius: 3px;
+                    min-height: 28px;
                 }}
                 QTableWidget {{
                     background-color: #ffffff;
                     color: #2c3e50;
                     gridline-color: #dfe6e9;
+                    alternate-background-color: #f7f9fc;
+                    selection-background-color: #d6eaff;
                 }}
                 QTableWidget QHeaderView::section {{
                     background-color: #dfe6e9;
                     color: #2c3e50;
-                    padding: 6px;
+                    padding: 8px;
                     border: 1px solid #b2bec3;
                     font-weight: bold;
                 }}
@@ -2660,10 +2696,15 @@ class MainWindow(QMainWindow):
                     color: #2c3e50;
                     border: 1px solid #b2bec3;
                     border-radius: 4px;
-                    padding: 6px 14px;
+                    padding: 7px 14px;
+                    min-height: 32px;
                 }}
                 QPushButton:hover {{
                     background-color: #b2bec3;
+                }}
+                QPushButton:disabled {{
+                    color: #7f8c8d;
+                    background-color: #ecf0f1;
                 }}
                 QListWidget {{
                     background-color: #ffffff;
@@ -2697,18 +2738,21 @@ class MainWindow(QMainWindow):
                     background-color: #333333;
                     color: #ffffff;
                     border: 1px solid #555555;
-                    padding: 5px;
+                    padding: 6px;
                     border-radius: 3px;
+                    min-height: 28px;
                 }}
                 QTableWidget {{
                     background-color: #252525;
                     color: #ecf0f1;
                     gridline-color: #333333;
+                    alternate-background-color: #2b2b2b;
+                    selection-background-color: #3d5a73;
                 }}
                 QTableWidget QHeaderView::section {{
                     background-color: #34495e;
                     color: #ecf0f1;
-                    padding: 6px;
+                    padding: 8px;
                     border: 1px solid #2c3e50;
                     font-weight: bold;
                 }}
@@ -2730,10 +2774,15 @@ class MainWindow(QMainWindow):
                     color: #ecf0f1;
                     border: 1px solid #2c3e50;
                     border-radius: 4px;
-                    padding: 6px 14px;
+                    padding: 7px 14px;
+                    min-height: 32px;
                 }}
                 QPushButton:hover {{
                     background-color: #3d566e;
+                }}
+                QPushButton:disabled {{
+                    color: #95a5a6;
+                    background-color: #2f3f50;
                 }}
                 QListWidget {{
                     background-color: #252525;
