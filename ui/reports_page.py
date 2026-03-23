@@ -780,6 +780,11 @@ class ReportsPage(QWidget):
             QMessageBox.information(self, "Scope Filter", "Current scope is Member. Switch scope to Society or Both to export society reports.")
             return
 
+        # Validate date range
+        if self.date_from.date() > self.date_to.date():
+            QMessageBox.warning(self, "Invalid Date Range", "Start date cannot be after end date.")
+            return
+
         pdf = self._build_society_pdf(self.monthly_chart)
         if pdf is None:
             return
