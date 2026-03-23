@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QComboBox, QScrollArea, QFrame, QLineEdit, QDoubleSpinBox,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QDialog,
     QDialogButtonBox,
+    QTabWidget,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import QHeaderView
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.db_init import save_settings, log_event
+from ui.widgets import UppercaseLineEdit
 from database.queries import (
     get_system_settings,
     get_loan_products,
@@ -56,23 +58,40 @@ class SettingsPage(QWidget):
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-
-        content = QWidget()
-        main = QVBoxLayout(content)
-        main.setContentsMargins(20, 20, 20, 20)
-        main.setSpacing(20)
+        outer.setContentsMargins(20, 20, 20, 20)
+        outer.setSpacing(14)
 
         # Title
         title = QLabel("Settings")
         tf = QFont("Arial", 18)
         tf.setBold(True)
         title.setFont(tf)
-        main.addWidget(title)
+        outer.addWidget(title)
+
+        tabs = QTabWidget()
+        tabs.setDocumentMode(True)
+        tabs.setTabPosition(QTabWidget.TabPosition.North)
+        tabs.setMovable(False)
+        outer.addWidget(tabs)
+
+        def make_tab_container() -> tuple[QWidget, QVBoxLayout]:
+            tab_scroll = QScrollArea()
+            tab_scroll.setWidgetResizable(True)
+            tab_scroll.setFrameShape(QFrame.Shape.NoFrame)
+            tab_content = QWidget()
+            tab_layout = QVBoxLayout(tab_content)
+            tab_layout.setContentsMargins(8, 8, 8, 8)
+            tab_layout.setSpacing(16)
+            tab_scroll.setWidget(tab_content)
+            return tab_scroll, tab_layout
+
+        general_tab, general_layout = make_tab_container()
+        policy_tab, policy_layout = make_tab_container()
+        security_tab, security_layout = make_tab_container()
+
+        tabs.addTab(general_tab, "General")
+        tabs.addTab(policy_tab, "Organization & Loans")
+        tabs.addTab(security_tab, "Security")
 
         # ── Appearance group ────────────────────────────────────────
         appear_group = QGroupBox("Appearance")
@@ -101,7 +120,7 @@ class SettingsPage(QWidget):
         scale_row.addWidget(self.lbl_scale)
         appear_form.addRow("Text Scale:", scale_row)
 
-        main.addWidget(appear_group)
+        general_layout.addWidget(appear_group)
 
         # ── Feature Toggles group ───────────────────────────────────
         toggle_group = QGroupBox("Feature Toggles")
@@ -117,7 +136,7 @@ class SettingsPage(QWidget):
         self.chk_alerts.setFont(QFont("Arial", 11))
         toggle_form.addRow(self.chk_alerts)
 
-        main.addWidget(toggle_group)
+        general_layout.addWidget(toggle_group)
 
         # ── Organization & Loan Policy ─────────────────────────────
         policy_group = QGroupBox("Organization & Loan Policy")
@@ -125,23 +144,23 @@ class SettingsPage(QWidget):
         policy_form = QFormLayout(policy_group)
         self._apply_form_rhythm(policy_form)
 
-        self.input_society_name = QLineEdit()
+        self.input_society_name = UppercaseLineEdit()
         self.input_society_name.setMinimumHeight(32)
         policy_form.addRow("Society Name:", self.input_society_name)
 
-        self.input_address = QLineEdit()
+        self.input_address = UppercaseLineEdit()
         self.input_address.setMinimumHeight(32)
         policy_form.addRow("Address:", self.input_address)
 
-        self.input_city_state = QLineEdit()
+        self.input_city_state = UppercaseLineEdit()
         self.input_city_state.setMinimumHeight(32)
         policy_form.addRow("City/State:", self.input_city_state)
 
-        self.input_phone = QLineEdit()
+        self.input_phone = UppercaseLineEdit()
         self.input_phone.setMinimumHeight(32)
         policy_form.addRow("Phone:", self.input_phone)
 
-        self.input_email = QLineEdit()
+        self.input_email = UppercaseLineEdit()
         self.input_email.setMinimumHeight(32)
         policy_form.addRow("Email:", self.input_email)
 
@@ -170,7 +189,7 @@ class SettingsPage(QWidget):
         self.input_default_duration.setSuffix(" months")
         policy_form.addRow("Default Loan Duration:", self.input_default_duration)
 
-        main.addWidget(policy_group)
+        policy_layout.addWidget(policy_group)
 
         # ── Loan Products Admin ───────────────────────────────────
         products_group = QGroupBox("Loan Products")
@@ -221,7 +240,7 @@ class SettingsPage(QWidget):
         products_btn_row.addStretch()
         products_layout.addLayout(products_btn_row)
 
-        main.addWidget(products_group)
+        policy_layout.addWidget(products_group)
 
         # ── Security group ──────────────────────────────────────────
         sec_group = QGroupBox("Security")
@@ -265,7 +284,7 @@ class SettingsPage(QWidget):
         timeout_row.addWidget(self.spin_timeout)
 
         sec_form.addRow("Auto-Lock Timeout:", timeout_row)
-        main.addWidget(sec_group)
+        security_layout.addWidget(sec_group)
 
         # ── Apply button ────────────────────────────────────────────
         btn_row = QHBoxLayout()
@@ -285,10 +304,10 @@ class SettingsPage(QWidget):
         self.btn_apply.clicked.connect(self._apply_settings)
         btn_row.addWidget(self.btn_apply)
 
-        main.addLayout(btn_row)
-        main.addStretch()
-        scroll.setWidget(content)
-        outer.addWidget(scroll)
+        for layout in (general_layout, policy_layout, security_layout):
+            layout.addStretch()
+
+        outer.addLayout(btn_row)
 
     # ── Sync helpers ─────────────────────────────────────────────────
 
@@ -407,7 +426,7 @@ class SettingsPage(QWidget):
 
         form = QFormLayout()
         self._apply_form_rhythm(form)
-        input_name = QLineEdit()
+        input_name = UppercaseLineEdit()
         input_name.setPlaceholderText("Product Name")
 
         input_max = QDoubleSpinBox()
