@@ -53,7 +53,6 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             theme         TEXT DEFAULT 'dark',
             text_scale    REAL DEFAULT 1.0,
             min_monthly_saving REAL DEFAULT 0.0,
-            max_loan_amount REAL DEFAULT 0.0,
             default_interest_rate REAL DEFAULT 12.0,
             loan_multiplier REAL DEFAULT 2.0,
             default_duration INTEGER DEFAULT 24,
@@ -253,8 +252,6 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN address TEXT;")
     if "min_monthly_saving" not in settings_columns:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN min_monthly_saving REAL DEFAULT 0.0;")
-    if "max_loan_amount" not in settings_columns:
-        cursor.execute("ALTER TABLE system_settings ADD COLUMN max_loan_amount REAL DEFAULT 0.0;")
     if "default_interest_rate" not in settings_columns:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN default_interest_rate REAL DEFAULT 12.0;")
     if "loan_multiplier" not in settings_columns:
