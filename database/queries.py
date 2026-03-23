@@ -781,6 +781,59 @@ def _persist_repayment_schedule(
         )
 
 
+def _backfill_missing_repayment_schedules(
+    cursor: sqlite3.Cursor,
+    member_id: int,
+) -> int:
+    """Create repayment schedules for active loans that have none (legacy data fix)."""
+    cursor.execute(
+        """
+        SELECT
+            l.loan_id,
+            l.principal,
+            l.interest_rate,
+            l.duration_months,
+            l.date_issued
+        FROM loans l
+        WHERE l.member_id = ?
+          AND l.status IN ('Active', 'Overdue', 'Default')
+          AND MAX(0, l.principal - COALESCE(l.principal_paid, 0.0)) > 0
+          AND NOT EXISTS (
+              SELECT 1
+              FROM loan_repayments lr
+              WHERE lr.loan_id = l.loan_id
+          )
+        ORDER BY l.loan_id ASC
+        """,
+        (member_id,),
+    )
+    missing_loans = cursor.fetchall()
+    created_count = 0
+
+    for loan_row in missing_loans:
+        loan_id = int(loan_row[0])
+        principal = float(loan_row[1] or 0.0)
+        interest_rate = float(loan_row[2] or 0.0)
+        duration_months = int(loan_row[3] or 0)
+        date_issued = loan_row[4]
+
+        if principal <= 0 or duration_months <= 0:
+            continue
+
+        _persist_repayment_schedule(
+            cursor=cursor,
+            loan_id=loan_id,
+            member_id=member_id,
+            principal=principal,
+            interest_rate=interest_rate,
+            duration_months=duration_months,
+            issued_date=str(date_issued) if date_issued else None,
+        )
+        created_count += 1
+
+    return created_count
+
+
 def apply_for_loan(
     db_path: str,
     member_id: int,
@@ -1513,6 +1566,32 @@ def post_loan_repayment(
             (member_id,),
         )
         installments = cursor.fetchall()
+
+        if not installments:
+            created = _backfill_missing_repayment_schedules(cursor, member_id)
+            if created > 0:
+                cursor.execute(
+                    """
+                    SELECT
+                        lr.repayment_id,
+                        lr.loan_id,
+                        lr.principal_due,
+                        lr.interest_due,
+                        lr.principal_paid,
+                        lr.interest_paid,
+                        lr.total_due,
+                        lr.total_paid
+                    FROM loan_repayments lr
+                    JOIN loans l ON l.loan_id = lr.loan_id
+                    WHERE lr.member_id = ?
+                      AND l.status IN ('Active', 'Overdue', 'Default')
+                      AND lr.status IN ('Pending', 'Partial')
+                    ORDER BY DATE(COALESCE(lr.due_date, l.date_issued)) ASC, lr.installment_no ASC
+                    """,
+                    (member_id,),
+                )
+                installments = cursor.fetchall()
+
         if not installments:
             conn.rollback()
             return False, "No pending loan repayments found for this member."
