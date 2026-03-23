@@ -1533,7 +1533,6 @@ class LoansPage(QWidget):
         self.max_eligible_amount = 0.0
         self.total_savings = 0.0
         self.loan_multiplier = 2.0
-        self.configured_max_loan = 0.0
         self.default_interest_rate = 12.0
         self.default_duration = 24
         self.selected_product_id = None
@@ -1873,17 +1872,13 @@ class LoansPage(QWidget):
         ok, settings = get_system_settings(self.db_path)
         if ok and settings:
             self.loan_multiplier = float(settings.get('loan_multiplier', 2.0))
-            self.configured_max_loan = float(settings.get('max_loan_amount', 0.0))
             self.default_interest_rate = float(settings.get('default_interest_rate', 12.0))
             self.default_duration = int(settings.get('default_duration', 24))
             self.input_interest_rate.setValue(self.default_interest_rate)
             self.input_duration.setValue(self.default_duration)
 
     def _effective_member_limit(self, total_savings: float) -> float:
-        max_eligible = float(self.loan_multiplier) * float(total_savings)
-        if self.configured_max_loan > 0:
-            max_eligible = min(max_eligible, self.configured_max_loan)
-        return max_eligible
+        return float(self.loan_multiplier) * float(total_savings)
 
     def load_loan_products(self) -> None:
         self.combo_loan_product.blockSignals(True)
