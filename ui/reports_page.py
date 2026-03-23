@@ -113,19 +113,19 @@ class ReportsPage(QWidget):
         ledger_form.setSpacing(12)
 
         self.search_member_widget = SearchFilterWidget()
-    self.search_member_widget.queryChanged.connect(self._on_member_search_changed)
-       
-    self.label_selected_member = QLabel("Member: Not selected")
-    self.label_selected_member.setFont(QFont("Arial", 10))
-    self.label_selected_member.setMinimumWidth(200)
-       
-    search_layout = QHBoxLayout()
-    search_layout.addWidget(self.search_member_widget)
-    search_layout.addWidget(self.label_selected_member)
-    search_layout.addStretch()
-    search_wrapper = QWidget()
-    search_wrapper.setLayout(search_layout)
-    ledger_form.addRow("Member Search:", search_wrapper)
+        self.search_member_widget.queryChanged.connect(self._on_member_search_changed)
+        
+        self.label_selected_member = QLabel("Member: Not selected")
+        self.label_selected_member.setFont(QFont("Arial", 10))
+        self.label_selected_member.setMinimumWidth(200)
+        
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(self.search_member_widget)
+        search_layout.addWidget(self.label_selected_member)
+        search_layout.addStretch()
+        search_wrapper = QWidget()
+        search_wrapper.setLayout(search_layout)
+        ledger_form.addRow("Member Search:", search_wrapper)
 
         self.btn_member_preview = QPushButton("Preview Member Statement")
         self.btn_member_preview.setMinimumHeight(38)
