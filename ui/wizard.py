@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.db_init import init_db, save_settings, log_event
 from security import hash_credential
 from ui.reports_page import generate_and_open_user_guide
+from ui.widgets import UppercaseLineEdit
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -91,35 +92,35 @@ class IdentityPage(QWizardPage):
 
         # Society Name
         society_label = QLabel("Society Name:")
-        self.society_input = QLineEdit()
+        self.society_input = UppercaseLineEdit()
         self.society_input.setPlaceholderText("e.g., Main Street Savings Society")
         layout.addWidget(society_label)
         layout.addWidget(self.society_input)
 
         # Address
         street_label = QLabel("Address:")
-        self.street_input = QLineEdit()
+        self.street_input = UppercaseLineEdit()
         self.street_input.setPlaceholderText("e.g., 123 Main Street")
         layout.addWidget(street_label)
         layout.addWidget(self.street_input)
 
         # City/State
         city_label = QLabel("City/State:")
-        self.city_input = QLineEdit()
+        self.city_input = UppercaseLineEdit()
         self.city_input.setPlaceholderText("e.g., New York, NY")
         layout.addWidget(city_label)
         layout.addWidget(self.city_input)
 
         # Phone
         phone_label = QLabel("Phone:")
-        self.phone_input = QLineEdit()
+        self.phone_input = UppercaseLineEdit()
         self.phone_input.setPlaceholderText("e.g., +1 (555) 123-4567")
         layout.addWidget(phone_label)
         layout.addWidget(self.phone_input)
 
         # Email
         email_label = QLabel("Email:")
-        self.email_input = QLineEdit()
+        self.email_input = UppercaseLineEdit()
         self.email_input.setPlaceholderText("e.g., contact@society.com")
         layout.addWidget(email_label)
         layout.addWidget(self.email_input)
@@ -314,7 +315,9 @@ class FinalizePage(QWizardPage):
         # Summary text area
         self.summary_text = QLabel()
         self.summary_text.setWordWrap(True)
-        self.summary_text.setStyleSheet("background-color: #ecf0f1; padding: 10px; border-radius: 5px;")
+        self.summary_text.setStyleSheet(
+            "background-color: #ecf0f1; color: #2c3e50; padding: 10px; border-radius: 5px;"
+        )
         layout.addWidget(self.summary_text)
 
         layout.addSpacing(20)
