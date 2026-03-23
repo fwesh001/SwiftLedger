@@ -28,6 +28,8 @@ from database.queries import (
     add_saving, get_total_savings, get_member_savings, get_system_settings,
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
     get_society_stats, check_overdue_loans, delete_member, update_member_profile,
+    get_loan_products, add_loan_product, post_loan_repayment, get_member_loan_totals,
+    has_active_loans,
 )
 from logic.analytics import (
     get_monthly_snapshot, get_monthly_trend, calculate_lts_ratio, get_liquidity_status
