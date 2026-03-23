@@ -5,6 +5,7 @@ Lets the user toggle charts, alerts, theme, text scale, auto-lock timeout.
 
 import sys
 from pathlib import Path
+from datetime import datetime
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -350,7 +351,7 @@ class SettingsPage(QWidget):
             'max_loan_amount': round(self.input_max_loan_amount.value(), 2),
             'default_interest_rate': round(self.input_default_interest.value(), 2),
             'default_duration': int(self.input_default_duration.value()),
-            'updated_at': __import__('datetime').datetime.now().isoformat(timespec='seconds'),
+            'updated_at': datetime.now().isoformat(timespec='seconds'),
         }
 
         if new_cred and mode in ("pin", "password"):
