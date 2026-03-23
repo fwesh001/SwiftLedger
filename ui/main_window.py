@@ -13,9 +13,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QSize, QEvent, QTimer
 from PySide6.QtGui import QFont, QColor, QBrush, QPixmap
 from PySide6.QtWidgets import QHeaderView
+import csv
 import shutil
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime
 from typing import Dict, List, Optional
 import sys
 from pathlib import Path
@@ -29,7 +30,7 @@ from database.queries import (
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
     get_society_stats, check_overdue_loans, delete_member, update_member_profile,
     get_loan_products, add_loan_product, post_loan_repayment, get_member_loan_totals,
-    has_active_loans, search_members, get_repayment_dashboard_rows,
+    has_active_loans, search_members, get_repayment_dashboard_rows, get_repayment_dashboard_summary,
 )
 from logic.analytics import (
     get_monthly_snapshot, get_monthly_trend, calculate_lts_ratio, get_liquidity_status
@@ -1723,8 +1724,49 @@ class LoansPage(QWidget):
         self.btn_refresh_repayments = QPushButton("Refresh")
         self.btn_refresh_repayments.clicked.connect(self.load_repayment_dashboard)
         repayments_filter_row.addWidget(self.btn_refresh_repayments)
+
+        self.btn_export_repayments = QPushButton("Export CSV")
+        self.btn_export_repayments.clicked.connect(self.export_repayment_dashboard_csv)
+        repayments_filter_row.addWidget(self.btn_export_repayments)
         repayments_filter_row.addStretch()
         main_layout.addLayout(repayments_filter_row)
+
+        kpi_row = QHBoxLayout()
+        self.label_repay_overdue = QLabel("Overdue: 0")
+        self.label_repay_due_week = QLabel("Due in 7 days: 0")
+        self.label_repay_collection = QLabel("Collection Rate: 0.00%")
+        self.label_repay_outstanding = QLabel("Outstanding: ₦0.00")
+        kpi_row.addWidget(self.label_repay_overdue)
+        kpi_row.addStretch()
+        kpi_row.addWidget(self.label_repay_due_week)
+        kpi_row.addStretch()
+        kpi_row.addWidget(self.label_repay_collection)
+        kpi_row.addStretch()
+        kpi_row.addWidget(self.label_repay_outstanding)
+        main_layout.addLayout(kpi_row)
+
+        action_row = QHBoxLayout()
+        self.input_repay_amount = QDoubleSpinBox()
+        self.input_repay_amount.setRange(0.0, 100_000_000.0)
+        self.input_repay_amount.setDecimals(2)
+        self.input_repay_amount.setSingleStep(100.0)
+        self.input_repay_amount.setPrefix("₦")
+        action_row.addWidget(QLabel("Post Repayment:"))
+        action_row.addWidget(self.input_repay_amount)
+
+        self.combo_repay_mode = QComboBox()
+        self.combo_repay_mode.addItems(["Bank Transfer", "Cash", "Salary Deduction"])
+        action_row.addWidget(self.combo_repay_mode)
+
+        self.input_repay_ref = QLineEdit()
+        self.input_repay_ref.setPlaceholderText("Transfer Ref (optional)")
+        action_row.addWidget(self.input_repay_ref)
+
+        self.btn_post_selected_repayment = QPushButton("Post for Selected Row")
+        self.btn_post_selected_repayment.clicked.connect(self.post_selected_repayment)
+        action_row.addWidget(self.btn_post_selected_repayment)
+        action_row.addStretch()
+        main_layout.addLayout(action_row)
 
         self.table_repayments = QTableWidget()
         self.table_repayments.setColumnCount(9)
@@ -1744,6 +1786,8 @@ class LoansPage(QWidget):
         self.load_loan_products()
         self.load_repayment_dashboard()
         self.combo_loan_product.currentIndexChanged.connect(self._on_product_changed)
+        self.combo_repay_scope.currentTextChanged.connect(self.load_repayment_dashboard)
+        self.combo_repay_status.currentTextChanged.connect(self.load_repayment_dashboard)
     
     def load_system_settings(self) -> None:
         """Load system settings for loan defaults."""
@@ -1786,7 +1830,7 @@ class LoansPage(QWidget):
                 self.input_interest_rate.setValue(float(product.get('interest_rate', self.default_interest_rate)))
                 self.input_duration.setValue(int(product.get('duration_months', self.default_duration)))
                 # Auto-fill principal with product's max amount
-                max_amount = float(product.get('max_loan_amount', 0))
+                max_amount = float(product.get('max_amount', 0))
                 self.input_principal.setValue(max_amount)
                 break
 
@@ -2087,8 +2131,17 @@ class LoansPage(QWidget):
         start_date = self.repay_date_from.text().strip() if hasattr(self, "repay_date_from") else ""
         end_date = self.repay_date_to.text().strip() if hasattr(self, "repay_date_to") else ""
 
+        for label, value in (("From", start_date), ("To", end_date)):
+            if value:
+                try:
+                    datetime.strptime(value, "%Y-%m-%d")
+                except ValueError:
+                    QMessageBox.warning(self, "Invalid Date", f"{label} date must be in YYYY-MM-DD format.")
+                    return
+
         if member_scope == "Current Member" and member_id is None:
             self.table_repayments.setRowCount(0)
+            self._update_repayment_dashboard_summary(member_id=None, start_date=None, end_date=None)
             return
 
         ok, rows = get_repayment_dashboard_rows(
@@ -2107,7 +2160,9 @@ class LoansPage(QWidget):
             self.table_repayments.insertRow(row_idx)
 
             member_text = f"{item.get('full_name', '')} ({item.get('staff_number', '')})"
-            self.table_repayments.setItem(row_idx, 0, QTableWidgetItem(member_text))
+            member_item = QTableWidgetItem(member_text)
+            member_item.setData(Qt.ItemDataRole.UserRole, int(item.get("member_id", 0) or 0))
+            self.table_repayments.setItem(row_idx, 0, member_item)
             self.table_repayments.setItem(row_idx, 1, QTableWidgetItem(str(item.get("loan_id", ""))))
             self.table_repayments.setItem(row_idx, 2, QTableWidgetItem(str(item.get("installment_no", ""))))
             self.table_repayments.setItem(row_idx, 3, QTableWidgetItem(str(item.get("due_date", ""))[:10]))
@@ -2137,6 +2192,122 @@ class LoansPage(QWidget):
             elif status == "Overdue":
                 status_item.setForeground(Qt.GlobalColor.red)
             self.table_repayments.setItem(row_idx, 8, status_item)
+
+        self._update_repayment_dashboard_summary(
+            member_id=member_id,
+            start_date=start_date or None,
+            end_date=end_date or None,
+        )
+
+    def _update_repayment_dashboard_summary(
+        self,
+        member_id: Optional[int],
+        start_date: Optional[str],
+        end_date: Optional[str],
+    ) -> None:
+        ok, summary = get_repayment_dashboard_summary(
+            self.db_path,
+            member_id=member_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if not ok:
+            self.label_repay_overdue.setText("Overdue: 0")
+            self.label_repay_due_week.setText("Due in 7 days: 0")
+            self.label_repay_collection.setText("Collection Rate: 0.00%")
+            self.label_repay_outstanding.setText("Outstanding: ₦0.00")
+            return
+
+        overdue = int(summary.get("overdue_count", 0.0) or 0.0)
+        due_week = int(summary.get("due_this_week_count", 0.0) or 0.0)
+        collection_rate = float(summary.get("collection_rate", 0.0) or 0.0)
+        outstanding = float(summary.get("total_outstanding", 0.0) or 0.0)
+
+        self.label_repay_overdue.setText(f"Overdue: {overdue}")
+        self.label_repay_due_week.setText(f"Due in 7 days: {due_week}")
+        self.label_repay_collection.setText(f"Collection Rate: {collection_rate:.2f}%")
+        self.label_repay_outstanding.setText(f"Outstanding: ₦{outstanding:,.2f}")
+
+        overdue_color = "#e74c3c" if overdue > 0 else "#27ae60"
+        due_week_color = "#f39c12" if due_week > 0 else "#27ae60"
+        self.label_repay_overdue.setStyleSheet(f"color: {overdue_color};")
+        self.label_repay_due_week.setStyleSheet(f"color: {due_week_color};")
+
+    def post_selected_repayment(self) -> None:
+        selected_rows = self.table_repayments.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, "No Selection", "Select a repayment row first.")
+            return
+
+        row = selected_rows[0].row()
+        member_item = self.table_repayments.item(row, 0)
+        if not member_item:
+            QMessageBox.warning(self, "Invalid Selection", "Could not read selected repayment member.")
+            return
+
+        member_id = int(member_item.data(Qt.ItemDataRole.UserRole) or 0)
+        if member_id <= 0:
+            QMessageBox.warning(self, "Invalid Selection", "Selected row has no valid member ID.")
+            return
+
+        amount = float(self.input_repay_amount.value())
+        if amount <= 0:
+            QMessageBox.warning(self, "Invalid Amount", "Repayment amount must be greater than 0.")
+            return
+
+        payment_mode = self.combo_repay_mode.currentText()
+        transfer_reference = self.input_repay_ref.text().strip()
+
+        success, message = post_loan_repayment(
+            self.db_path,
+            member_id,
+            amount,
+            payment_mode,
+            transfer_reference,
+        )
+        if not success:
+            QMessageBox.warning(self, "Repayment Failed", message)
+            return
+
+        QMessageBox.information(self, "Repayment Posted", message)
+        self.input_repay_amount.setValue(0.0)
+        self.input_repay_ref.clear()
+        self.load_repayment_dashboard()
+
+        if self.current_member_id == member_id:
+            self.load_active_loans()
+
+    def export_repayment_dashboard_csv(self) -> None:
+        if self.table_repayments.rowCount() == 0:
+            QMessageBox.information(self, "Export", "No repayment rows to export.")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Repayment Dashboard",
+            "SwiftLedger_Repayment_Dashboard.csv",
+            "CSV Files (*.csv)",
+        )
+        if not path:
+            return
+
+        headers = [
+            self.table_repayments.horizontalHeaderItem(col).text()
+            for col in range(self.table_repayments.columnCount())
+        ]
+
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as csv_file:
+                writer = csv.writer(csv_file)
+                writer.writerow(headers)
+                for row in range(self.table_repayments.rowCount()):
+                    writer.writerow([
+                        (self.table_repayments.item(row, col).text() if self.table_repayments.item(row, col) else "")
+                        for col in range(self.table_repayments.columnCount())
+                    ])
+            QMessageBox.information(self, "Exported", f"Repayment dashboard exported to:\n{path}")
+        except Exception as exc:
+            QMessageBox.warning(self, "Export Failed", f"Could not export CSV:\n{exc}")
     
     def load_active_loans(self) -> None:
         """Load and display active loans for the current member."""
@@ -2210,6 +2381,10 @@ class LoansPage(QWidget):
         self.label_validation_status.setText("")
         self.table_loans.setRowCount(0)
         self.table_repayments.setRowCount(0)
+        self.label_repay_overdue.setText("Overdue: 0")
+        self.label_repay_due_week.setText("Due in 7 days: 0")
+        self.label_repay_collection.setText("Collection Rate: 0.00%")
+        self.label_repay_outstanding.setText("Outstanding: ₦0.00")
         self.btn_validate.setEnabled(False)
         self.btn_preview.setEnabled(False)
         self.btn_submit.setEnabled(False)
