@@ -11,13 +11,21 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QCheckBox, QSlider, QMessageBox,
     QSpinBox, QComboBox, QScrollArea, QFrame, QLineEdit, QDoubleSpinBox,
+    QTableWidget, QTableWidgetItem, QAbstractItemView, QDialog,
+    QDialogButtonBox,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.db_init import save_settings, log_event
-from database.queries import get_system_settings
+from database.queries import (
+    get_system_settings,
+    get_loan_products,
+    add_loan_product,
+    update_loan_product,
+    set_loan_product_active,
+)
 from security import hash_credential
 
 
@@ -33,6 +41,7 @@ class SettingsPage(QWidget):
         self.current_auth_hash = ""
         self._build_ui()
         self._load_current_settings()
+        self._load_loan_products_table()
 
     # ── UI ───────────────────────────────────────────────────────────
 
@@ -163,6 +172,45 @@ class SettingsPage(QWidget):
         policy_form.addRow("Default Loan Duration:", self.input_default_duration)
 
         main.addWidget(policy_group)
+
+        # ── Loan Products Admin ───────────────────────────────────
+        products_group = QGroupBox("Loan Products")
+        products_group.setFont(QFont("Arial", 12))
+        products_layout = QVBoxLayout(products_group)
+        products_layout.setContentsMargins(14, 20, 14, 14)
+        products_layout.setSpacing(10)
+
+        self.table_loan_products = QTableWidget()
+        self.table_loan_products.setColumnCount(6)
+        self.table_loan_products.setHorizontalHeaderLabels(
+            ["Name", "Max Amount", "Rate", "Duration", "Status", "ID"]
+        )
+        self.table_loan_products.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_loan_products.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table_loan_products.horizontalHeader().setStretchLastSection(True)
+        self.table_loan_products.setColumnHidden(5, True)
+        products_layout.addWidget(self.table_loan_products)
+
+        products_btn_row = QHBoxLayout()
+        self.btn_product_add = QPushButton("Add")
+        self.btn_product_add.clicked.connect(self._add_loan_product)
+        products_btn_row.addWidget(self.btn_product_add)
+
+        self.btn_product_edit = QPushButton("Edit")
+        self.btn_product_edit.clicked.connect(self._edit_loan_product)
+        products_btn_row.addWidget(self.btn_product_edit)
+
+        self.btn_product_toggle = QPushButton("Activate/Deactivate")
+        self.btn_product_toggle.clicked.connect(self._toggle_loan_product_status)
+        products_btn_row.addWidget(self.btn_product_toggle)
+
+        self.btn_product_refresh = QPushButton("Refresh")
+        self.btn_product_refresh.clicked.connect(self._load_loan_products_table)
+        products_btn_row.addWidget(self.btn_product_refresh)
+        products_btn_row.addStretch()
+        products_layout.addLayout(products_btn_row)
+
+        main.addWidget(products_group)
 
         # ── Security group ──────────────────────────────────────────
         sec_group = QGroupBox("Security")
@@ -306,6 +354,170 @@ class SettingsPage(QWidget):
         if idx >= 0:
             self.combo_security_mode.setCurrentIndex(idx)
         self._sync_security_placeholders()
+
+    def _load_loan_products_table(self) -> None:
+        ok, products = get_loan_products(self.db_path, active_only=False)
+        self.table_loan_products.setRowCount(0)
+        if not ok:
+            return
+
+        for row_idx, product in enumerate(products):
+            self.table_loan_products.insertRow(row_idx)
+            product_id = int(product.get("product_id", 0) or 0)
+            name = str(product.get("name", ""))
+            max_amount = float(product.get("max_amount", 0.0) or 0.0)
+            rate = float(product.get("interest_rate", 0.0) or 0.0)
+            duration = int(product.get("duration_months", 0) or 0)
+            is_active = bool(product.get("is_active", 0))
+
+            self.table_loan_products.setItem(row_idx, 0, QTableWidgetItem(name))
+            self.table_loan_products.setItem(row_idx, 1, QTableWidgetItem(f"₦{max_amount:,.2f}"))
+            self.table_loan_products.setItem(row_idx, 2, QTableWidgetItem(f"{rate:.2f}%"))
+            self.table_loan_products.setItem(row_idx, 3, QTableWidgetItem(f"{duration} months"))
+            self.table_loan_products.setItem(row_idx, 4, QTableWidgetItem("Active" if is_active else "Inactive"))
+            self.table_loan_products.setItem(row_idx, 5, QTableWidgetItem(str(product_id)))
+
+    def _get_selected_product_id(self) -> int:
+        selected = self.table_loan_products.selectionModel().selectedRows()
+        if not selected:
+            return 0
+
+        row = selected[0].row()
+        id_item = self.table_loan_products.item(row, 5)
+        if not id_item:
+            return 0
+        try:
+            return int(id_item.text())
+        except Exception:
+            return 0
+
+    def _open_product_dialog(self, title: str, initial: dict | None = None) -> tuple[bool, dict]:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        layout = QVBoxLayout(dialog)
+
+        form = QFormLayout()
+        input_name = QLineEdit()
+        input_name.setPlaceholderText("Product Name")
+
+        input_max = QDoubleSpinBox()
+        input_max.setRange(0.0, 100_000_000.0)
+        input_max.setPrefix("₦")
+        input_max.setDecimals(2)
+        input_max.setSingleStep(1000.0)
+
+        input_rate = QDoubleSpinBox()
+        input_rate.setRange(0.0, 100.0)
+        input_rate.setSuffix("%")
+        input_rate.setDecimals(2)
+        input_rate.setSingleStep(0.25)
+
+        input_duration = QSpinBox()
+        input_duration.setRange(1, 120)
+        input_duration.setSuffix(" months")
+
+        if initial:
+            input_name.setText(str(initial.get("name", "")))
+            input_max.setValue(float(initial.get("max_amount", 0.0) or 0.0))
+            input_rate.setValue(float(initial.get("interest_rate", 0.0) or 0.0))
+            input_duration.setValue(int(initial.get("duration_months", 1) or 1))
+
+        form.addRow("Name:", input_name)
+        form.addRow("Max Amount:", input_max)
+        form.addRow("Interest Rate:", input_rate)
+        form.addRow("Duration:", input_duration)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False, {}
+
+        return True, {
+            "name": input_name.text().strip(),
+            "max_amount": float(input_max.value()),
+            "interest_rate": float(input_rate.value()),
+            "duration_months": int(input_duration.value()),
+        }
+
+    def _add_loan_product(self) -> None:
+        ok, payload = self._open_product_dialog("Add Loan Product")
+        if not ok:
+            return
+
+        success, message = add_loan_product(
+            self.db_path,
+            payload.get("name", ""),
+            float(payload.get("max_amount", 0.0)),
+            float(payload.get("interest_rate", 0.0)),
+            int(payload.get("duration_months", 1)),
+        )
+        if not success:
+            QMessageBox.warning(self, "Could Not Save", message)
+            return
+
+        self._load_loan_products_table()
+        self.settings_changed.emit()
+        QMessageBox.information(self, "Saved", message)
+
+    def _edit_loan_product(self) -> None:
+        product_id = self._get_selected_product_id()
+        if product_id <= 0:
+            QMessageBox.warning(self, "No Selection", "Select a loan product to edit.")
+            return
+
+        selected_row = self.table_loan_products.selectionModel().selectedRows()[0].row()
+        initial = {
+            "name": self.table_loan_products.item(selected_row, 0).text() if self.table_loan_products.item(selected_row, 0) else "",
+            "max_amount": float((self.table_loan_products.item(selected_row, 1).text() if self.table_loan_products.item(selected_row, 1) else "0").replace("₦", "").replace(",", "")),
+            "interest_rate": float((self.table_loan_products.item(selected_row, 2).text() if self.table_loan_products.item(selected_row, 2) else "0").replace("%", "")),
+            "duration_months": int((self.table_loan_products.item(selected_row, 3).text() if self.table_loan_products.item(selected_row, 3) else "1").replace(" months", "")),
+        }
+
+        ok, payload = self._open_product_dialog("Edit Loan Product", initial)
+        if not ok:
+            return
+
+        success, message = update_loan_product(
+            self.db_path,
+            product_id,
+            payload.get("name", ""),
+            float(payload.get("max_amount", 0.0)),
+            float(payload.get("interest_rate", 0.0)),
+            int(payload.get("duration_months", 1)),
+        )
+        if not success:
+            QMessageBox.warning(self, "Could Not Update", message)
+            return
+
+        self._load_loan_products_table()
+        self.settings_changed.emit()
+        QMessageBox.information(self, "Updated", message)
+
+    def _toggle_loan_product_status(self) -> None:
+        product_id = self._get_selected_product_id()
+        if product_id <= 0:
+            QMessageBox.warning(self, "No Selection", "Select a loan product to activate/deactivate.")
+            return
+
+        selected_row = self.table_loan_products.selectionModel().selectedRows()[0].row()
+        status_item = self.table_loan_products.item(selected_row, 4)
+        is_active_now = bool(status_item and status_item.text().strip().lower() == "active")
+        target_active = not is_active_now
+
+        success, message = set_loan_product_active(self.db_path, product_id, target_active)
+        if not success:
+            QMessageBox.warning(self, "Could Not Update", message)
+            return
+
+        self._load_loan_products_table()
+        self.settings_changed.emit()
+        QMessageBox.information(self, "Updated", message)
 
     def _apply_settings(self) -> None:
         mode = self.combo_security_mode.currentText().lower().replace(" ", "_")
