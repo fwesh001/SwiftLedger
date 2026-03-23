@@ -158,13 +158,6 @@ class SettingsPage(QWidget):
         self.input_min_monthly_saving.setDecimals(2)
         policy_form.addRow("Min Savings (eligibility):", self.input_min_monthly_saving)
 
-        self.input_max_loan_amount = QDoubleSpinBox()
-        self.input_max_loan_amount.setRange(0.0, 100_000_000.0)
-        self.input_max_loan_amount.setSingleStep(1000.0)
-        self.input_max_loan_amount.setPrefix("₦")
-        self.input_max_loan_amount.setDecimals(2)
-        policy_form.addRow("Global Max Loan (0 = no cap):", self.input_max_loan_amount)
-
         self.input_default_interest = QDoubleSpinBox()
         self.input_default_interest.setRange(0.0, 100.0)
         self.input_default_interest.setSingleStep(0.25)
@@ -360,7 +353,6 @@ class SettingsPage(QWidget):
         self.input_email.setText(str(settings.get('email') or ''))
         self.input_loan_multiplier.setValue(float(settings.get('loan_multiplier', 2.0) or 2.0))
         self.input_min_monthly_saving.setValue(float(settings.get('min_monthly_saving', 0.0) or 0.0))
-        self.input_max_loan_amount.setValue(float(settings.get('max_loan_amount', 0.0) or 0.0))
         self.input_default_interest.setValue(float(settings.get('default_interest_rate', 12.0) or 12.0))
         self.input_default_duration.setValue(int(settings.get('default_duration', 24) or 24))
 
@@ -578,7 +570,6 @@ class SettingsPage(QWidget):
             'email': self.input_email.text().strip(),
             'loan_multiplier': round(self.input_loan_multiplier.value(), 2),
             'min_monthly_saving': round(self.input_min_monthly_saving.value(), 2),
-            'max_loan_amount': round(self.input_max_loan_amount.value(), 2),
             'default_interest_rate': round(self.input_default_interest.value(), 2),
             'default_duration': int(self.input_default_duration.value()),
             'updated_at': datetime.now().isoformat(timespec='seconds'),
