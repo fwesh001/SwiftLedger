@@ -833,11 +833,10 @@ def get_member_loans(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
                 l.product_id,
                 lp.name AS product_name,
                 MAX(0, l.principal - COALESCE(l.principal_paid, 0.0)) AS outstanding_principal
-            FROM loans
-            l
+            FROM loans l
             LEFT JOIN loan_products lp ON lp.product_id = l.product_id
             WHERE l.member_id = ?
-            ORDER BY loan_id DESC
+            ORDER BY l.loan_id DESC
             """,
             (member_id,),
         )
