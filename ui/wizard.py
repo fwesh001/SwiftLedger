@@ -96,8 +96,8 @@ class IdentityPage(QWizardPage):
         layout.addWidget(society_label)
         layout.addWidget(self.society_input)
 
-        # Street
-        street_label = QLabel("Street:")
+        # Address
+        street_label = QLabel("Address:")
         self.street_input = QLineEdit()
         self.street_input.setPlaceholderText("e.g., 123 Main Street")
         layout.addWidget(street_label)
@@ -124,13 +124,6 @@ class IdentityPage(QWizardPage):
         layout.addWidget(email_label)
         layout.addWidget(self.email_input)
 
-        # Registration Number
-        reg_label = QLabel("Registration Number:")
-        self.reg_input = QLineEdit()
-        self.reg_input.setPlaceholderText("e.g., REG-2024-001")
-        layout.addWidget(reg_label)
-        layout.addWidget(self.reg_input)
-
         layout.addStretch()
 
     def get_data(self) -> dict:
@@ -141,7 +134,6 @@ class IdentityPage(QWizardPage):
             "city_state": self.city_input.text(),
             "phone": self.phone_input.text(),
             "email": self.email_input.text(),
-            "reg_no": self.reg_input.text(),
         }
 
     def validatePage(self) -> bool:
@@ -344,11 +336,10 @@ class FinalizePage(QWizardPage):
         summary = f"""
         <b>Organization Information:</b><br>
         Society Name: {identity_data['society_name']}<br>
-        Street: {identity_data['street']}<br>
+        Address: {identity_data['street']}<br>
         City/State: {identity_data['city_state']}<br>
         Phone: {identity_data['phone']}<br>
         Email: {identity_data['email']}<br>
-        Registration No: {identity_data['reg_no']}<br>
         <br>
         <b>Security:</b><br>
         Mode: {security_mode}
@@ -407,10 +398,10 @@ class FirstRunWizard(QWizard):
             settings_data = {
                 "society_name": identity_data["society_name"],
                 "street": identity_data["street"],
+                "address": identity_data["street"],
                 "city_state": identity_data["city_state"],
                 "phone": identity_data["phone"],
                 "email": identity_data["email"],
-                "reg_no": identity_data["reg_no"],
                 "security_mode": security_mode,
             }
 
