@@ -4,7 +4,7 @@ Handles CRUD operations for members, savings, loans, and repayment schedules.
 """
 
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 
 from database.db_init import log_event
@@ -330,12 +330,22 @@ def get_system_settings(db_path: str) -> Tuple[bool, Optional[Dict]]:
     The simplified schema does not store loan settings, so defaults are returned.
     """
     defaults = {
+        'society_name': 'SwiftLedger',
+        'address': '',
+        'street': '',
+        'city_state': '',
+        'phone': '',
+        'email': '',
         'min_monthly_saving': 0.0,
         'max_loan_amount': 0.0,
         'default_interest_rate': 12.0,
         'loan_multiplier': 2.0,
         'default_duration': 24,
         'show_charts': 0,
+        'show_alerts': 1,
+        'theme': 'dark',
+        'text_scale': 1.0,
+        'timeout_minutes': 10,
         'updated_at': None,
     }
 
@@ -352,6 +362,7 @@ def get_system_settings(db_path: str) -> Tuple[bool, Optional[Dict]]:
 
         settings = defaults.copy()
         settings.update(dict(row))
+        settings['address'] = settings.get('address') or settings.get('street') or ''
         return True, settings
 
     except sqlite3.DatabaseError:
@@ -455,12 +466,138 @@ def generate_repayment_schedule(
         return False, []
 
 
+def get_loan_products(db_path: str, active_only: bool = True) -> Tuple[bool, List[Dict]]:
+    """Retrieve configured loan products."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        if active_only:
+            cursor.execute(
+                """
+                SELECT product_id, name, max_amount, interest_rate, duration_months, is_active
+                FROM loan_products
+                WHERE is_active = 1
+                ORDER BY name ASC
+                """
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT product_id, name, max_amount, interest_rate, duration_months, is_active
+                FROM loan_products
+                ORDER BY is_active DESC, name ASC
+                """
+            )
+        rows = cursor.fetchall()
+        return True, [dict(row) for row in rows]
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
+
+
+def add_loan_product(
+    db_path: str,
+    name: str,
+    max_amount: float,
+    interest_rate: float,
+    duration_months: int,
+) -> Tuple[bool, str]:
+    """Create a reusable loan product definition."""
+    if not name.strip():
+        return False, "Product name is required."
+    if max_amount < 0:
+        return False, "Max amount cannot be negative."
+    if interest_rate < 0:
+        return False, "Interest rate cannot be negative."
+    if duration_months <= 0:
+        return False, "Duration must be at least 1 month."
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO loan_products (name, max_amount, interest_rate, duration_months, is_active, updated_at)
+            VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+            """,
+            (name.strip(), float(max_amount), float(interest_rate), int(duration_months)),
+        )
+        conn.commit()
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=(
+                f"Loan product created: {name.strip()} "
+                f"(max ₦{max_amount:,.2f}, {interest_rate:.2f}%/{duration_months}m)"
+            ),
+            status="Success",
+            db_path=db_path,
+        )
+        return True, "Loan product created successfully."
+    except sqlite3.IntegrityError:
+        return False, "A loan product with this name already exists."
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return False, f"Failed to create product: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
+def _persist_repayment_schedule(
+    cursor: sqlite3.Cursor,
+    loan_id: int,
+    member_id: int,
+    principal: float,
+    interest_rate: float,
+    duration_months: int,
+    issued_date: Optional[str] = None,
+) -> None:
+    """Persist generated repayment schedule rows for a loan."""
+    schedule = calculate_repayment_schedule(principal, interest_rate, duration_months)
+    base_date = date.today()
+    if issued_date:
+        try:
+            base_date = date.fromisoformat(str(issued_date)[:10])
+        except ValueError:
+            base_date = date.today()
+
+    for month_data in schedule:
+        due = (base_date + timedelta(days=30 * int(month_data['month_number']))).isoformat()
+        cursor.execute(
+            """
+            INSERT INTO loan_repayments (
+                loan_id, member_id, installment_no, due_date,
+                principal_due, interest_due, total_due,
+                principal_paid, interest_paid, total_paid, status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0.0, 0.0, 0.0, 'Pending')
+            """,
+            (
+                loan_id,
+                member_id,
+                int(month_data['month_number']),
+                due,
+                float(month_data['principal_payment']),
+                float(month_data['interest_payment']),
+                float(month_data['total_payment']),
+            ),
+        )
+
+
 def apply_for_loan(
     db_path: str,
     member_id: int,
     principal: float,
     interest_rate: Optional[float] = None,
-    duration: Optional[int] = None
+    duration: Optional[int] = None,
+    product_id: Optional[int] = None,
 ) -> Tuple[bool, str]:
     """
     Update a member's total_loans balance while enforcing a savings-multiplier rule.
@@ -469,8 +606,9 @@ def apply_for_loan(
         db_path: Path to the SQLite database.
         member_id: The member applying for the loan.
         principal: Requested loan amount.
-        interest_rate: Unused (kept for compatibility).
-        duration: Unused (kept for compatibility).
+        interest_rate: Optional annual interest override.
+        duration: Optional duration override (months).
+        product_id: Optional selected loan product ID.
 
     Returns:
         (True, success_message) on success or (False, error_message) on failure.
@@ -487,6 +625,8 @@ def apply_for_loan(
         return False, "Failed to retrieve system settings"
 
     loan_multiplier = float(settings.get('loan_multiplier', 2.0))
+    min_monthly_saving = float(settings.get('min_monthly_saving', 0.0))
+    configured_max_loan = float(settings.get('max_loan_amount', 0.0))
 
     ok, total_savings = get_total_savings(db_path, member_id)
     if not ok:
@@ -500,6 +640,15 @@ def apply_for_loan(
         return False, "Failed to calculate total savings"
 
     max_allowed = loan_multiplier * total_savings
+    if configured_max_loan > 0:
+        max_allowed = min(max_allowed, configured_max_loan)
+
+    if min_monthly_saving > 0 and total_savings < min_monthly_saving:
+        return False, (
+            f"Member savings (₦{total_savings:,.2f}) is below the minimum threshold "
+            f"(₦{min_monthly_saving:,.2f})."
+        )
+
     if principal > max_allowed:
         _safe_log_event(
             user="Admin",
@@ -518,17 +667,81 @@ def apply_for_loan(
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("BEGIN;")
 
-        final_interest_rate = float(interest_rate) if interest_rate is not None else float(settings.get('default_interest_rate', 12.0))
-        final_duration = int(duration) if duration is not None else int(settings.get('default_duration', 24))
+        selected_product = None
+        if product_id:
+            cursor.execute(
+                """
+                SELECT product_id, name, max_amount, interest_rate, duration_months, is_active
+                FROM loan_products
+                WHERE product_id = ?
+                """,
+                (product_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                conn.rollback()
+                return False, "Selected loan product was not found."
+            selected_product = {
+                'product_id': row[0],
+                'name': row[1],
+                'max_amount': float(row[2] or 0.0),
+                'interest_rate': float(row[3] or 0.0),
+                'duration_months': int(row[4] or 0),
+                'is_active': int(row[5] or 0),
+            }
+            if selected_product['is_active'] != 1:
+                conn.rollback()
+                return False, "Selected loan product is inactive."
+            if selected_product['max_amount'] > 0 and principal > selected_product['max_amount']:
+                conn.rollback()
+                return False, (
+                    f"Loan exceeds product cap (Max: ₦{selected_product['max_amount']:,.2f})."
+                )
+
+        if selected_product and interest_rate is None:
+            final_interest_rate = selected_product['interest_rate']
+        else:
+            final_interest_rate = float(interest_rate) if interest_rate is not None else float(settings.get('default_interest_rate', 12.0))
+
+        if selected_product and duration is None:
+            final_duration = selected_product['duration_months']
+        else:
+            final_duration = int(duration) if duration is not None else int(settings.get('default_duration', 24))
+
+        if final_duration <= 0:
+            conn.rollback()
+            return False, "Loan duration must be at least 1 month."
 
         due_date = (date.today() + timedelta(days=30 * final_duration)).isoformat()
         cursor.execute(
             """
-            INSERT INTO loans (member_id, principal, interest_rate, duration_months, status, due_date)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO loans (
+                member_id, principal, interest_rate, duration_months, product_id,
+                principal_paid, interest_paid, total_repaid, status, due_date
+            )
+            VALUES (?, ?, ?, ?, ?, 0.0, 0.0, 0.0, ?, ?)
             """,
-            (member_id, principal, final_interest_rate, final_duration, 'Active', due_date),
+            (
+                member_id,
+                principal,
+                final_interest_rate,
+                final_duration,
+                selected_product['product_id'] if selected_product else None,
+                'Active',
+                due_date,
+            ),
+        )
+        loan_id = int(cursor.lastrowid)
+
+        _persist_repayment_schedule(
+            cursor=cursor,
+            loan_id=loan_id,
+            member_id=member_id,
+            principal=principal,
+            interest_rate=final_interest_rate,
+            duration_months=final_duration,
         )
 
         cursor.execute(
@@ -552,11 +765,14 @@ def apply_for_loan(
             return False, f"Error: Member ID {member_id} does not exist."
 
         conn.commit()
+        product_note = ""
+        if selected_product:
+            product_note = f" ({selected_product['name']})"
         _safe_log_event(
             user="Admin",
             category="Loans",
             description=(
-                f"Loan approved for member_id {member_id}: ₦{principal:,.2f}, "
+                f"Loan approved for member_id {member_id}{product_note}: ₦{principal:,.2f}, "
                 f"{final_interest_rate:.2f}% for {final_duration} months"
             ),
             status="Success",
@@ -604,9 +820,23 @@ def get_member_loans(db_path: str, member_id: int) -> Tuple[bool, List[Dict]]:
 
         cursor.execute(
             """
-            SELECT loan_id, principal, interest_rate, status, date_issued
+            SELECT
+                l.loan_id,
+                l.principal,
+                l.interest_rate,
+                l.duration_months,
+                l.status,
+                l.date_issued,
+                l.principal_paid,
+                l.interest_paid,
+                l.total_repaid,
+                l.product_id,
+                lp.name AS product_name,
+                MAX(0, l.principal - COALESCE(l.principal_paid, 0.0)) AS outstanding_principal
             FROM loans
-            WHERE member_id = ?
+            l
+            LEFT JOIN loan_products lp ON lp.product_id = l.product_id
+            WHERE l.member_id = ?
             ORDER BY loan_id DESC
             """,
             (member_id,),
@@ -806,6 +1036,7 @@ def add_saving(
     amount: float,
     category: str,
     payment_mode: str = "Cash",
+    transfer_reference: str = "",
 ) -> Tuple[bool, str]:
     """
     Update a member's current savings balance.
@@ -816,6 +1047,7 @@ def add_saving(
         amount: The savings amount (positive number).
         category: Either 'Deduction' or 'Lodgment'.
         payment_mode: 'Bank Transfer', 'Cash', or 'Salary Deduction'.
+        transfer_reference: Optional bank transfer reference ID.
 
     Returns:
         A tuple (success: bool, message: str)
@@ -850,6 +1082,8 @@ def add_saving(
             db_path=db_path,
         )
         return False, "Invalid payment mode."
+
+    transfer_reference = (transfer_reference or "").strip()
 
     if payment_mode == "Salary Deduction" and category != "Lodgment":
         _safe_log_event(
@@ -933,11 +1167,11 @@ def add_saving(
         cursor.execute(
             """
             INSERT INTO savings_transactions (
-                member_id, trans_type, amount, running_balance, payment_mode
+                member_id, trans_type, amount, running_balance, payment_mode, transfer_reference
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (member_id, category, amount, running_balance, payment_mode),
+            (member_id, category, amount, running_balance, payment_mode, transfer_reference),
         )
 
         conn.commit()
