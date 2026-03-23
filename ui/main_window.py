@@ -38,6 +38,7 @@ from ui.analytics_charts import InteractiveMonthlyChart, LTSRiskGauge
 from ui.audit_page import AuditLogPage
 from ui.about_page import AboutPage
 from ui.settings_page import SettingsPage
+from ui.widgets import SearchFilterWidget
 from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
 from logic.data_manager import BulkDataManager
@@ -1143,6 +1144,9 @@ class SavingsPage(QWidget):
         self.db_path = db_path
         self.current_member_id = None
         self.current_member_name = None
+        self.search_debounce_timer = QTimer()
+        self.search_debounce_timer.setSingleShot(True)
+        self.search_debounce_timer.timeout.connect(self.search_member)
         
         # Create main layout
         main_layout = QVBoxLayout(self)
@@ -1163,16 +1167,10 @@ class SavingsPage(QWidget):
         search_group.setFont(search_font)
         search_layout = QHBoxLayout()
         
-        search_label = QLabel("Staff Number:")
-        self.input_search = QLineEdit()
-        self.input_search.setPlaceholderText("e.g., EMP001")
-        self.btn_search = QPushButton("Search")
-        self.btn_search.setMinimumWidth(100)
-        self.btn_search.clicked.connect(self.search_member)
+        self.search_widget = SearchFilterWidget()
+        self.search_widget.queryChanged.connect(self._on_search_query_changed)
         
-        search_layout.addWidget(search_label)
-        search_layout.addWidget(self.input_search)
-        search_layout.addWidget(self.btn_search)
+        search_layout.addWidget(self.search_widget)
         search_layout.addStretch()
         search_group.setLayout(search_layout)
         main_layout.addWidget(search_group)
