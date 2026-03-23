@@ -476,7 +476,9 @@ class MemberProfileDialog(QDialog):
             "QFrame { border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; }"
         )
         identity_layout = QFormLayout(identity_frame)
-        identity_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        identity_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        identity_layout.setHorizontalSpacing(14)
+        identity_layout.setVerticalSpacing(10)
 
         self.input_phone = QLineEdit(self.member_data.get("phone", ""))
         self.input_phone.setReadOnly(True)
@@ -500,7 +502,9 @@ class MemberProfileDialog(QDialog):
             "QFrame { border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; }"
         )
         bank_layout = QFormLayout(bank_frame)
-        bank_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        bank_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        bank_layout.setHorizontalSpacing(14)
+        bank_layout.setVerticalSpacing(10)
 
         self.input_bank_name = QLineEdit(self.member_data.get("bank_name", ""))
         self.input_bank_name.setReadOnly(True)
@@ -706,6 +710,11 @@ class MembersPage(QWidget):
         form_font.setBold(True)
         form_group.setFont(form_font)
         form_layout = QFormLayout()
+        form_layout.setContentsMargins(12, 8, 12, 8)
+        form_layout.setHorizontalSpacing(16)
+        form_layout.setVerticalSpacing(10)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         
         # Staff Number input
         self.input_staff_number = QLineEdit()
@@ -1204,6 +1213,11 @@ class SavingsPage(QWidget):
         form_font.setBold(True)
         form_group.setFont(form_font)
         form_layout = QFormLayout()
+        form_layout.setContentsMargins(12, 8, 12, 8)
+        form_layout.setHorizontalSpacing(16)
+        form_layout.setVerticalSpacing(10)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         
         # Amount input
         self.input_amount = QDoubleSpinBox()
@@ -1526,8 +1540,17 @@ class LoansPage(QWidget):
         self.search_debounce_timer.setSingleShot(True)
         self.search_debounce_timer.timeout.connect(self.search_member)
         
-        # Create main layout
-        main_layout = QVBoxLayout(self)
+        # Create scrollable container layout
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        content = QWidget()
+        main_layout = QVBoxLayout(content)
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
         
@@ -1559,6 +1582,7 @@ class LoansPage(QWidget):
         eligibility_font.setBold(True)
         eligibility_group.setFont(eligibility_font)
         eligibility_layout = QHBoxLayout()
+        eligibility_layout.setSpacing(18)
         
         self.label_member_name = QLabel("Member: Not Selected")
         self.label_member_name.setFont(QFont("Arial", 11))
@@ -1590,6 +1614,11 @@ class LoansPage(QWidget):
         form_font.setBold(True)
         form_group.setFont(form_font)
         form_layout = QFormLayout()
+        form_layout.setContentsMargins(12, 8, 12, 8)
+        form_layout.setHorizontalSpacing(16)
+        form_layout.setVerticalSpacing(10)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         
         # Principal input
         self.input_principal = QDoubleSpinBox()
@@ -1605,6 +1634,7 @@ class LoansPage(QWidget):
         form_layout.addRow("Loan Plan:", self.combo_loan_product)
 
         product_btn_row = QHBoxLayout()
+        product_btn_row.setSpacing(10)
         self.btn_add_custom_loan = QPushButton("Add Custom Loan")
         self.btn_add_custom_loan.clicked.connect(self.add_custom_loan_product)
         product_btn_row.addWidget(self.btn_add_custom_loan)
@@ -1634,6 +1664,7 @@ class LoansPage(QWidget):
         
         # Validation and Preview Section
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
         
         self.btn_validate = QPushButton("Validate Loan")
         self.btn_validate.setMinimumHeight(40)
@@ -1717,22 +1748,28 @@ class LoansPage(QWidget):
         main_layout.addWidget(repayments_title)
 
         repayments_filter_row = QHBoxLayout()
+        repayments_filter_row.setContentsMargins(0, 0, 0, 0)
+        repayments_filter_row.setSpacing(10)
         self.combo_repay_scope = QComboBox()
         self.combo_repay_scope.addItems(["Current Member", "All Members"])
+        self.combo_repay_scope.setMaximumWidth(170)
         repayments_filter_row.addWidget(QLabel("Scope:"))
         repayments_filter_row.addWidget(self.combo_repay_scope)
 
         self.combo_repay_status = QComboBox()
         self.combo_repay_status.addItems(["All", "Pending", "Partial", "Paid", "Overdue"])
+        self.combo_repay_status.setMaximumWidth(150)
         repayments_filter_row.addWidget(QLabel("Status:"))
         repayments_filter_row.addWidget(self.combo_repay_status)
 
         self.repay_date_from = QLineEdit()
         self.repay_date_from.setPlaceholderText("From (YYYY-MM-DD)")
+        self.repay_date_from.setMaximumWidth(160)
         repayments_filter_row.addWidget(self.repay_date_from)
 
         self.repay_date_to = QLineEdit()
         self.repay_date_to.setPlaceholderText("To (YYYY-MM-DD)")
+        self.repay_date_to.setMaximumWidth(160)
         repayments_filter_row.addWidget(self.repay_date_to)
 
         self.btn_refresh_repayments = QPushButton("Refresh")
@@ -1766,20 +1803,25 @@ class LoansPage(QWidget):
         main_layout.addLayout(kpi_row)
 
         action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(10)
         self.input_repay_amount = QDoubleSpinBox()
         self.input_repay_amount.setRange(0.0, 100_000_000.0)
         self.input_repay_amount.setDecimals(2)
         self.input_repay_amount.setSingleStep(100.0)
         self.input_repay_amount.setPrefix("₦")
+        self.input_repay_amount.setMaximumWidth(180)
         action_row.addWidget(QLabel("Post Repayment:"))
         action_row.addWidget(self.input_repay_amount)
 
         self.combo_repay_mode = QComboBox()
         self.combo_repay_mode.addItems(["Bank Transfer", "Cash", "Salary Deduction"])
+        self.combo_repay_mode.setMaximumWidth(170)
         action_row.addWidget(self.combo_repay_mode)
 
         self.input_repay_ref = QLineEdit()
         self.input_repay_ref.setPlaceholderText("Transfer Ref (optional)")
+        self.input_repay_ref.setMaximumWidth(240)
         action_row.addWidget(self.input_repay_ref)
 
         self.btn_post_selected_repayment = QPushButton("Post for Selected Row")
@@ -1812,7 +1854,8 @@ class LoansPage(QWidget):
         repay_header.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)
         main_layout.addWidget(self.table_repayments)
         
-        self.setLayout(main_layout)
+        scroll.setWidget(content)
+        outer_layout.addWidget(scroll)
         
         # Load system settings
         self.load_system_settings()
@@ -1873,6 +1916,11 @@ class LoansPage(QWidget):
         layout = QVBoxLayout(dialog)
 
         form = QFormLayout()
+        form.setContentsMargins(10, 6, 10, 6)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         input_name = QLineEdit()
         input_name.setPlaceholderText("Name")
         input_max = QDoubleSpinBox()
