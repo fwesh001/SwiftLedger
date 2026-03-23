@@ -1513,6 +1513,9 @@ class LoansPage(QWidget):
         self.default_interest_rate = 12.0
         self.default_duration = 24
         self.selected_product_id = None
+        self.search_debounce_timer = QTimer()
+        self.search_debounce_timer.setSingleShot(True)
+        self.search_debounce_timer.timeout.connect(self.search_member)
         
         # Create main layout
         main_layout = QVBoxLayout(self)
@@ -1533,16 +1536,10 @@ class LoansPage(QWidget):
         search_group.setFont(search_font)
         search_layout = QHBoxLayout()
         
-        search_label = QLabel("Staff Number:")
-        self.input_search = QLineEdit()
-        self.input_search.setPlaceholderText("e.g., EMP001")
-        self.btn_search = QPushButton("Search")
-        self.btn_search.setMinimumWidth(100)
-        self.btn_search.clicked.connect(self.search_member)
+        self.search_widget = SearchFilterWidget()
+        self.search_widget.queryChanged.connect(self._on_search_query_changed)
         
-        search_layout.addWidget(search_label)
-        search_layout.addWidget(self.input_search)
-        search_layout.addWidget(self.btn_search)
+        search_layout.addWidget(self.search_widget)
         search_layout.addStretch()
         search_group.setLayout(search_layout)
         main_layout.addWidget(search_group)
