@@ -22,9 +22,9 @@ from typing import Dict, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QLineEdit, QMessageBox,
-    QFileDialog,
+    QFileDialog, QDateEdit, QCheckBox, QComboBox,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -32,6 +32,7 @@ from database.queries import (
     get_system_settings, get_member_by_staff_number,
     get_member_savings, get_member_loans, get_society_stats,
     get_all_members,
+    get_member_statement_data, get_society_report_stats,
 )
 from database.db_init import log_event
 
@@ -62,6 +63,46 @@ class ReportsPage(QWidget):
         tf.setBold(True)
         title.setFont(tf)
         main.addWidget(title)
+
+        # ── Dynamic Filters ─────────────────────────────────────────
+        filter_group = QGroupBox("Report Filters")
+        filter_group.setFont(QFont("Arial", 12))
+        filter_form = QFormLayout(filter_group)
+        filter_form.setContentsMargins(14, 20, 14, 14)
+        filter_form.setSpacing(12)
+
+        self.combo_scope = QComboBox()
+        self.combo_scope.addItems(["Member", "Society", "Both"])
+        filter_form.addRow("Scope:", self.combo_scope)
+
+        self.date_from = QDateEdit()
+        self.date_from.setCalendarPopup(True)
+        self.date_from.setDate(QDate.currentDate().addMonths(-1))
+        filter_form.addRow("From:", self.date_from)
+
+        self.date_to = QDateEdit()
+        self.date_to.setCalendarPopup(True)
+        self.date_to.setDate(QDate.currentDate())
+        filter_form.addRow("To:", self.date_to)
+
+        toggle_row = QHBoxLayout()
+        self.chk_include_savings = QCheckBox("Savings")
+        self.chk_include_savings.setChecked(True)
+        self.chk_include_loans = QCheckBox("Loans")
+        self.chk_include_loans.setChecked(True)
+        self.chk_include_repayments = QCheckBox("Loan Repayments")
+        self.chk_include_repayments.setChecked(True)
+        self.chk_include_duration = QCheckBox("Include Duration Breakdown")
+        self.chk_include_duration.setChecked(True)
+        toggle_row.addWidget(self.chk_include_savings)
+        toggle_row.addWidget(self.chk_include_loans)
+        toggle_row.addWidget(self.chk_include_repayments)
+        toggle_row.addWidget(self.chk_include_duration)
+        toggle_wrap = QWidget()
+        toggle_wrap.setLayout(toggle_row)
+        filter_form.addRow("Include:", toggle_wrap)
+
+        main.addWidget(filter_group)
 
         # ── Member Ledger ────────────────────────────────────────────
         ledger_group = QGroupBox("Member Statement")
@@ -155,7 +196,7 @@ class ReportsPage(QWidget):
         if ok and s:
             return {
                 "name": s.get("society_name") or "SwiftLedger",
-                "street": s.get("street") or "",
+                "street": s.get("address") or s.get("street") or "",
                 "city": s.get("city_state") or "",
                 "phone": s.get("phone") or "",
                 "email": s.get("email") or "",
@@ -164,6 +205,19 @@ class ReportsPage(QWidget):
             }
         return {"name": "SwiftLedger", "street": "", "city": "",
                 "phone": "", "email": "", "reg_no": "", "logo": ""}
+
+    def _current_filters(self) -> Dict[str, object]:
+        start_date = self.date_from.date().toString("yyyy-MM-dd")
+        end_date = self.date_to.date().toString("yyyy-MM-dd")
+        return {
+            "scope": self.combo_scope.currentText(),
+            "start_date": start_date,
+            "end_date": end_date,
+            "include_savings": self.chk_include_savings.isChecked(),
+            "include_loans": self.chk_include_loans.isChecked(),
+            "include_repayments": self.chk_include_repayments.isChecked(),
+            "include_duration": self.chk_include_duration.isChecked(),
+        }
 
     def _add_header(self, pdf, info: dict) -> None:
         """Add dynamic branded header (logo or styled society name)."""
@@ -283,8 +337,30 @@ class ReportsPage(QWidget):
         if not mid:
             QMessageBox.warning(self, "Error", "Member record is missing an ID.")
             return None, None
-        _, savings_txns = get_member_savings(self.db_path, mid)
-        _, loans = get_member_loans(self.db_path, mid)
+        filters = self._current_filters()
+        start_date = str(filters.get("start_date") or "")
+        end_date = str(filters.get("end_date") or "")
+        ok_stmt, stmt_data = get_member_statement_data(
+            self.db_path,
+            mid,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if ok_stmt:
+            savings_txns = list(stmt_data.get("savings", []))
+            loans = list(stmt_data.get("loans", []))
+            repayments = list(stmt_data.get("repayments", []))
+        else:
+            _, savings_txns = get_member_savings(self.db_path, mid)
+            _, loans = get_member_loans(self.db_path, mid)
+            repayments = []
+
+        if not bool(filters.get("include_savings", True)):
+            savings_txns = []
+        if not bool(filters.get("include_loans", True)):
+            loans = []
+        if not bool(filters.get("include_repayments", True)):
+            repayments = []
         info = self._society_header()
 
         pdf = FPDF()
@@ -303,6 +379,7 @@ class ReportsPage(QWidget):
         loans_bal = float(member.get("total_loans", 0) or 0)
         pdf.cell(0, 6, f"Current Savings: NGN {savings_bal:,.2f}   |   Outstanding Loans: NGN {loans_bal:,.2f}",
                  new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, f"Reporting Period: {start_date} to {end_date}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
         # Savings table
@@ -358,8 +435,8 @@ class ReportsPage(QWidget):
         # Loans table
         pdf.set_font("Helvetica", "B", 11)
         pdf.cell(0, 8, "Loan Records", new_x="LMARGIN", new_y="NEXT")
-        loan_w = [20, 32, 28, 24, 36]
-        loan_h = ["ID", "Principal", "Rate", "Status", "Date Issued"]
+        loan_w = [16, 28, 20, 18, 22, 26, 24]
+        loan_h = ["ID", "Principal", "Rate", "Duration", "Status", "Date", "Repaid"]
         pdf.set_font("Helvetica", "B", 8)
         pdf.set_fill_color(44, 62, 80)
         pdf.set_text_color(255, 255, 255)
@@ -387,8 +464,10 @@ class ReportsPage(QWidget):
                 str(loan.get("loan_id", "")),
                 f"NGN {float(loan.get('principal', 0)):,.2f}",
                 f"{float(loan.get('interest_rate', 0)):.1f}%",
+                f"{int(loan.get('duration_months', 0) or 0)}m",
                 status,
                 str(loan.get("date_issued", ""))[:10],
+                f"NGN {float(loan.get('total_repaid', 0) or 0):,.2f}",
             ]
             for w, v in zip(loan_w, vals):
                 pdf.cell(w, 6, v, border=1, fill=True)
@@ -397,6 +476,46 @@ class ReportsPage(QWidget):
 
         if not loans:
             pdf.cell(sum(loan_w), 6, "No loan records found", border=1, align="C")
+            pdf.ln()
+
+        pdf.ln(4)
+
+        # Repayment table
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(0, 8, "Loan Repayments", new_x="LMARGIN", new_y="NEXT")
+        repay_w = [18, 16, 28, 30, 24, 24, 24]
+        repay_h = ["Repay #", "Loan", "Due Date", "Status", "Total Due", "Paid", "Outstanding"]
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.set_fill_color(44, 62, 80)
+        pdf.set_text_color(255, 255, 255)
+        for w, h in zip(repay_w, repay_h):
+            pdf.cell(w, 7, h, border=1, fill=True, align="C")
+        pdf.ln()
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Helvetica", "", 7)
+
+        for i, repayment in enumerate(repayments):
+            if i % 2 == 0:
+                pdf.set_fill_color(236, 240, 241)
+            else:
+                pdf.set_fill_color(255, 255, 255)
+            total_due = float(repayment.get("total_due", 0.0) or 0.0)
+            total_paid = float(repayment.get("total_paid", 0.0) or 0.0)
+            vals = [
+                str(repayment.get("repayment_id", "")),
+                str(repayment.get("loan_id", "")),
+                str(repayment.get("due_date", ""))[:10],
+                str(repayment.get("status", "")),
+                f"NGN {total_due:,.2f}",
+                f"NGN {total_paid:,.2f}",
+                f"NGN {max(0.0, total_due - total_paid):,.2f}",
+            ]
+            for w, v in zip(repay_w, vals):
+                pdf.cell(w, 6, v, border=1, fill=True)
+            pdf.ln()
+
+        if not repayments:
+            pdf.cell(sum(repay_w), 6, "No repayment records found", border=1, align="C")
             pdf.ln()
 
         self._add_footer_text(pdf)
