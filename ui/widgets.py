@@ -4,6 +4,30 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QComboBox, QLineEdit
 from PySide6.QtCore import Qt, Signal
 
 
+class UppercaseLineEdit(QLineEdit):
+    """QLineEdit variant that forces uppercase text for consistent data entry."""
+
+    def __init__(self, *args, force_uppercase: bool = True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._force_uppercase = bool(force_uppercase)
+        self.textChanged.connect(self._handle_text_changed)
+
+    def set_force_uppercase(self, enabled: bool) -> None:
+        self._force_uppercase = bool(enabled)
+
+    def _handle_text_changed(self, text: str) -> None:
+        if not self._force_uppercase:
+            return
+        upper_text = text.upper()
+        if upper_text == text:
+            return
+        cursor_pos = self.cursorPosition()
+        self.blockSignals(True)
+        self.setText(upper_text)
+        self.blockSignals(False)
+        self.setCursorPosition(min(cursor_pos, len(upper_text)))
+
+
 class SearchFilterWidget(QWidget):
     """
     Search bar with integrated dropdown filter.
@@ -37,7 +61,7 @@ class SearchFilterWidget(QWidget):
         self.combo_filter.setToolTip("Select search field: All Fields, Staff ID, Full Name, or Phone")
         
         # Search input
-        self.input_search = QLineEdit()
+        self.input_search = UppercaseLineEdit()
         self.input_search.setPlaceholderText("Search by Staff ID, Name, or Phone...")
         self.input_search.textChanged.connect(self._on_text_changed)
         
