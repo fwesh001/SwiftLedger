@@ -61,12 +61,27 @@ class ReportsPage(QWidget):
         main.setContentsMargins(20, 20, 20, 20)
         main.setSpacing(20)
 
-        # Title
+        # Title row
+        header_row = QHBoxLayout()
         title = QLabel("Reports")
         tf = QFont("Arial", 18)
         tf.setBold(True)
         title.setFont(tf)
-        main.addWidget(title)
+        header_row.addWidget(title)
+        header_row.addStretch()
+
+        self.btn_refresh = QPushButton("⟳  Refresh")
+        self.btn_refresh.setMinimumHeight(36)
+        self.btn_refresh.setMinimumWidth(110)
+        self.btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_refresh.setStyleSheet(
+            "QPushButton { background-color: #2980b9; color: white; "
+            "border-radius: 6px; padding: 6px 14px; font-weight: bold; } "
+            "QPushButton:hover { background-color: #3498db; }"
+        )
+        self.btn_refresh.clicked.connect(self.refresh_page)
+        header_row.addWidget(self.btn_refresh)
+        main.addLayout(header_row)
 
         # ── Dynamic Filters ─────────────────────────────────────────
         filter_group = QGroupBox("Report Filters")
@@ -249,6 +264,29 @@ class ReportsPage(QWidget):
             self.date_from.setDate(min_qdate)
         if max_qdate.isValid():
             self.date_to.setDate(max_qdate)
+
+    def refresh_page(self) -> None:
+        """Refresh report dates while keeping current filters and member search state."""
+        scope_index = self.combo_scope.currentIndex()
+        include_savings = self.chk_include_savings.isChecked()
+        include_loans = self.chk_include_loans.isChecked()
+        include_repayments = self.chk_include_repayments.isChecked()
+        include_duration = self.chk_include_duration.isChecked()
+
+        member_query = self.search_member_widget.get_query()
+        member_filter_index = self.search_member_widget.combo_filter.currentIndex()
+
+        self._initialize_date_filters()
+
+        self.combo_scope.setCurrentIndex(scope_index)
+        self.chk_include_savings.setChecked(include_savings)
+        self.chk_include_loans.setChecked(include_loans)
+        self.chk_include_repayments.setChecked(include_repayments)
+        self.chk_include_duration.setChecked(include_duration)
+
+        self.search_member_widget.combo_filter.setCurrentIndex(member_filter_index)
+        self.search_member_widget.set_query(member_query)
+        self._on_member_search_changed(self.search_member_widget.get_filter_type(), member_query)
 
     def _add_header(self, pdf, info: dict) -> None:
         """Add dynamic branded header (logo or styled society name)."""
