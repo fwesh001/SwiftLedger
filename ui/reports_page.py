@@ -113,12 +113,19 @@ class ReportsPage(QWidget):
         ledger_form.setSpacing(12)
 
         self.search_member_widget = SearchFilterWidget()
-        search_layout = QHBoxLayout()
-        search_layout.addWidget(self.search_member_widget)
-        search_layout.addStretch()
-        search_wrapper = QWidget()
-        search_wrapper.setLayout(search_layout)
-        ledger_form.addRow("Member Search:", search_wrapper)
+    self.search_member_widget.queryChanged.connect(self._on_member_search_changed)
+       
+    self.label_selected_member = QLabel("Member: Not selected")
+    self.label_selected_member.setFont(QFont("Arial", 10))
+    self.label_selected_member.setMinimumWidth(200)
+       
+    search_layout = QHBoxLayout()
+    search_layout.addWidget(self.search_member_widget)
+    search_layout.addWidget(self.label_selected_member)
+    search_layout.addStretch()
+    search_wrapper = QWidget()
+    search_wrapper.setLayout(search_layout)
+    ledger_form.addRow("Member Search:", search_wrapper)
 
         self.btn_member_preview = QPushButton("Preview Member Statement")
         self.btn_member_preview.setMinimumHeight(38)
@@ -273,6 +280,7 @@ class ReportsPage(QWidget):
             from PySide6.QtPdf import QPdfDocument
             from PySide6.QtPdfWidgets import QPdfView
             from PySide6.QtWidgets import QDialog
+            from PySide6.QtCore import QUrl
         except ImportError:
             QMessageBox.information(
                 self,
@@ -288,9 +296,10 @@ class ReportsPage(QWidget):
         layout = QVBoxLayout(dialog)
 
         pdf_doc = QPdfDocument(dialog)
-        status = pdf_doc.load(path)
+        file_url = QUrl.fromLocalFile(path)
+        status = pdf_doc.load(file_url)
         if status != QPdfDocument.Status.Ready:
-            QMessageBox.warning(self, "Preview Error", "Unable to load the PDF file.")
+            QMessageBox.warning(self, "Preview Error", f"Unable to load PDF file.\nPath: {path}\nStatus: {status}")
             return
 
         view = QPdfView(dialog)
@@ -329,6 +338,24 @@ class ReportsPage(QWidget):
         """
         ok, members = search_members(self.db_path, staff)
         if not ok or not members:
+            def _on_member_search_changed(self, filter_type: str, query: str) -> None:
+                """Auto-search for member when search query changes and display name."""
+                if not query.strip():
+                    self.label_selected_member.setText("Member: Not selected")
+                    return
+        
+                # Search for matching members
+                success, members = search_members(self.db_path, query, filter_field=filter_type)
+        
+                if success and members:
+                    member = members[0]  # Use first match
+                    member_name = member.get('full_name', 'Unknown')
+                    if len(members) > 1:
+                        self.label_selected_member.setText(f"Member: {member_name} (+{len(members)-1} more)")
+                    else:
+                        self.label_selected_member.setText(f"Member: {member_name}")
+                else:
+                    self.label_selected_member.setText("Member: Not found")
             QMessageBox.warning(self, "Not Found", f"No member found matching '{staff}'.")
             return None, None
 
