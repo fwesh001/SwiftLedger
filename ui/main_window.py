@@ -1163,12 +1163,27 @@ class SavingsPage(QWidget):
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
         
-        # Title
+        # Title row
+        header_row = QHBoxLayout()
         title = QLabel("Savings Management")
         title_font = QFont("Arial", 18)
         title_font.setBold(True)
         title.setFont(title_font)
-        main_layout.addWidget(title)
+        header_row.addWidget(title)
+        header_row.addStretch()
+
+        self.btn_refresh = QPushButton("⟳  Refresh")
+        self.btn_refresh.setMinimumHeight(36)
+        self.btn_refresh.setMinimumWidth(110)
+        self.btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_refresh.setStyleSheet(
+            "QPushButton { background-color: #2980b9; color: white; border-radius: 6px; "
+            "font-weight: bold; padding: 6px 14px; } "
+            "QPushButton:hover { background-color: #3498db; }"
+        )
+        self.btn_refresh.clicked.connect(self.refresh_page)
+        header_row.addWidget(self.btn_refresh)
+        main_layout.addLayout(header_row)
         
         # Search Section
         search_group = QGroupBox("Find Member")
@@ -1487,6 +1502,13 @@ class SavingsPage(QWidget):
         self.table_savings.setRowCount(0)
         self.btn_post.setEnabled(False)
 
+    def refresh_page(self) -> None:
+        """Refresh page data, or hard-reset when no member is selected."""
+        if self.current_member_id is None:
+            self.clear_selection()
+            return
+        self.load_savings_data()
+
     def _format_savings_type(self, trans_type: str) -> str:
         labels = {
             "Lodgment": "Deposit (+)",
@@ -1554,12 +1576,27 @@ class LoansPage(QWidget):
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
         
-        # Title
+        # Title row
+        header_row = QHBoxLayout()
         title = QLabel("Loan Management")
         title_font = QFont("Arial", 18)
         title_font.setBold(True)
         title.setFont(title_font)
-        main_layout.addWidget(title)
+        header_row.addWidget(title)
+        header_row.addStretch()
+
+        self.btn_refresh = QPushButton("⟳  Refresh")
+        self.btn_refresh.setMinimumHeight(36)
+        self.btn_refresh.setMinimumWidth(110)
+        self.btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_refresh.setStyleSheet(
+            "QPushButton { background-color: #2980b9; color: white; border-radius: 6px; "
+            "font-weight: bold; padding: 6px 14px; } "
+            "QPushButton:hover { background-color: #3498db; }"
+        )
+        self.btn_refresh.clicked.connect(self.refresh_page)
+        header_row.addWidget(self.btn_refresh)
+        main_layout.addLayout(header_row)
         
         # Search Section
         search_group = QGroupBox("Find Member")
@@ -2489,6 +2526,22 @@ class LoansPage(QWidget):
         self.btn_preview.setEnabled(False)
         self.btn_submit.setEnabled(False)
 
+    def refresh_page(self) -> None:
+        """Refresh page data, or hard-reset when no member is selected."""
+        self.load_system_settings()
+        if self.current_member_id is None:
+            self.clear_selection()
+            return
+
+        ok, total_savings = get_total_savings(self.db_path, self.current_member_id)
+        self.total_savings = total_savings if ok else 0.0
+        self.max_eligible_amount = self._effective_member_limit(self.total_savings)
+        self.label_total_savings.setText(f"Total Savings: ₦{self.total_savings:,.2f}")
+        self.label_max_eligible.setText(f"Max Eligible Loan: ₦{self.max_eligible_amount:,.2f}")
+
+        self.load_active_loans()
+        self.load_repayment_dashboard()
+
 
 class MainWindow(QMainWindow):
     """Main application window for SwiftLedger."""
@@ -2670,6 +2723,12 @@ class MainWindow(QMainWindow):
         # Auto-refresh certain pages on navigation
         if page_index == 0:
             self.dashboard_page.refresh_dashboard()
+        elif page_index == 2:
+            self.savings_page.refresh_page()
+        elif page_index == 3:
+            self.loans_page.refresh_page()
+        elif page_index == 4:
+            self.reports_page.refresh_page()
         elif page_index == 5:
             self.audit_page.refresh_logs()
     
