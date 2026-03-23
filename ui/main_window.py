@@ -1725,9 +1725,9 @@ class LoansPage(QWidget):
         main_layout.addWidget(loans_title)
         
         self.table_loans = QTableWidget()
-        self.table_loans.setColumnCount(5)
+        self.table_loans.setColumnCount(7)
         self.table_loans.setHorizontalHeaderLabels([
-            "Loan ID", "Principal", "Interest Rate", "Status", "Date Issued"
+            "Loan ID", "Principal", "Interest Rate", "Total Repaid", "Outstanding", "Status", "Date Issued"
         ])
         self.table_loans.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_loans.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -1735,9 +1735,11 @@ class LoansPage(QWidget):
         self.table_loans.verticalHeader().setVisible(False)
         self.table_loans.setAlternatingRowColors(True)
         self.table_loans.setColumnWidth(0, 100)
-        self.table_loans.setColumnWidth(1, 170)
-        self.table_loans.setColumnWidth(2, 120)
-        self.table_loans.setColumnWidth(3, 110)
+        self.table_loans.setColumnWidth(1, 140)
+        self.table_loans.setColumnWidth(2, 110)
+        self.table_loans.setColumnWidth(3, 140)
+        self.table_loans.setColumnWidth(4, 140)
+        self.table_loans.setColumnWidth(5, 100)
         main_layout.addWidget(self.table_loans)
 
         # Repayment Status Dashboard
@@ -1784,7 +1786,9 @@ class LoansPage(QWidget):
         repayments_filter_row.addStretch()
         main_layout.addLayout(repayments_filter_row)
 
-        kpi_row = QHBoxLayout()
+        kpi_row = QGridLayout()
+        kpi_row.setHorizontalSpacing(20)
+        kpi_row.setVerticalSpacing(6)
         self.label_repay_overdue = QLabel("Overdue: 0")
         self.label_repay_due_week = QLabel("Due in 7 days: 0")
         self.label_repay_collection = QLabel("Collection Rate: 0.00%")
@@ -1793,13 +1797,11 @@ class LoansPage(QWidget):
         self.label_repay_due_week.setFont(QFont("Arial", 10))
         self.label_repay_collection.setFont(QFont("Arial", 10))
         self.label_repay_outstanding.setFont(QFont("Arial", 10))
-        kpi_row.addWidget(self.label_repay_overdue)
-        kpi_row.addStretch()
-        kpi_row.addWidget(self.label_repay_due_week)
-        kpi_row.addStretch()
-        kpi_row.addWidget(self.label_repay_collection)
-        kpi_row.addStretch()
-        kpi_row.addWidget(self.label_repay_outstanding)
+        self.label_repay_outstanding.setWordWrap(True)
+        kpi_row.addWidget(self.label_repay_overdue, 0, 0)
+        kpi_row.addWidget(self.label_repay_due_week, 0, 1)
+        kpi_row.addWidget(self.label_repay_collection, 1, 0)
+        kpi_row.addWidget(self.label_repay_outstanding, 1, 1)
         main_layout.addLayout(kpi_row)
 
         action_row = QHBoxLayout()
@@ -2423,21 +2425,35 @@ class LoansPage(QWidget):
                 rate_item = QTableWidgetItem(f"{loan['interest_rate']:.2f}%")
                 rate_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table_loans.setItem(row_idx, 2, rate_item)
+
+                # Total Repaid
+                total_repaid = float(loan.get('total_repaid', 0.0) or 0.0)
+                repaid_item = QTableWidgetItem(f"₦{total_repaid:,.2f}")
+                repaid_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                self.table_loans.setItem(row_idx, 3, repaid_item)
+
+                # Outstanding
+                outstanding = float(loan.get('outstanding_principal', 0.0) or 0.0)
+                outstanding_item = QTableWidgetItem(f"₦{outstanding:,.2f}")
+                outstanding_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
+                self.table_loans.setItem(row_idx, 4, outstanding_item)
                 
                 # Status
                 status = loan['status']
                 status_item = QTableWidgetItem(status)
                 if status == 'Active':
                     status_item.setForeground(Qt.GlobalColor.green)
+                elif status == 'Paid':
+                    status_item.setForeground(Qt.GlobalColor.blue)
                 elif status == 'Closed':
                     status_item.setForeground(Qt.GlobalColor.blue)
                 elif status == 'Default':
                     status_item.setForeground(Qt.GlobalColor.red)
-                self.table_loans.setItem(row_idx, 3, status_item)
+                self.table_loans.setItem(row_idx, 5, status_item)
                 
                 # Date Issued
                 date_item = QTableWidgetItem(str(loan['date_issued']))
-                self.table_loans.setItem(row_idx, 4, date_item)
+                self.table_loans.setItem(row_idx, 6, date_item)
 
             self._refresh_member_loan_totals()
             self.load_repayment_dashboard()
