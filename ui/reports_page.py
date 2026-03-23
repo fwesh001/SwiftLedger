@@ -35,6 +35,7 @@ from database.queries import (
     get_member_statement_data, get_society_report_stats, search_members,
 )
 from database.db_init import log_event
+from ui.widgets import SearchFilterWidget
 
 
 class ReportsPage(QWidget):
@@ -111,9 +112,13 @@ class ReportsPage(QWidget):
         ledger_form.setContentsMargins(14, 20, 14, 14)
         ledger_form.setSpacing(12)
 
-        self.input_staff = QLineEdit()
-        self.input_staff.setPlaceholderText("e.g., EMP001")
-        ledger_form.addRow("Staff Number:", self.input_staff)
+        self.search_member_widget = SearchFilterWidget()
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(self.search_member_widget)
+        search_layout.addStretch()
+        search_wrapper = QWidget()
+        search_wrapper.setLayout(search_layout)
+        ledger_form.addRow("Member Search:", search_wrapper)
 
         self.btn_member_preview = QPushButton("Preview Member Statement")
         self.btn_member_preview.setMinimumHeight(38)
@@ -674,9 +679,9 @@ class ReportsPage(QWidget):
             QMessageBox.information(self, "Scope Filter", "Current scope is Society. Switch scope to Member or Both to preview member reports.")
             return
 
-        staff = self.input_staff.text().strip()
+        staff = self.search_member_widget.get_query()
         if not staff:
-            QMessageBox.warning(self, "Input Required", "Enter a staff number.")
+            QMessageBox.warning(self, "Input Required", "Enter a staff number or name.")
             return
 
         # Validate date range
@@ -740,9 +745,9 @@ class ReportsPage(QWidget):
             QMessageBox.information(self, "Scope Filter", "Current scope is Society. Switch scope to Member or Both to export member reports.")
             return
 
-        staff = self.input_staff.text().strip()
+        staff = self.search_member_widget.get_query()
         if not staff:
-            QMessageBox.warning(self, "Input Required", "Enter a staff number.")
+            QMessageBox.warning(self, "Input Required", "Enter a staff number or name.")
             return
 
         # Validate date range
