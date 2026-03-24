@@ -2,7 +2,7 @@
 
 SwiftLedger is a local desktop application for managing small thrift societies and cooperatives. It provides member management, savings transaction tracking, loan origination and repayment scheduling, PDF reporting, and an audit trail — all in a compact PySide6 (Qt) GUI.
 
-Download the latest Windows installer: [SwiftLedger_Installer_1.0.0.exe](https://github.com/fwesh001/SwiftLedger/releases/download/v1.0.0/SwiftLedger.exe)
+Download the latest Windows installer: [SwiftLedger_Installer_1.0.1.exe](https://github.com/fwesh001/SwiftLedger/releases/download/v1.0.1/SwiftLedger_Installer_1.0.1.exe)
 
 Quick highlights
 - Member registration and lookup by staff number
@@ -40,7 +40,7 @@ python main.py
 
 How to use
 - On first run the app opens a setup wizard to configure society name and initial credential.
-- Use the left sidebar to navigate: Dashboard, Members, Savings, Loans, Reports, Audit Logs, Settings, About.
+- Use the left sidebar to navigate: Dashboard, Members, Savings, Loans, Reports, Audit Logs, Settings, About/Help.
 - Generate PDF reports in the Reports page. Use the Preview button to view them inside the app (requires Qt PDF modules) or Save to persist to disk.
 
 Developer notes
