@@ -91,6 +91,39 @@ QScrollArea {
     border: none;
 }
 
+QScrollBar:vertical {
+    background-color: #ddc59d;
+    width: 12px;
+    margin: 3px 2px 3px 2px;
+    border: 1px solid #c09a62;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #d1af77;
+    min-height: 28px;
+    margin: 2px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #c59f63;
+}
+
+QScrollBar::handle:vertical:pressed {
+    background-color: #a9854f;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+
 QCheckBox, QSlider, QTabWidget, QTabBar::tab {
     color: #3b2f1f;
 }
