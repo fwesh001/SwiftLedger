@@ -6,6 +6,7 @@ and system finalization steps.
 """
 
 import sys
+import re
 from pathlib import Path
 from typing import cast, Any
 
@@ -64,7 +65,7 @@ class WelcomePage(QWizardPage):
         layout.addStretch()
 
         # Footer with developer credit
-        footer = QLabel("Designed and Developed by Zabdiel")
+        footer = QLabel("Designed and Developed by Zabdiel  |  www.zabdiel.tech")
         footer_font = QFont()
         footer_font.setPointSize(10)
         footer_font.setItalic(True)
@@ -140,7 +141,7 @@ class IdentityPage(QWizardPage):
     def validatePage(self) -> bool:
         """Validate that required fields are filled."""
         data = self.get_data()
-        required_fields = ["society_name", "phone", "email"]
+        required_fields = ["society_name", "street", "city_state", "phone", "email"]
         
         for field in required_fields:
             if not data[field].strip():
@@ -150,6 +151,25 @@ class IdentityPage(QWizardPage):
                     f"Please enter a valid {field.replace('_', ' ').title()}."
                 )
                 return False
+
+        email = data["email"].strip()
+        email_pattern = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+        if re.match(email_pattern, email) is None:
+            QMessageBox.warning(
+                self,
+                "Invalid Email",
+                "Please enter a valid email address (e.g., name@example.com)."
+            )
+            return False
+
+        phone_digits = "".join(ch for ch in data["phone"] if ch.isdigit())
+        if len(phone_digits) < 10:
+            QMessageBox.warning(
+                self,
+                "Invalid Phone",
+                "Phone number should contain at least 10 digits."
+            )
+            return False
         return True
 
 
