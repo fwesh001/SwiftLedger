@@ -696,9 +696,18 @@ class MembersPage(QWidget):
     def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
         self.db_path = db_path
-        
-        # Create main layout
-        main_layout = QVBoxLayout(self)
+
+        # Create scrollable page container
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        content = QWidget()
+        main_layout = QVBoxLayout(content)
         main_layout.setContentsMargins(15, 15, 15, 24)
         main_layout.setSpacing(15)
         
@@ -865,8 +874,9 @@ class MembersPage(QWidget):
         del_row.setContentsMargins(0, 6, 0, 0)
         main_layout.addLayout(del_row)
         main_layout.addSpacing(6)
-        
-        self.setLayout(main_layout)
+
+        scroll.setWidget(content)
+        outer_layout.addWidget(scroll)
         
         # Load initial data
         self.load_data()
