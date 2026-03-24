@@ -17,7 +17,7 @@ from pathlib import Path
 # ─────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent
 PROJECT_NAME = "SwiftLedger"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 DIST_DIR = PROJECT_ROOT / "dist"
 BUILD_DIR = PROJECT_ROOT / "build"
 MAIN_SCRIPT = PROJECT_ROOT / "main.py"
@@ -127,6 +127,9 @@ ShowUnInstDetails show
 ; ─────────────────────────────────────────────────────────────────
 ; MUI Settings
 ; ─────────────────────────────────────────────────────────────────
+!define MUI_FINISHPAGE_RUN "$INSTDIR\\${{APP_EXE}}"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${{APP_NAME}}"
+
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
