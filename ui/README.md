@@ -14,7 +14,7 @@ Pages (summary)
 - Loans — Loan origination, approvals, repayment schedule generation.
 - Reports — Generate and preview branded PDFs (member statements and society summaries).
 - Audit Logs — View the recorded system events from `audit_logs`.
-- Settings — Theme, text scale, security mode (PIN/Password/System Auth), and other preferences.
+- Settings — Theme, text scale, security mode (PIN/Password), and other preferences.
 
 How to add a page
 1. Create a new file under `ui/` with a `QWidget` subclass.
