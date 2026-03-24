@@ -2,7 +2,7 @@
 Login / Authentication screen for SwiftLedger.
 
 Reads the configured security_mode from system_settings and presents
-the appropriate authentication gate (PIN, Password, or System Auth).
+the appropriate authentication gate (PIN or Password).
 """
 
 import sys
@@ -18,7 +18,7 @@ from PySide6.QtGui import QFont
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.queries import get_system_settings
 from database.db_init import log_event
-from security import verify_credential, check_system_auth
+from security import verify_credential
 
 
 class LoginScreen(QWidget):
@@ -45,8 +45,13 @@ class LoginScreen(QWidget):
         """Read security_mode and auth_hash from the database."""
         ok, settings = get_system_settings(self.db_path)
         if ok and settings:
-            mode = settings.get("security_mode") or "pin"
-            self.security_mode = str(mode).strip().lower()
+            mode = str(settings.get("security_mode") or "password")
+            normalized = mode.strip().lower().replace(" ", "_")
+            if normalized in ("system", "system_auth", "system_authentication"):
+                normalized = "password"
+            if normalized not in ("pin", "password"):
+                normalized = "password"
+            self.security_mode = normalized
             self.auth_hash = str(settings.get("auth_hash") or "")
 
     # ── UI ───────────────────────────────────────────────────────────
@@ -85,7 +90,7 @@ class LoginScreen(QWidget):
 
         card_layout.addSpacing(8)
 
-        # Credential input (hidden for system_auth mode)
+        # Credential input
         self.input_credential = QLineEdit()
         self.input_credential.setEchoMode(QLineEdit.EchoMode.Password)
         self.input_credential.setMinimumHeight(38)
@@ -96,20 +101,13 @@ class LoginScreen(QWidget):
 
         if self.security_mode == "pin":
             self.input_credential.setPlaceholderText("Enter your PIN")
-        elif self.security_mode == "password":
-            self.input_credential.setPlaceholderText("Enter your password")
         else:
-            # system_auth — hide the text field, show a different prompt
-            self.input_credential.setVisible(False)
+            self.input_credential.setPlaceholderText("Enter your password")
 
         card_layout.addWidget(self.input_credential)
 
         # Login button
-        self.btn_login = QPushButton(
-            "Authenticate with Windows"
-            if self.security_mode == "system_auth"
-            else "Unlock"
-        )
+        self.btn_login = QPushButton("Unlock")
         self.btn_login.setMinimumHeight(40)
         bf = QFont("Arial", 11)
         bf.setBold(True)
@@ -132,10 +130,7 @@ class LoginScreen(QWidget):
     # ── Authentication logic ─────────────────────────────────────────
 
     def _attempt_login(self) -> None:
-        if self.security_mode == "system_auth":
-            self._do_system_auth()
-        else:
-            self._do_credential_auth()
+        self._do_credential_auth()
 
     def _do_credential_auth(self) -> None:
         """Verify PIN or password against stored hash."""
@@ -179,28 +174,3 @@ class LoginScreen(QWidget):
             )
             self.input_credential.clear()
 
-    def _do_system_auth(self) -> None:
-        """Use Windows credential provider for authentication."""
-        result = check_system_auth()
-        if result:
-            log_event(
-                user="Admin",
-                category="Security",
-                description="Successful system authentication",
-                status="Success",
-                db_path=self.db_path,
-            )
-            self.login_successful.emit()
-        else:
-            log_event(
-                user="Admin",
-                category="Security",
-                description="Failed system authentication attempt",
-                status="Failed",
-                db_path=self.db_path,
-            )
-            QMessageBox.critical(
-                self, "Authentication Failed",
-                "Windows authentication was cancelled or failed.\n"
-                "Please try again.",
-            )
