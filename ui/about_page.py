@@ -162,7 +162,7 @@ class AboutPage(QWidget):
             ),
             (
                 "What happens if I forget my PIN?",
-                "Contact the System Administrator or Zabdiel for recovery procedures. "
+                "Contact the System Administrator or Zabdiel (www.zabdiel.tech) for recovery procedures. "
                 "Recovery involves resetting the auth_hash in the system_settings table."
             ),
             (
