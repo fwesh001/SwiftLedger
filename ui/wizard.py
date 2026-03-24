@@ -105,16 +105,16 @@ class IdentityPage(QWizardPage):
         layout.addWidget(self.street_input)
 
         # City/State
-        city_label = QLabel("City/State:")
+        city_label = QLabel("State/Country:")
         self.city_input = UppercaseLineEdit()
-        self.city_input.setPlaceholderText("e.g., New York, NY")
+        self.city_input.setPlaceholderText("e.g., Abuja,Nigeria")
         layout.addWidget(city_label)
         layout.addWidget(self.city_input)
 
         # Phone
         phone_label = QLabel("Phone:")
         self.phone_input = UppercaseLineEdit()
-        self.phone_input.setPlaceholderText("e.g., +1 (555) 123-4567")
+        self.phone_input.setPlaceholderText("e.g., +234 7025 067 494")
         layout.addWidget(phone_label)
         layout.addWidget(self.phone_input)
 
