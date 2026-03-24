@@ -1,65 +1,23 @@
 """
 About page for SwiftLedger.
-Shows software info, developer section, and FAQ accordion.
+Shows software info and help guidance.
 """
 
 import sys
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox,
+    QWidget, QVBoxLayout, QLabel, QGroupBox,
     QScrollArea, QFrame,
+    QTabWidget,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
-
-# ── Collapsible FAQ widget ───────────────────────────────────────────
-
-class _CollapsibleFAQ(QWidget):
-    """A single question/answer that can be expanded or collapsed."""
-
-    def __init__(self, question: str, answer: str):
-        super().__init__()
-        self._expanded = False
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        # Question bar
-        self.btn = QLabel(f"▶  {question}")
-        self.btn.setStyleSheet(
-            "QLabel { background: #2b2b2b; padding: 10px 14px; "
-            "border: 1px solid #444; border-radius: 4px; font-weight: bold; }"
-        )
-        self.btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn.mousePressEvent = lambda _: self.toggle()
-        layout.addWidget(self.btn)
-
-        # Answer area (hidden by default)
-        self.answer_label = QLabel(answer)
-        self.answer_label.setWordWrap(True)
-        self.answer_label.setStyleSheet(
-            "QLabel { background: #333; padding: 10px 14px; "
-            "border: 1px solid #444; border-top: none; border-radius: 0 0 4px 4px; }"
-        )
-        self.answer_label.setVisible(False)
-        layout.addWidget(self.answer_label)
-
-        self._question = question
-
-    def toggle(self) -> None:
-        self._expanded = not self._expanded
-        self.answer_label.setVisible(self._expanded)
-        arrow = "▼" if self._expanded else "▶"
-        self.btn.setText(f"{arrow}  {self._question}")
-
-
 # ── About page ───────────────────────────────────────────────────────
 
 class AboutPage(QWidget):
-    """Software info, developer bio, and FAQ accordion."""
+    """Software info and tabbed help guide."""
 
     def __init__(self, db_path: str = "swiftledger.db"):
         super().__init__()
@@ -122,73 +80,132 @@ class AboutPage(QWidget):
 
         main.addWidget(about_group)
 
-        # ── Developer section ────────────────────────────────────────
-        dev_group = QGroupBox("About the Developer")
-        dev_group.setFont(QFont("Arial", 12))
-        dev_layout = QVBoxLayout(dev_group)
+        # ── Help tabs ────────────────────────────────────────────────
+        help_group = QGroupBox("Help")
+        help_group.setFont(QFont("Arial", 12))
+        help_layout = QVBoxLayout(help_group)
 
-        dev_text = QLabel(
-            "I built SwiftLedger to bring transparency and simplicity to society "
-            "management. Every feature — from SHA-256 credential hashing to "
-            "automatic dividend calculations — was designed with your organisation's "
-            "trust in mind.\n\n"
-            "For support or custom features, contact me at:\n"
-            "📧  zabdielfwesh001@gmail.com\n"
-            "🔗  github.com/fwesh001\n"
-            "🌐  www.zabdiel.tech"
+        tabs = QTabWidget()
+        tabs.setDocumentMode(True)
+
+        def make_help_tab(title: str, what_text: str, steps: list[str], advanced_note: str) -> QWidget:
+            tab = QWidget()
+            tab_layout = QVBoxLayout(tab)
+            tab_layout.setContentsMargins(12, 12, 12, 12)
+            tab_layout.setSpacing(10)
+
+            lbl_title = QLabel(title)
+            lbl_title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+            tab_layout.addWidget(lbl_title)
+
+            lbl_what = QLabel(f"What it is:\n{what_text}")
+            lbl_what.setWordWrap(True)
+            tab_layout.addWidget(lbl_what)
+
+            steps_text = "\n".join(f"{idx + 1}. {step}" for idx, step in enumerate(steps))
+            lbl_how = QLabel(f"How to use:\n{steps_text}")
+            lbl_how.setWordWrap(True)
+            tab_layout.addWidget(lbl_how)
+
+            lbl_note = QLabel(f"Advanced note:\n{advanced_note}")
+            lbl_note.setWordWrap(True)
+            tab_layout.addWidget(lbl_note)
+
+            tab_layout.addStretch()
+            return tab
+
+        tabs.addTab(
+            make_help_tab(
+                "Members",
+                "Registers, edits, and tracks members with their banking and profile details.",
+                [
+                    "Open Members page and fill Staff ID, full name, phone, bank, account number, department, and date joined.",
+                    "Click Register Member to save.",
+                    "Use the search bar to find members quickly.",
+                    "Double-click any member row to open full profile details.",
+                ],
+                "Use Download Template and Import Members for bulk onboarding when data is large.",
+            ),
+            "Members",
         )
-        dev_text.setWordWrap(True)
-        dev_text.setStyleSheet("font-size: 13px; line-height: 1.6; padding: 10px;")
-        dev_layout.addWidget(dev_text)
 
-        signature = QLabel("— Zabdiel, Developer  |  www.zabdiel.tech")
-        signature.setAlignment(Qt.AlignmentFlag.AlignRight)
-        signature.setStyleSheet("font-size: 12px; font-style: italic; color: #7f8c8d; padding-right: 14px;")
-        dev_layout.addWidget(signature)
-
-        main.addWidget(dev_group)
-
-        # ── FAQ accordion ────────────────────────────────────────────
-        faq_group = QGroupBox("Frequently Asked Questions")
-        faq_group.setFont(QFont("Arial", 12))
-        faq_layout = QVBoxLayout(faq_group)
-
-        faqs = [
-            (
-                "How do I backup data?",
-                "The app uses swiftledger.db — a single SQLite file. "
-                "Simply copy this file to a USB drive, cloud folder, or external backup. "
-                "Restoring is as easy as replacing the file."
+        tabs.addTab(
+            make_help_tab(
+                "Loans",
+                "Handles loan eligibility checks, disbursement, repayment tracking, and dashboard summaries.",
+                [
+                    "Search and select a member in Loans.",
+                    "Enter principal, loan plan, rate, and duration.",
+                    "Click Validate Loan and then Preview Schedule.",
+                    "Submit Loan only after validation passes.",
+                ],
+                "Use the Repayment Status Dashboard filters (scope/status/date) before posting repayments.",
             ),
-            (
-                "What happens if I forget my PIN?",
-                "Contact the System Administrator or Zabdiel (www.zabdiel.tech) for recovery procedures. "
-                "Recovery involves resetting the auth_hash in the system_settings table."
-            ),
-            (
-                "Is my data secure?",
-                "Yes. SwiftLedger uses SHA-256 hashing for credentials with per-user "
-                "cryptographic salts. All data is stored locally on your machine — "
-                "nothing is sent to external servers."
-            ),
-            (
-                "Can I run SwiftLedger on multiple computers?",
-                "Each installation uses its own local database file. To share data, "
-                "copy swiftledger.db to the new machine. Concurrent multi-user access "
-                "is not yet supported."
-            ),
-            (
-                "How are dividends calculated?",
-                "Projected interest is estimated at 12% of total outstanding loans. "
-                "60% is allocated to members and 40% to the society reserve."
-            ),
-        ]
+            "Loans",
+        )
 
-        for q, a in faqs:
-            faq_layout.addWidget(_CollapsibleFAQ(q, a))
+        tabs.addTab(
+            make_help_tab(
+                "Savings",
+                "Posts savings transactions and displays running balances with recent history.",
+                [
+                    "Search and select a member on the Savings page.",
+                    "Enter amount and choose transaction type and payment mode.",
+                    "Add transfer reference when mode is Bank Transfer.",
+                    "Click Post Saving to record the transaction.",
+                ],
+                "Salary Deduction mode auto-aligns transaction type to Deposit (+) for safer entry.",
+            ),
+            "Savings",
+        )
 
-        faq_layout.addStretch()
-        main.addWidget(faq_group)
+        tabs.addTab(
+            make_help_tab(
+                "Reports",
+                "Generates branded member statements, society summaries, and quick-start guides.",
+                [
+                    "Choose report scope (member or society).",
+                    "Set date range and required options.",
+                    "Preview report in-app where available.",
+                    "Export PDF to save a final report copy.",
+                ],
+                "Use refreshed date bounds before export if recent data was just entered.",
+            ),
+            "Reports",
+        )
+
+        tabs.addTab(
+            make_help_tab(
+                "Audit",
+                "Shows action history for security, member changes, savings, loans, and settings updates.",
+                [
+                    "Open Audit Logs from the sidebar.",
+                    "Filter by category/date where needed.",
+                    "Review action, status, and timestamps.",
+                    "Export logs when compliance evidence is required.",
+                ],
+                "Use audit exports for month-end controls and review meetings.",
+            ),
+            "Audit",
+        )
+
+        tabs.addTab(
+            make_help_tab(
+                "Settings",
+                "Controls theme, text scale, organization policy, loan products, and security credentials.",
+                [
+                    "Open Settings and choose the relevant tab.",
+                    "Adjust appearance and text scale first for comfort.",
+                    "Update organization details and loan defaults/products.",
+                    "Click Apply to save and broadcast updates across pages.",
+                ],
+                "After changing loan defaults, refresh Loans page to confirm current values are reloaded.",
+            ),
+            "Settings",
+        )
+
+        help_layout.addWidget(tabs)
+        main.addWidget(help_group)
 
         main.addStretch()
         scroll.setWidget(content)
