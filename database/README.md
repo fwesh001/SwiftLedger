@@ -1,4 +1,3 @@
-```markdown
 # database — Schema & Data Access
 
 This folder contains the SQLite schema initialization and the Data Access Layer (DAL) used by SwiftLedger.
@@ -26,12 +25,3 @@ Developer tips
 python -c "import sqlite3; conn=sqlite3.connect('swiftledger.db'); print(conn.execute('PRAGMA table_info(members)').fetchall()); conn.close()"
 ```
 
-- Back up the database before making schema changes:
-
-```powershell
-copy swiftledger.db swiftledger.db.bak
-```
-
-If you need to add auditing or more advanced migration support, consider using a lightweight migration tool or keeping incremental SQL upgrade scripts under `database/migrations/`.
-
-```
