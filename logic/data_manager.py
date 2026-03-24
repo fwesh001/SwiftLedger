@@ -76,7 +76,7 @@ class BulkDataManager:
         # Dummy data in row 2
         dummy = [
             "John Doe",
-            "SLT/001",
+            "SLT001",
             "+2348012345678",
             "SLT",
             "UBA",
