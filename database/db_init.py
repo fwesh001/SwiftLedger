@@ -269,6 +269,18 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
         "UPDATE system_settings SET street = address "
         "WHERE (street IS NULL OR street = '') AND address IS NOT NULL AND address != ''"
     )
+    cursor.execute(
+        "UPDATE system_settings SET security_mode = 'password' "
+        "WHERE security_mode IS NULL OR TRIM(security_mode) = ''"
+    )
+    cursor.execute(
+        "UPDATE system_settings SET security_mode = 'pin' "
+        "WHERE LOWER(REPLACE(TRIM(security_mode), ' ', '_')) = 'pin'"
+    )
+    cursor.execute(
+        "UPDATE system_settings SET security_mode = 'password' "
+        "WHERE LOWER(REPLACE(TRIM(security_mode), ' ', '_')) IN ('password', 'system', 'system_auth', 'system_authentication')"
+    )
 
     cursor.execute("PRAGMA table_info(loans);")
     loan_columns = {row[1] for row in cursor.fetchall()}
