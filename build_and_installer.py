@@ -28,8 +28,8 @@ MAIN_SCRIPT = PROJECT_ROOT / "main.py"
 
 def log(msg: str, level: str = "INFO") -> None:
     """Print formatted log messages."""
-    symbols = {"INFO": "ℹ️ ", "SUCCESS": "✓ ", "ERROR": "✗ ", "WARN": "⚠ "}
-    print(f"{symbols.get(level, '→ ')} {msg}")
+    symbols = {"INFO": "[INFO]", "SUCCESS": "[OK]", "ERROR": "[ERROR]", "WARN": "[WARN]"}
+    print(f"{symbols.get(level, '[..]')} {msg}")
 
 def clean_build() -> None:
     """Remove previous build artifacts."""
@@ -99,16 +99,30 @@ def generate_nsis_installer() -> None:
 ; SwiftLedger Installer Script
 ; Generated automatically by build_and_installer.py
 
+Unicode True
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 
 ; ─────────────────────────────────────────────────────────────────
 ; Basic Settings
 ; ─────────────────────────────────────────────────────────────────
+!define APP_NAME "{PROJECT_NAME}"
+!define APP_VERSION "{VERSION}"
+!define APP_PUBLISHER "SwiftLedger"
+!define APP_EXE "{PROJECT_NAME}.exe"
+!define APP_OUTFILE "{PROJECT_ROOT}\\SwiftLedger_Installer_{VERSION}.exe"
+!define APP_SOURCE_EXE "{exe_path}"
+!define APP_DATA_DIR "$LOCALAPPDATA\\SwiftLedger"
+!define APP_DB_FILE "$LOCALAPPDATA\\SwiftLedger\\swiftledger.db"
+
+RequestExecutionLevel user
+
 Name "SwiftLedger {VERSION}"
-OutFile "{PROJECT_ROOT}\\SwiftLedger_Installer_{VERSION}.exe"
-InstallDir "$PROGRAMFILES\\SwiftLedger"
+OutFile "${{APP_OUTFILE}}"
+InstallDir "$LOCALAPPDATA\\Programs\\SwiftLedger"
 InstallDirRegKey HKCU "Software\\SwiftLedger" "Install_Dir"
+ShowInstDetails show
+ShowUnInstDetails show
 
 ; ─────────────────────────────────────────────────────────────────
 ; MUI Settings
@@ -118,27 +132,42 @@ InstallDirRegKey HKCU "Software\\SwiftLedger" "Install_Dir"
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 
+!insertmacro MUI_UNPAGE_CONFIRM
+!insertmacro MUI_UNPAGE_INSTFILES
+!insertmacro MUI_UNPAGE_FINISH
+
 !insertmacro MUI_LANGUAGE "English"
 
 ; ─────────────────────────────────────────────────────────────────
 ; Installer Sections
 ; ─────────────────────────────────────────────────────────────────
 Section "Install"
+    SetShellVarContext current
     SetOutPath "$INSTDIR"
+    SetOverwrite on
+
+    ; Remove old app binary if present
+    Delete "$INSTDIR\\${{APP_EXE}}"
     
     ; Copy executable
-    File "{exe_path}"
+    File "${{APP_SOURCE_EXE}}"
     
     ; Create shortcuts
     CreateDirectory "$SMPROGRAMS\\SwiftLedger"
-    CreateShortcut "$SMPROGRAMS\\SwiftLedger\\SwiftLedger.lnk" "$INSTDIR\\{PROJECT_NAME}.exe"
-    CreateShortcut "$DESKTOP\\SwiftLedger.lnk" "$INSTDIR\\{PROJECT_NAME}.exe"
+    CreateShortcut "$SMPROGRAMS\\SwiftLedger\\SwiftLedger.lnk" "$INSTDIR\\${{APP_EXE}}"
+    CreateShortcut "$SMPROGRAMS\\SwiftLedger\\Uninstall SwiftLedger.lnk" "$INSTDIR\\uninstall.exe"
+    CreateShortcut "$DESKTOP\\SwiftLedger.lnk" "$INSTDIR\\${{APP_EXE}}"
     
     ; Write registry
     WriteRegStr HKCU "Software\\SwiftLedger" "Install_Dir" "$INSTDIR"
-    WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftLedger" "DisplayName" "SwiftLedger"
+    WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftLedger" "DisplayName" "${{APP_NAME}}"
+    WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftLedger" "DisplayIcon" "$INSTDIR\\${{APP_EXE}}"
+    WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftLedger" "Publisher" "${{APP_PUBLISHER}}"
     WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftLedger" "UninstallString" "$INSTDIR\\uninstall.exe"
-    WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftLedger" "DisplayVersion" "{VERSION}"
+    WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftLedger" "QuietUninstallString" "$INSTDIR\\uninstall.exe /S"
+    WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftLedger" "DisplayVersion" "${{APP_VERSION}}"
+    WriteRegDWORD HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftLedger" "NoModify" 1
+    WriteRegDWORD HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SwiftLedger" "NoRepair" 1
     
     ; Create uninstaller
     WriteUninstaller "$INSTDIR\\uninstall.exe"
@@ -148,15 +177,24 @@ SectionEnd
 ; Uninstaller Section
 ; ─────────────────────────────────────────────────────────────────
 Section "Uninstall"
+    SetShellVarContext current
+
     ; Delete executable
-    Delete "$INSTDIR\\{PROJECT_NAME}.exe"
+    Delete "$INSTDIR\\${{APP_EXE}}"
     Delete "$INSTDIR\\uninstall.exe"
     RMDir "$INSTDIR"
     
     ; Delete shortcuts
     Delete "$SMPROGRAMS\\SwiftLedger\\SwiftLedger.lnk"
+    Delete "$SMPROGRAMS\\SwiftLedger\\Uninstall SwiftLedger.lnk"
     RMDir "$SMPROGRAMS\\SwiftLedger"
     Delete "$DESKTOP\\SwiftLedger.lnk"
+
+    ; Optional user-data cleanup (database + app data folder)
+    MessageBox MB_ICONQUESTION|MB_YESNO "Also remove local SwiftLedger data (database and user files)?" IDNO SkipDataCleanup
+    Delete "${{APP_DB_FILE}}"
+    RMDir /r "${{APP_DATA_DIR}}"
+SkipDataCleanup:
     
     ; Delete registry
     DeleteRegKey HKCU "Software\\SwiftLedger"
