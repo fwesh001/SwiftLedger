@@ -2754,7 +2754,7 @@ class MainWindow(QMainWindow):
         self.btn_reports = QPushButton("Reports")
         self.btn_audit = QPushButton("Audit Logs")
         self.btn_settings = QPushButton("Settings")
-        self.btn_about = QPushButton("About")
+        self.btn_about = QPushButton("About/Help")
         
         buttons = [
             self.btn_dashboard,
