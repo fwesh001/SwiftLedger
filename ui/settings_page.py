@@ -189,7 +189,7 @@ class SettingsPage(QWidget):
         self.input_default_duration.setSuffix(" months")
         policy_form.addRow("Default Loan Duration:", self.input_default_duration)
 
-        policy_layout.addWidget(policy_group)
+        policy_layout.addWidget(policy_group, 1)
 
         # ── Loan Products Admin ───────────────────────────────────
         products_group = QGroupBox("Loan Products")
@@ -215,7 +215,8 @@ class SettingsPage(QWidget):
         products_header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         products_header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self.table_loan_products.setColumnHidden(5, True)
-        products_layout.addWidget(self.table_loan_products)
+        self.table_loan_products.setMinimumHeight(360)
+        products_layout.addWidget(self.table_loan_products, 1)
 
         products_btn_row = QHBoxLayout()
         self.btn_product_add = QPushButton("Add")
@@ -240,7 +241,7 @@ class SettingsPage(QWidget):
         products_btn_row.addStretch()
         products_layout.addLayout(products_btn_row)
 
-        policy_layout.addWidget(products_group)
+        policy_layout.addWidget(products_group, 2)
 
         # ── Security group ──────────────────────────────────────────
         sec_group = QGroupBox("Security")
