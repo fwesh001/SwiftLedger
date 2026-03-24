@@ -1153,7 +1153,9 @@ def generate_and_open_user_guide(society_data: Dict[str, str]) -> Optional[str]:
         return None
 
     society_name = society_data.get("society_name") or "SwiftLedger"
-    security_mode = (society_data.get("security_mode") or "password").lower()
+    security_mode = (society_data.get("security_mode") or "password").lower().replace(" ", "_")
+    if security_mode in ("system", "system_auth", "system_authentication"):
+        security_mode = "password"
     logo_path = society_data.get("logo_path") or ""
 
     pdf = FPDF()
@@ -1225,7 +1227,7 @@ def generate_and_open_user_guide(society_data: Dict[str, str]) -> Optional[str]:
     pdf.add_page()
     _section_title("1. Security Configuration")
 
-    mode_label = {"pin": "PIN", "password": "Password", "system": "System Authentication"}
+    mode_label = {"pin": "PIN", "password": "Password"}
     _body(f"Your society has been configured to use {mode_label.get(security_mode, 'Password')} authentication.")
     pdf.ln(2)
 
@@ -1236,14 +1238,6 @@ def generate_and_open_user_guide(society_data: Dict[str, str]) -> Optional[str]:
             "- PINs should be 4-8 digits long.\n"
             "- Keep your PIN confidential and do not share it.\n"
             "- To change your PIN, go to Settings > Security and update the credential."
-        )
-    elif security_mode == "system":
-        instructions = (
-            "System Authentication Mode\n"
-            "- SwiftLedger uses your Windows login credentials for access.\n"
-            "- No separate PIN or password is required.\n"
-            "- Ensure your Windows account is password-protected.\n"
-            "- Only the Windows user who completed setup can access the application."
         )
     else:
         instructions = (
