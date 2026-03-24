@@ -80,6 +80,31 @@ class AboutPage(QWidget):
 
         main.addWidget(about_group)
 
+        # ── About the Developer ─────────────────────────────────────
+        dev_group = QGroupBox("About the Developer")
+        dev_group.setFont(QFont("Arial", 12))
+        dev_layout = QVBoxLayout(dev_group)
+
+        dev_text = QLabel(
+            "I built SwiftLedger to bring transparency and simplicity to society "
+            "management. Every feature — from credential hashing to automatic "
+            "dividend calculations — was designed with your organisation's trust in mind.\n\n"
+            "For support or custom features, contact me at:\n"
+            "📧  zabdielfwesh001@gmail.com\n"
+            "🔗  github.com/fwesh001\n"
+            "🌐  www.zabdiel.tech"
+        )
+        dev_text.setWordWrap(True)
+        dev_text.setStyleSheet("font-size: 13px; line-height: 1.6; padding: 10px;")
+        dev_layout.addWidget(dev_text)
+
+        signature = QLabel("— Zabdiel, Developer  |  www.zabdiel.tech")
+        signature.setAlignment(Qt.AlignmentFlag.AlignRight)
+        signature.setStyleSheet("font-size: 12px; font-style: italic; color: #7f8c8d; padding-right: 14px;")
+        dev_layout.addWidget(signature)
+
+        main.addWidget(dev_group)
+
         # ── Help tabs ────────────────────────────────────────────────
         help_group = QGroupBox("Help")
         help_group.setFont(QFont("Arial", 12))
