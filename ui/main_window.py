@@ -15,6 +15,7 @@ from PySide6.QtGui import QFont, QColor, QBrush, QPixmap
 from PySide6.QtWidgets import QHeaderView
 import csv
 import shutil
+import re
 from pathlib import Path
 from datetime import date, datetime
 from typing import Dict, List, Optional
@@ -873,20 +874,68 @@ class MembersPage(QWidget):
         # Validate inputs
         staff_number = self.input_staff_number.text().strip()
         full_name = self.input_full_name.text().strip()
+        phone = self.input_phone.text().strip()
+        bank_name = self.input_bank_name.text().strip()
+        account_no = self.input_account_no.text().strip()
+        department = self.input_department.text().strip()
+        date_joined = self.input_date_joined.text().strip()
         
         if not staff_number or not full_name:
             QMessageBox.warning(self, "Invalid Input", "Please fill in all required fields.")
+            return
+
+        if re.match(r"^[A-Z0-9]+$", staff_number) is None:
+            QMessageBox.warning(
+                self,
+                "Invalid Staff ID",
+                "Staff ID must use letters and numbers only (example: SLT001)."
+            )
+            return
+
+        if not phone or not bank_name or not account_no or not department or not date_joined:
+            QMessageBox.warning(
+                self,
+                "Incomplete Registration",
+                "Please complete Phone, Bank Name, Account Number, Department, and Date Joined."
+            )
+            return
+
+        if not account_no.isdigit() or len(account_no) != 10:
+            QMessageBox.warning(
+                self,
+                "Invalid Account Number",
+                "Account Number must be exactly 10 digits."
+            )
+            return
+
+        phone_digits = "".join(ch for ch in phone if ch.isdigit())
+        if len(phone_digits) < 10:
+            QMessageBox.warning(
+                self,
+                "Invalid Phone",
+                "Phone number should contain at least 10 digits."
+            )
+            return
+
+        try:
+            datetime.strptime(date_joined, "%Y-%m-%d")
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Invalid Date",
+                "Date Joined must be in YYYY-MM-DD format."
+            )
             return
         
         # Prepare member data
         member_data = {
             'staff_number': staff_number,
             'full_name': full_name,
-            'phone': self.input_phone.text().strip(),
-            'bank_name': self.input_bank_name.text().strip(),
-            'account_no': self.input_account_no.text().strip(),
-            'department': self.input_department.text().strip(),
-            'date_joined': self.input_date_joined.text().strip(),
+            'phone': phone,
+            'bank_name': bank_name,
+            'account_no': account_no,
+            'department': department,
+            'date_joined': date_joined,
         }
         
         # Add member to database
