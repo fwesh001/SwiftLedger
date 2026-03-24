@@ -1,5 +1,4 @@
-```markdown
-# ui — User Interface Overview
+# UI — User Interface Overview
 
 This folder contains the PySide6 (Qt for Python) UI implementation for SwiftLedger.
 
@@ -32,4 +31,3 @@ Developer tips
 - Keep page logic thin: call into `database/queries.py` and `logic/*` for business rules.
 - Reuse widgets from `ui/widgets.py` where helpful (common form rows, confirmation dialogs).
 
-```
