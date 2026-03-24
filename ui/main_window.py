@@ -699,7 +699,7 @@ class MembersPage(QWidget):
         
         # Create main layout
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setContentsMargins(15, 15, 15, 24)
         main_layout.setSpacing(15)
         
         # Title
@@ -845,7 +845,7 @@ class MembersPage(QWidget):
         self.table_members.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table_members.setColumnHidden(5, True)  # Hide member_id column
         self.table_members.cellDoubleClicked.connect(self._open_member_profile)
-        self.table_members.setMinimumHeight(380)
+        self.table_members.setMinimumHeight(320)
         main_layout.addWidget(self.table_members, 1)
 
         # Delete button
@@ -862,6 +862,7 @@ class MembersPage(QWidget):
         self.btn_delete.clicked.connect(self._delete_selected_member)
         del_row.addWidget(self.btn_delete)
         main_layout.addLayout(del_row)
+        main_layout.addSpacing(6)
         
         self.setLayout(main_layout)
         
@@ -2781,6 +2782,18 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(self.db_path)
         self.about_page = AboutPage(self.db_path)
 
+        for page in (
+            self.dashboard_page,
+            self.members_page,
+            self.savings_page,
+            self.loans_page,
+            self.reports_page,
+            self.audit_page,
+            self.settings_page,
+            self.about_page,
+        ):
+            self._apply_bottom_safe_space(page)
+
         # Connect settings signal for live theme/scale updates
         self.settings_page.settings_changed.connect(self.apply_stylesheet)
         self.settings_page.settings_changed.connect(self.loans_page.load_system_settings)
@@ -2799,6 +2812,14 @@ class MainWindow(QMainWindow):
         # Set default page
         self.stacked_widget.setCurrentIndex(0)
         self.dashboard_page.refresh_dashboard()
+
+    def _apply_bottom_safe_space(self, page: QWidget) -> None:
+        """Ensure each page keeps enough bottom inset so content is not visually clipped."""
+        layout = page.layout()
+        if layout is None:
+            return
+        left, top, right, bottom = layout.getContentsMargins()
+        layout.setContentsMargins(left, top, right, max(bottom, 18))
     
     def navigate_to_page(self, page_index: int) -> None:
         """Navigate to a specific page in the stacked widget."""
