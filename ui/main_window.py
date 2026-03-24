@@ -819,19 +819,19 @@ class MembersPage(QWidget):
         button_layout.addWidget(self.btn_register, 0, Qt.AlignmentFlag.AlignRight)
         main_layout.addLayout(button_layout)
         
-        # Members Table
-        table_title = QLabel("All Members")
-        table_font = QFont("Arial", 12)
-        table_font.setBold(True)
-        table_title.setFont(table_font)
-        main_layout.addWidget(table_title)
+        # Members Table Box
+        table_group = QGroupBox("All Members")
+        table_group.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        table_layout = QVBoxLayout(table_group)
+        table_layout.setContentsMargins(10, 10, 10, 10)
+        table_layout.setSpacing(10)
 
         search_row = QHBoxLayout()
         self.input_member_search = QLineEdit()
         self.input_member_search.setPlaceholderText("Search by name, staff ID, or phone")
         self.input_member_search.textChanged.connect(self._filter_members_table)
         search_row.addWidget(self.input_member_search)
-        main_layout.addLayout(search_row)
+        table_layout.addLayout(search_row)
         
         self.table_members = QTableWidget()
         self.table_members.setColumnCount(6)
@@ -846,7 +846,8 @@ class MembersPage(QWidget):
         self.table_members.setColumnHidden(5, True)  # Hide member_id column
         self.table_members.cellDoubleClicked.connect(self._open_member_profile)
         self.table_members.setMinimumHeight(320)
-        main_layout.addWidget(self.table_members, 1)
+        table_layout.addWidget(self.table_members, 1)
+        main_layout.addWidget(table_group, 1)
 
         # Delete button
         del_row = QHBoxLayout()
@@ -861,6 +862,7 @@ class MembersPage(QWidget):
         )
         self.btn_delete.clicked.connect(self._delete_selected_member)
         del_row.addWidget(self.btn_delete)
+        del_row.setContentsMargins(0, 6, 0, 0)
         main_layout.addLayout(del_row)
         main_layout.addSpacing(6)
         
