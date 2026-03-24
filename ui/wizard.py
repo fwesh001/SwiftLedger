@@ -120,7 +120,7 @@ class IdentityPage(QWizardPage):
 
         # Email
         email_label = QLabel("Email:")
-        self.email_input = UppercaseLineEdit()
+        self.email_input = UppercaseLineEdit(force_uppercase=False)
         self.email_input.setPlaceholderText("e.g., contact@society.com")
         layout.addWidget(email_label)
         layout.addWidget(self.email_input)
@@ -181,21 +181,19 @@ class SecurityPage(QWizardPage):
         self.mode_combo.addItems([
             "PIN (4-6 digits)",
             "Password (text)",
-            "System Authentication (Windows Hello)"
         ])
         self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
         layout.addWidget(self.mode_combo)
 
         layout.addSpacing(20)
 
-        # Credential input (hidden for System Auth)
+        # Credential input
         self.credential_label = QLabel("Enter your PIN/Password:")
         self.credential_label.setFont(mode_font)
         layout.addWidget(self.credential_label)
 
         self.credential_input = QLineEdit()
         self.credential_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.credential_input.setPlaceholderText("Leave empty for System Authentication")
         layout.addWidget(self.credential_input)
 
         # Confirm credential
@@ -209,7 +207,6 @@ class SecurityPage(QWizardPage):
 
         # Info message
         info_label = QLabel(
-            "For System Authentication, Windows Hello or system login will be used.\n"
             "For PIN/Password, you'll need to set a secure code above."
         )
         info_label.setWordWrap(True)
@@ -222,37 +219,29 @@ class SecurityPage(QWizardPage):
         self._on_mode_changed()
 
     def _on_mode_changed(self) -> None:
-        """Update visibility of credential fields based on selected mode."""
-        is_system_auth = "System Authentication" in self.mode_combo.currentText()
-        
-        self.credential_label.setVisible(not is_system_auth)
-        self.credential_input.setVisible(not is_system_auth)
-        self.confirm_label.setVisible(not is_system_auth)
-        self.confirm_input.setVisible(not is_system_auth)
+        """Update placeholders based on selected mode."""
+        if "PIN" in self.mode_combo.currentText():
+            self.credential_input.setPlaceholderText("Enter 4-6 digit PIN")
+            self.confirm_input.setPlaceholderText("Re-enter PIN")
+        else:
+            self.credential_input.setPlaceholderText("Enter password")
+            self.confirm_input.setPlaceholderText("Re-enter password")
 
     def get_security_mode(self) -> str:
         """Return the selected security mode."""
         mode_text = self.mode_combo.currentText()
         if "PIN" in mode_text:
-            return "PIN"
-        elif "Password" in mode_text:
-            return "Password"
-        else:
-            return "System Auth"
+            return "pin"
+        return "password"
 
     def get_credential(self) -> str:
-        """Return the entered credential or empty string for System Auth."""
-        if self.get_security_mode() == "System Auth":
-            return ""
+        """Return the entered credential."""
         return self.credential_input.text()
 
     def validatePage(self) -> bool:
         """Validate security configuration."""
         mode = self.get_security_mode()
-        
-        if mode == "System Auth":
-            return True
-        
+
         # Validate PIN/Password
         credential = self.get_credential()
         confirm = self.confirm_input.text()
@@ -275,7 +264,7 @@ class SecurityPage(QWizardPage):
             self.confirm_input.clear()
             return False
 
-        if mode == "PIN":
+        if mode == "pin":
             if not credential.isdigit() or not (4 <= len(credential) <= 6):
                 QMessageBox.warning(
                     self,
@@ -334,7 +323,8 @@ class FinalizePage(QWizardPage):
         """Populate summary before showing this page."""
         wizard = cast(FirstRunWizard, self.wizard())
         identity_data = wizard.identity_page.get_data()
-        security_mode = wizard.security_page.get_security_mode()
+        raw_security_mode = wizard.security_page.get_security_mode()
+        security_mode = "PIN" if raw_security_mode == "pin" else "Password"
 
         summary = f"""
         <b>Organization Information:</b><br>
