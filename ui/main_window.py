@@ -843,7 +843,8 @@ class MembersPage(QWidget):
         self.table_members.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table_members.setColumnHidden(5, True)  # Hide member_id column
         self.table_members.cellDoubleClicked.connect(self._open_member_profile)
-        main_layout.addWidget(self.table_members)
+        self.table_members.setMinimumHeight(380)
+        main_layout.addWidget(self.table_members, 1)
 
         # Delete button
         del_row = QHBoxLayout()
