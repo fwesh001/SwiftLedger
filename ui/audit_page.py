@@ -246,7 +246,7 @@ class AuditLogPage(QWidget):
         # Footer
         pdf.ln(10)
         pdf.set_font("Helvetica", "I", 9)
-        pdf.cell(0, 8, "Developed by Zabdiel  |  SwiftLedger v1.0", align="C")
+        pdf.cell(0, 8, "Developed by Zabdiel (www.zabdiel.tech)  |  SwiftLedger v1.0", align="C")
 
         pdf.output(path)
         QMessageBox.information(self, "Exported", f"Report saved to:\n{path}")
@@ -299,7 +299,7 @@ class AuditLogPage(QWidget):
         elements.append(t)
         elements.append(Spacer(1, 20))
         elements.append(Paragraph(
-            "Developed by Zabdiel  |  SwiftLedger v1.0",
+            "Developed by Zabdiel (www.zabdiel.tech)  |  SwiftLedger v1.0",
             styles["Normal"]
         ))
 
