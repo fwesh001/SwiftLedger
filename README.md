@@ -14,7 +14,7 @@ Quick highlights
 
 Supported environment
 - Python 3.10+ (3.11 recommended)
-- Windows / macOS / Linux (Windows-only features: system authentication)
+- Windows / macOS / Linux
 - SQLite local database (swiftledger.db)
 
 Getting started
