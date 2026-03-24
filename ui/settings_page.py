@@ -160,7 +160,7 @@ class SettingsPage(QWidget):
         self.input_phone.setMinimumHeight(32)
         policy_form.addRow("Phone:", self.input_phone)
 
-        self.input_email = UppercaseLineEdit()
+        self.input_email = UppercaseLineEdit(force_uppercase=False)
         self.input_email.setMinimumHeight(32)
         policy_form.addRow("Email:", self.input_email)
 
@@ -250,7 +250,7 @@ class SettingsPage(QWidget):
 
         # Security mode
         self.combo_security_mode = QComboBox()
-        self.combo_security_mode.addItems(["PIN", "Password", "System Auth"])
+        self.combo_security_mode.addItems(["PIN", "Password"])
         self.combo_security_mode.setFont(QFont("Arial", 11))
         self.combo_security_mode.currentTextChanged.connect(self._sync_security_placeholders)
         sec_form.addRow("Security Mode:", self.combo_security_mode)
@@ -331,16 +331,11 @@ class SettingsPage(QWidget):
             self.input_confirm_credential.setPlaceholderText("Re-enter PIN")
             self.input_new_credential.setEnabled(True)
             self.input_confirm_credential.setEnabled(True)
-        elif mode == "password":
+        else:
             self.input_new_credential.setPlaceholderText("New password (min 6 chars)")
             self.input_confirm_credential.setPlaceholderText("Re-enter password")
             self.input_new_credential.setEnabled(True)
             self.input_confirm_credential.setEnabled(True)
-        else:
-            self.input_new_credential.setPlaceholderText("Not required for System Auth")
-            self.input_confirm_credential.setPlaceholderText("Not required for System Auth")
-            self.input_new_credential.setEnabled(False)
-            self.input_confirm_credential.setEnabled(False)
 
     # ── Load / Save ──────────────────────────────────────────────────
 
@@ -376,8 +371,13 @@ class SettingsPage(QWidget):
         self.input_default_duration.setValue(int(settings.get('default_duration', 24) or 24))
 
         self.current_auth_hash = str(settings.get("auth_hash") or "")
-        mode = str(settings.get("security_mode") or "pin").lower().replace(" ", "_")
-        mode_label = "System Auth" if mode == "system_auth" else mode.capitalize()
+        mode_raw = str(settings.get("security_mode") or "password")
+        mode = mode_raw.strip().lower().replace(" ", "_")
+        if mode in ("system", "system_auth", "system_authentication"):
+            mode = "password"
+        if mode not in ("pin", "password"):
+            mode = "password"
+        mode_label = mode.capitalize()
         idx = self.combo_security_mode.findText(mode_label)
         if idx >= 0:
             self.combo_security_mode.setCurrentIndex(idx)
