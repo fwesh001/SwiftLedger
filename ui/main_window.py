@@ -1640,7 +1640,10 @@ class LoansPage(QWidget):
         self.label_max_eligible.setFont(max_eligible_font)
 
         self.label_total_loans_view = QLabel("Loan Summary: Issued ₦0.00 | Repaid ₦0.00 | Outstanding ₦0.00")
-        self.label_total_loans_view.setFont(QFont("Arial", 10))
+        summary_font = QFont("Arial", 10)
+        summary_font.setWeight(QFont.Weight.DemiBold)
+        self.label_total_loans_view.setFont(summary_font)
+        self.label_total_loans_view.setTextFormat(Qt.TextFormat.RichText)
         self.label_total_loans_view.setWordWrap(True)
         self.label_total_loans_view.setMinimumHeight(34)
         
@@ -2037,18 +2040,25 @@ class LoansPage(QWidget):
         self.load_loan_products()
         QMessageBox.information(self, "Saved", "Custom loan product added.")
 
+    def _set_loan_summary_label(self, issued: float, repaid: float, outstanding: float) -> None:
+        self.label_total_loans_view.setText(
+            "<b>Loan Summary:</b> "
+            f"Issued ₦{issued:,.2f} | "
+            f"<span style='color:#27ae60;'>Repaid ₦{repaid:,.2f}</span> | "
+            f"<span style='color:#e74c3c;'>Outstanding ₦{outstanding:,.2f}</span>"
+        )
+
     def _refresh_member_loan_totals(self) -> None:
         if self.current_member_id is None:
-            self.label_total_loans_view.setText("Loan Summary: Issued ₦0.00 | Repaid ₦0.00 | Outstanding ₦0.00")
+            self._set_loan_summary_label(0.0, 0.0, 0.0)
             return
         ok, totals = get_member_loan_totals(self.db_path, self.current_member_id)
         if not ok:
             return
-        self.label_total_loans_view.setText(
-            "Loan Summary: "
-            f"Issued ₦{totals.get('total_issued', 0.0):,.2f} | "
-            f"Repaid ₦{totals.get('total_repaid', 0.0):,.2f} | "
-            f"Outstanding ₦{totals.get('outstanding_principal', 0.0):,.2f}"
+        self._set_loan_summary_label(
+            float(totals.get('total_issued', 0.0) or 0.0),
+            float(totals.get('total_repaid', 0.0) or 0.0),
+            float(totals.get('outstanding_principal', 0.0) or 0.0),
         )
     
     def _on_search_query_changed(self, filter_type: str, query: str) -> None:
@@ -2538,7 +2548,7 @@ class LoansPage(QWidget):
         self.label_member_name.setText("Member: Not Selected")
         self.label_total_savings.setText("Total Savings: ₦0.00")
         self.label_max_eligible.setText("Max Eligible Loan: ₦0.00")
-        self.label_total_loans_view.setText("Loan Summary: Issued ₦0.00 | Repaid ₦0.00 | Outstanding ₦0.00")
+        self._set_loan_summary_label(0.0, 0.0, 0.0)
         self.label_validation_status.setText("")
         self.table_loans.setRowCount(0)
         self.table_repayments.setRowCount(0)
