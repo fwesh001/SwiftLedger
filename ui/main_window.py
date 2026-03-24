@@ -1774,13 +1774,22 @@ class LoansPage(QWidget):
         ])
         self.table_loans.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_loans.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table_loans.horizontalHeader().setStretchLastSection(True)
+        self.table_loans.horizontalHeader().setStretchLastSection(False)
         self.table_loans.verticalHeader().setVisible(False)
         self.table_loans.setAlternatingRowColors(True)
         self.table_loans.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         loans_header = self.table_loans.horizontalHeader()
-        for col in range(self.table_loans.columnCount()):
-            loans_header.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
+        loans_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)    # Loan ID
+        loans_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Principal
+        loans_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)    # Interest Rate
+        loans_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Total Repaid
+        loans_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Outstanding
+        loans_header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Status
+        loans_header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Date Issued
+        self.table_loans.setColumnWidth(0, 78)
+        self.table_loans.setColumnWidth(2, 105)
+        self.table_loans.setColumnWidth(5, 95)
+        self.table_loans.setColumnWidth(6, 130)
         main_layout.addWidget(self.table_loans)
 
         # Repayment Status Dashboard
@@ -1884,14 +1893,25 @@ class LoansPage(QWidget):
         ])
         self.table_repayments.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_repayments.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table_repayments.horizontalHeader().setStretchLastSection(True)
+        self.table_repayments.horizontalHeader().setStretchLastSection(False)
         self.table_repayments.verticalHeader().setVisible(False)
         self.table_repayments.setAlternatingRowColors(True)
         self.table_repayments.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         repay_header = self.table_repayments.horizontalHeader()
-        repay_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col in range(1, self.table_repayments.columnCount()):
-            repay_header.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
+        repay_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Member
+        repay_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)    # Loan
+        repay_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)    # Installment
+        repay_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)    # Due Date
+        repay_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)    # Paid Date
+        repay_header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)  # Total Due
+        repay_header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)  # Total Paid
+        repay_header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)  # Outstanding
+        repay_header.setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)    # Status
+        self.table_repayments.setColumnWidth(1, 70)
+        self.table_repayments.setColumnWidth(2, 88)
+        self.table_repayments.setColumnWidth(3, 105)
+        self.table_repayments.setColumnWidth(4, 105)
+        self.table_repayments.setColumnWidth(8, 92)
         main_layout.addWidget(self.table_repayments)
         
         scroll.setWidget(content)
