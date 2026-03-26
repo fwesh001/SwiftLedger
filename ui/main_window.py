@@ -1065,14 +1065,14 @@ class MembersPage(QWidget):
 
                 # Current Savings
                 savings = float(member.get('current_savings', 0.0) or 0.0)
-                savings_item = QTableWidgetItem(format_currency(savings, symbol="₦"))
+                savings_item = QTableWidgetItem(format_currency_with_words(savings, symbol="₦"))
                 savings_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 savings_item.setForeground(QBrush(QColor("#2ecc71")))
                 self.table_members.setItem(row_idx, 3, savings_item)
 
                 # Total Loans
                 loans = float(member.get('total_loans', 0.0) or 0.0)
-                loans_item = QTableWidgetItem(format_currency(loans, symbol="₦"))
+                loans_item = QTableWidgetItem(format_currency_with_words(loans, symbol="₦"))
                 loans_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 if member.get('active_loan_count', 0) > 0 and loans > 0:
                     loans_item.setForeground(QBrush(QColor("#ff6f61")))
@@ -2424,7 +2424,7 @@ class LoansPage(QWidget):
         layout = QVBoxLayout(preview_dialog)
         
         # Info label
-        info_text = f"Loan: ₦{principal:,.2f} @ {interest_rate}% for {duration} months"
+        info_text = f"Loan: {format_currency_with_words(principal, symbol='₦')} @ {interest_rate}% for {duration} months"
         info_label = QLabel(info_text)
         info_font = QFont("Arial", 11)
         info_font.setBold(True)
@@ -2444,19 +2444,19 @@ class LoansPage(QWidget):
             month_item = QTableWidgetItem(str(month_data['month_number']))
             table.setItem(row_idx, 0, month_item)
             
-            principal_item = QTableWidgetItem(f"₦{month_data['principal_payment']:,.2f}")
+            principal_item = QTableWidgetItem(format_currency_with_words(month_data['principal_payment'], symbol="₦"))
             principal_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
             table.setItem(row_idx, 1, principal_item)
             
-            interest_item = QTableWidgetItem(f"₦{month_data['interest_payment']:,.2f}")
+            interest_item = QTableWidgetItem(format_currency_with_words(month_data['interest_payment'], symbol="₦"))
             interest_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
             table.setItem(row_idx, 2, interest_item)
             
-            total_item = QTableWidgetItem(f"₦{month_data['total_payment']:,.2f}")
+            total_item = QTableWidgetItem(format_currency_with_words(month_data['total_payment'], symbol="₦"))
             total_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
             table.setItem(row_idx, 3, total_item)
             
-            remaining_item = QTableWidgetItem(f"₦{month_data['remaining_balance']:,.2f}")
+            remaining_item = QTableWidgetItem(format_currency_with_words(month_data['remaining_balance'], symbol="₦"))
             remaining_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
             table.setItem(row_idx, 4, remaining_item)
         
@@ -2810,7 +2810,7 @@ class LoansPage(QWidget):
                 self.table_loans.setItem(row_idx, 0, loan_id_item)
                 
                 # Principal
-                principal_item = QTableWidgetItem(f"₦{loan['principal']:,.2f}")
+                principal_item = QTableWidgetItem(format_currency_with_words(loan['principal'], symbol="₦"))
                 principal_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 self.table_loans.setItem(row_idx, 1, principal_item)
                 
@@ -2821,13 +2821,13 @@ class LoansPage(QWidget):
 
                 # Total Repaid
                 total_repaid = float(loan.get('total_repaid', 0.0) or 0.0)
-                repaid_item = QTableWidgetItem(f"₦{total_repaid:,.2f}")
+                repaid_item = QTableWidgetItem(format_currency_with_words(total_repaid, symbol="₦"))
                 repaid_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 self.table_loans.setItem(row_idx, 3, repaid_item)
 
                 # Outstanding
                 outstanding = float(loan.get('outstanding_principal', 0.0) or 0.0)
-                outstanding_item = QTableWidgetItem(f"₦{outstanding:,.2f}")
+                outstanding_item = QTableWidgetItem(format_currency_with_words(outstanding, symbol="₦"))
                 outstanding_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 self.table_loans.setItem(row_idx, 4, outstanding_item)
                 
