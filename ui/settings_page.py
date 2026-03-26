@@ -12,10 +12,10 @@ from PySide6.QtWidgets import (
     QGroupBox, QFormLayout, QCheckBox, QSlider, QMessageBox,
     QSpinBox, QComboBox, QScrollArea, QFrame, QLineEdit, QDoubleSpinBox,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QDialog,
-    QDialogButtonBox, QApplication,
+    QDialogButtonBox, QApplication, QToolTip,
     QTabWidget,
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QHeaderView
 
@@ -368,11 +368,6 @@ class SettingsPage(QWidget):
         key_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(key_display)
 
-        copied_label = QLabel("")
-        copied_label.setStyleSheet("color: #27ae60; font-weight: bold;")
-        copied_label.setVisible(False)
-        layout.addWidget(copied_label)
-
         button_row = QHBoxLayout()
         button_row.addStretch()
 
@@ -386,9 +381,7 @@ class SettingsPage(QWidget):
 
         def copy_key() -> None:
             QApplication.clipboard().setText(self.pending_recovery_key)
-            copied_label.setText("Copied to clipboard")
-            copied_label.setVisible(True)
-            QTimer.singleShot(1600, lambda: copied_label.setVisible(False))
+            QToolTip.showText(btn_copy.mapToGlobal(btn_copy.rect().center()), "Copied to clipboard", btn_copy, btn_copy.rect(), 1600)
 
         btn_copy.clicked.connect(copy_key)
         button_row.addWidget(btn_copy)
