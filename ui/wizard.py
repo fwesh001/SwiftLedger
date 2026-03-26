@@ -21,7 +21,7 @@ from PySide6.QtGui import QFont
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from database.db_init import init_db, save_settings, log_event
-from security import hash_credential
+from security import hash_credential, generate_secure_token
 from ui.reports_page import generate_and_open_user_guide
 from ui.widgets import UppercaseLineEdit
 
@@ -408,6 +408,7 @@ class FirstRunWizard(QWizard):
             credential = self.security_page.get_credential()
 
             # Prepare settings dictionary
+            recovery_key_plain = generate_secure_token(6).upper()
             settings_data = {
                 "society_name": identity_data["society_name"],
                 "street": identity_data["street"],
@@ -416,6 +417,7 @@ class FirstRunWizard(QWizard):
                 "phone": identity_data["phone"],
                 "email": identity_data["email"],
                 "security_mode": security_mode,
+                "recovery_key_hash": hash_credential(recovery_key_plain),
             }
 
             # Hash credential if provided
@@ -446,7 +448,8 @@ class FirstRunWizard(QWizard):
                 "Setup Complete",
                 "SwiftLedger has been initialized successfully!\n"
                 "Your Quick Start Manual has been opened.\n"
-                "You can now launch the main application."
+                "You can now launch the main application.\n\n"
+                f"Recovery Key (save this securely):\n{recovery_key_plain}"
             )
 
             # Emit signal to parent to launch dashboard
