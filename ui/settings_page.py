@@ -29,7 +29,7 @@ from database.queries import (
     update_loan_product,
     set_loan_product_active,
 )
-from security import hash_credential
+from security import hash_credential, generate_secure_token
 
 
 class SettingsPage(QWidget):
@@ -50,6 +50,7 @@ class SettingsPage(QWidget):
         super().__init__()
         self.db_path = db_path
         self.current_auth_hash = ""
+        self.pending_recovery_key = ""
         self._build_ui()
         self._load_current_settings()
         self._load_loan_products_table()
@@ -267,6 +268,11 @@ class SettingsPage(QWidget):
         self.input_confirm_credential.setMinimumHeight(34)
         sec_form.addRow("Confirm Credential:", self.input_confirm_credential)
 
+        self.btn_generate_recovery = QPushButton("Generate New Recovery Key")
+        self.btn_generate_recovery.setMinimumHeight(34)
+        self.btn_generate_recovery.clicked.connect(self._generate_recovery_key)
+        sec_form.addRow("Recovery Key:", self.btn_generate_recovery)
+
         timeout_row = QHBoxLayout()
         self.slider_timeout = QSlider(Qt.Orientation.Horizontal)
         self.slider_timeout.setRange(1, 60)
@@ -332,6 +338,16 @@ class SettingsPage(QWidget):
             self.input_confirm_credential.setPlaceholderText("Re-enter PIN")
             self.input_new_credential.setEnabled(True)
             self.input_confirm_credential.setEnabled(True)
+
+    def _generate_recovery_key(self) -> None:
+        self.pending_recovery_key = generate_secure_token(6).upper()
+        QMessageBox.information(
+            self,
+            "Recovery Key Generated",
+            "Save this key in a safe location.\n\n"
+            f"Recovery Key:\n{self.pending_recovery_key}\n\n"
+            "Click Apply to store it.",
+        )
         else:
             self.input_new_credential.setPlaceholderText("New password (min 6 chars)")
             self.input_confirm_credential.setPlaceholderText("Re-enter password")
@@ -597,6 +613,8 @@ class SettingsPage(QWidget):
 
         if new_cred and mode in ("pin", "password"):
             data['auth_hash'] = hash_credential(new_cred)
+        if self.pending_recovery_key:
+            data['recovery_key_hash'] = hash_credential(self.pending_recovery_key)
 
         try:
             save_settings(data, self.db_path)
@@ -613,7 +631,18 @@ class SettingsPage(QWidget):
                 db_path=self.db_path,
             )
             self.settings_changed.emit()
-            QMessageBox.information(self, "Saved", "Settings applied successfully.")
+            if self.pending_recovery_key:
+                key_plain = self.pending_recovery_key
+                self.pending_recovery_key = ""
+                QMessageBox.information(
+                    self,
+                    "Saved",
+                    "Settings applied successfully.\n\n"
+                    "New Recovery Key (save securely):\n"
+                    f"{key_plain}",
+                )
+            else:
+                QMessageBox.information(self, "Saved", "Settings applied successfully.")
         except Exception as e:
             log_event(
                 user="Admin",
