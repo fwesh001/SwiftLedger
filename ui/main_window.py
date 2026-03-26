@@ -45,72 +45,94 @@ from ui.settings_page import SettingsPage
 from ui.widgets import SearchFilterWidget, UppercaseLineEdit
 from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
+       from utils import format_currency, format_currency_with_words
 from ui.theme_manager import build_theme_stylesheet
 from logic.data_manager import BulkDataManager
-from utils import format_currency
+          "💰  Total Savings", format_currency_with_words(0.0, symbol="₦"), self.CARD_COLOURS['savings']
 
 QLineEdit = UppercaseLineEdit
-
+          "🏦  Loans Disbursed", format_currency_with_words(0.0, symbol="₦"), self.CARD_COLOURS['loans']
 
 class DashboardPage(QWidget):
-    """Dashboard page with society-wide financial statistics and dividend breakdown."""
+          "📈  Projected Interest", format_currency_with_words(0.0, symbol="₦"), self.CARD_COLOURS['interest']
 
     # Accent colours for each stat card (left-border & value text)
     CARD_COLOURS = {
-        'members':  '#3498db',  # Blue
+          "Members' Share (60%)", format_currency_with_words(0.0, symbol="₦"), "#27ae60"
         'savings':  '#27ae60',  # Green
         'loans':    '#e67e22',  # Orange
-        'interest': '#9b59b6',  # Purple
+          "Society Reserve (40%)", format_currency_with_words(0.0, symbol="₦"), "#e74c3c"
     }
 
     def __init__(self, db_path: str = "swiftledger.db"):
+       self.lbl_available_cash = QLabel(f"Available Cash: {format_currency_with_words(0.0, symbol='₦')}")
         super().__init__()
         self.db_path = db_path
+       self.lbl_outstanding_loans = QLabel(f"Outstanding Loans: {format_currency_with_words(0.0, symbol='₦')}")
         self._build_ui()
 
+       self.card_savings[2].setText(format_currency_with_words(stats.get('total_savings', 0), symbol="₦"))
     # ── UI construction ─────────────────────────────────────────────
+       self.card_loans[2].setText(format_currency_with_words(stats.get('total_loans_disbursed', 0), symbol="₦"))
 
+       self.card_interest[2].setText(format_currency_with_words(stats.get('total_projected_interest', 0), symbol="₦"))
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+          format_currency_with_words(stats.get('members_dividend_share', 0), symbol="₦")
 
         scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
+          format_currency_with_words(stats.get('society_dividend_share', 0), symbol="₦")
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        content = QWidget()
+             f"Available Cash: {format_currency_with_words(liquidity.get('available_cash', 0), symbol='₦')}"
         main_layout = QVBoxLayout(content)
         main_layout.setContentsMargins(24, 24, 24, 24)
-        main_layout.setSpacing(22)
+             f"Outstanding Loans: {format_currency_with_words(liquidity.get('outstanding_loans', 0), symbol='₦')}"
 
         # Title row
         header_row = QHBoxLayout()
+       score_layout.addLayout(self._make_score_block("Total Savings", format_currency_with_words(savings, symbol="₦"), "#27ae60"))
         title = QLabel("Dashboard")
+       score_layout.addLayout(self._make_score_block("Total Loans", format_currency_with_words(loans, symbol="₦"), "#e74c3c"))
         title_font = QFont("Arial", 20)
+       score_layout.addLayout(self._make_score_block("Net Position", format_currency_with_words(net, symbol="₦"), "#34495e"))
         title_font.setBold(True)
         title.setFont(title_font)
+             savings_item = QTableWidgetItem(format_currency_with_words(savings, symbol="₦"))
         header_row.addWidget(title)
         header_row.addStretch()
+             loans_item = QTableWidgetItem(format_currency_with_words(loans, symbol="₦"))
 
         self.btn_refresh = QPushButton("⟳  Refresh")
+             amount_value = float(item.get('amount', 0.0) or 0.0)
+             balance_value = float(item.get('running_balance', 0.0) or 0.0)
+             amount_item = QTableWidgetItem(format_currency_with_words(amount_value, symbol="₦"))
+             balance_item = QTableWidgetItem(format_currency_with_words(balance_value, symbol="₦"))
         self.btn_refresh.setMinimumHeight(36)
         self.btn_refresh.setMinimumWidth(110)
+          self.label_total_savings.setText(f"Total Savings: {format_currency_with_words(total_savings, symbol='₦')}")
         self.btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_refresh.setStyleSheet(
-            "QPushButton { background-color: #2980b9; color: white; border-radius: 6px; "
+       current_amount = float(amount_item.data(Qt.ItemDataRole.UserRole) or 0.0)
             "font-weight: bold; padding: 6px 14px; } "
             "QPushButton:hover { background-color: #3498db; }"
+          due_item = QTableWidgetItem(format_currency_with_words(total_due, symbol="₦"))
         )
         self.btn_refresh.clicked.connect(self.refresh_dashboard)
+       self.label_repay_outstanding.setText(f"Outstanding: {format_currency_with_words(outstanding, symbol='₦')}")
         header_row.addWidget(self.btn_refresh)
         main_layout.addLayout(header_row)
+       current_paid = float(paid_item.data(Qt.ItemDataRole.UserRole) or 0.0)
 
         # ── Stat cards grid ────────────────────────────────────────
+             principal_item = QTableWidgetItem(format_currency_with_words(loan['principal'], symbol="₦"))
         cards_layout = QGridLayout()
         cards_layout.setHorizontalSpacing(16)
+             repaid_item = QTableWidgetItem(format_currency_with_words(total_repaid, symbol="₦"))
         cards_layout.setVerticalSpacing(16)
 
+             outstanding_item = QTableWidgetItem(format_currency_with_words(outstanding, symbol="₦"))
         self.card_members = self._create_stat_card(
             "👥  Total Members", "0", self.CARD_COLOURS['members']
         )
