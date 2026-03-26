@@ -47,7 +47,7 @@ from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
 from ui.theme_manager import build_theme_stylesheet
 from logic.data_manager import BulkDataManager
-from utils import format_currency
+from utils import format_currency, format_currency_with_words
 
 QLineEdit = UppercaseLineEdit
 
@@ -115,13 +115,13 @@ class DashboardPage(QWidget):
             "👥  Total Members", "0", self.CARD_COLOURS['members']
         )
         self.card_savings = self._create_stat_card(
-            "💰  Total Savings", "₦0.00", self.CARD_COLOURS['savings']
+            "💰  Total Savings", format_currency_with_words(0.0, symbol="₦"), self.CARD_COLOURS['savings']
         )
         self.card_loans = self._create_stat_card(
-            "🏦  Loans Disbursed", "₦0.00", self.CARD_COLOURS['loans']
+            "🏦  Loans Disbursed", format_currency_with_words(0.0, symbol="₦"), self.CARD_COLOURS['loans']
         )
         self.card_interest = self._create_stat_card(
-            "📈  Projected Interest", "₦0.00", self.CARD_COLOURS['interest']
+            "📈  Projected Interest", format_currency_with_words(0.0, symbol="₦"), self.CARD_COLOURS['interest']
         )
 
         cards_layout.addWidget(self.card_members[0], 0, 0)
@@ -144,10 +144,10 @@ class DashboardPage(QWidget):
         div_layout.setSpacing(20)
 
         self.member_div_card = self._create_dividend_card(
-            "Members' Share (60%)", "₦0.00", "#27ae60"
+            "Members' Share (60%)", format_currency_with_words(0.0, symbol="₦"), "#27ae60"
         )
         self.society_div_card = self._create_dividend_card(
-            "Society Reserve (40%)", "₦0.00", "#e74c3c"
+            "Society Reserve (40%)", format_currency_with_words(0.0, symbol="₦"), "#e74c3c"
         )
 
         div_layout.addWidget(self.member_div_card[0])
@@ -191,9 +191,9 @@ class DashboardPage(QWidget):
         liquidity_group = QGroupBox("Liquidity Status")
         liquidity_group.setFont(QFont("Arial", 12))
         liquidity_layout = QVBoxLayout(liquidity_group)
-        self.lbl_available_cash = QLabel("Available Cash: ₦0.00")
+        self.lbl_available_cash = QLabel(f"Available Cash: {format_currency_with_words(0.0, symbol='₦')}")
         self.lbl_available_cash.setStyleSheet("color: #27ae60; font-weight: bold;")
-        self.lbl_outstanding_loans = QLabel("Outstanding Loans: ₦0.00")
+        self.lbl_outstanding_loans = QLabel(f"Outstanding Loans: {format_currency_with_words(0.0, symbol='₦')}")
         self.lbl_outstanding_loans.setStyleSheet("color: #ff6f61; font-weight: bold;")
         liquidity_layout.addWidget(self.lbl_available_cash)
         liquidity_layout.addWidget(self.lbl_outstanding_loans)
@@ -321,16 +321,16 @@ class DashboardPage(QWidget):
 
         # Stat cards
         self.card_members[2].setText(str(stats.get('total_members', 0)))
-        self.card_savings[2].setText(f"₦{stats.get('total_savings', 0):,.2f}")
-        self.card_loans[2].setText(f"₦{stats.get('total_loans_disbursed', 0):,.2f}")
-        self.card_interest[2].setText(f"₦{stats.get('total_projected_interest', 0):,.2f}")
+        self.card_savings[2].setText(format_currency_with_words(stats.get('total_savings', 0), symbol="₦"))
+        self.card_loans[2].setText(format_currency_with_words(stats.get('total_loans_disbursed', 0), symbol="₦"))
+        self.card_interest[2].setText(format_currency_with_words(stats.get('total_projected_interest', 0), symbol="₦"))
 
         # Dividend cards
         self.member_div_card[1].setText(
-            f"₦{stats.get('members_dividend_share', 0):,.2f}"
+            format_currency_with_words(stats.get('members_dividend_share', 0), symbol="₦")
         )
         self.society_div_card[1].setText(
-            f"₦{stats.get('society_dividend_share', 0):,.2f}"
+            format_currency_with_words(stats.get('society_dividend_share', 0), symbol="₦")
         )
 
         # LTS Ratio
@@ -342,10 +342,10 @@ class DashboardPage(QWidget):
         liq_ok, liquidity = get_liquidity_status(self.db_path)
         if liq_ok:
             self.lbl_available_cash.setText(
-                f"Available Cash: ₦{liquidity.get('available_cash', 0):,.2f}"
+                f"Available Cash: {format_currency_with_words(liquidity.get('available_cash', 0), symbol='₦')}"
             )
             self.lbl_outstanding_loans.setText(
-                f"Outstanding Loans: ₦{liquidity.get('outstanding_loans', 0):,.2f}"
+                f"Outstanding Loans: {format_currency_with_words(liquidity.get('outstanding_loans', 0), symbol='₦')}"
             )
 
         # Monthly trends chart
@@ -540,9 +540,9 @@ class MemberProfileDialog(QDialog):
         loans = float(self.member_data.get("total_loans", 0.0) or 0.0)
         net = savings - loans
 
-        score_layout.addLayout(self._make_score_block("Total Savings", f"₦{savings:,.2f}", "#27ae60"))
-        score_layout.addLayout(self._make_score_block("Total Loans", f"₦{loans:,.2f}", "#e74c3c"))
-        score_layout.addLayout(self._make_score_block("Net Position", f"₦{net:,.2f}", "#34495e"))
+        score_layout.addLayout(self._make_score_block("Total Savings", format_currency_with_words(savings, symbol="₦"), "#27ae60"))
+        score_layout.addLayout(self._make_score_block("Total Loans", format_currency_with_words(loans, symbol="₦"), "#e74c3c"))
+        score_layout.addLayout(self._make_score_block("Net Position", format_currency_with_words(net, symbol="₦"), "#34495e"))
 
         outer.addWidget(scoreboard)
 
