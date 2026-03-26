@@ -47,6 +47,7 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
             logo_path     TEXT,
             security_mode TEXT,
             auth_hash     TEXT,
+            recovery_key_hash TEXT,
             timeout_minutes INTEGER DEFAULT 10,
             show_charts   INTEGER DEFAULT 0,
             show_alerts   INTEGER DEFAULT 1,
@@ -260,6 +261,8 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN default_duration INTEGER DEFAULT 24;")
     if "updated_at" not in settings_columns:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN updated_at DATETIME;")
+    if "recovery_key_hash" not in settings_columns:
+        cursor.execute("ALTER TABLE system_settings ADD COLUMN recovery_key_hash TEXT;")
 
     cursor.execute(
         "UPDATE system_settings SET address = street "
@@ -342,7 +345,7 @@ def save_settings(data_dict: Dict[str, object], db_path: str = DB_PATH) -> None:
     """
     valid_columns = {
         "society_name", "street", "address", "city_state", "phone", "email",
-        "reg_no", "logo_path", "security_mode", "auth_hash",
+        "reg_no", "logo_path", "security_mode", "auth_hash", "recovery_key_hash",
         "timeout_minutes", "show_charts", "show_alerts",
         "theme", "text_scale", "min_monthly_saving",
         "default_interest_rate", "loan_multiplier", "default_duration", "updated_at",
