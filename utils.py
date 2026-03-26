@@ -11,6 +11,10 @@ import sys
 from pathlib import Path
 
 
+APP_NAME = "SwiftLedger"
+APP_VERSION = "1.0.1"
+
+
 def get_asset_path(relative_path: str) -> str:
     """Return the absolute path to a bundled asset.
 
@@ -66,3 +70,20 @@ def get_database_path(db_filename: str = "swiftledger.db") -> str:
         return user_db_path
 
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), db_filename)
+
+
+def format_currency(value: float | int | str | None, symbol: str = "NGN") -> str:
+    """Return a standardized currency string used across the UI and reports.
+
+    Args:
+        value: Numeric value to format. Non-numeric values fall back to ``0.0``.
+        symbol: Currency prefix (e.g. ``"NGN"`` or ``"₦"``).
+
+    Returns:
+        Formatted amount like ``"NGN 12,345.67"``.
+    """
+    try:
+        numeric_value = float(value or 0.0)
+    except (TypeError, ValueError):
+        numeric_value = 0.0
+    return f"{symbol} {numeric_value:,.2f}"
