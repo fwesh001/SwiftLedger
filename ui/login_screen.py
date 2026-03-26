@@ -6,6 +6,7 @@ the appropriate authentication gate (PIN or Password).
 """
 
 import sys
+import re
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -221,6 +222,22 @@ class LoginScreen(QWidget):
         if not ok:
             return
 
+        normalized_key = (recovery_key or "").strip().upper()
+        if re.fullmatch(r"[A-F0-9]{12}", normalized_key) is None:
+            QMessageBox.critical(self, "Invalid Recovery Key", "Recovery key format is invalid.")
+            return
+
+        if not verify_credential(normalized_key, self.recovery_key_hash):
+            log_event(
+                user="Admin",
+                category="Security",
+                description="Credential reset failed (invalid recovery key)",
+                status="Failed",
+                db_path=self.db_path,
+            )
+            QMessageBox.critical(self, "Invalid Recovery Key", "The recovery key you entered is incorrect.")
+            return
+
         new_credential, ok = QInputDialog.getText(
             self,
             "New Credential",
@@ -247,7 +264,7 @@ class LoginScreen(QWidget):
         mode = self.security_mode if self.security_mode in ("pin", "password") else "password"
         ok_reset, message = reset_credential_with_recovery_key(
             self.db_path,
-            recovery_key,
+            normalized_key,
             new_credential,
             mode,
         )
