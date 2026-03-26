@@ -12,11 +12,11 @@ from PySide6.QtWidgets import (
     QGroupBox, QFormLayout, QCheckBox, QSlider, QMessageBox,
     QSpinBox, QComboBox, QScrollArea, QFrame, QLineEdit, QDoubleSpinBox,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QDialog,
-    QDialogButtonBox,
+    QDialogButtonBox, QApplication,
     QTabWidget,
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QHeaderView
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -346,13 +346,48 @@ class SettingsPage(QWidget):
 
     def _generate_recovery_key(self) -> None:
         self.pending_recovery_key = generate_secure_token(6).upper()
-        QMessageBox.information(
-            self,
-            "Recovery Key Generated",
-            "Save this key in a safe location.\n\n"
-            f"Recovery Key:\n{self.pending_recovery_key}\n\n"
-            "Click Apply to store it.",
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Recovery Key Generated")
+        dialog.setMinimumWidth(460)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        message = QLabel(
+            "Save this key in a safe location.\n"
+            "Click Apply in Settings to store it."
         )
+        message.setWordWrap(True)
+        layout.addWidget(message)
+
+        key_display = QLineEdit(self.pending_recovery_key)
+        key_display.setReadOnly(True)
+        key_display.setMinimumHeight(34)
+        key_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(key_display)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch()
+
+        btn_copy = QPushButton("Copy Key")
+        copy_icon = QIcon.fromTheme("edit-copy")
+        if not copy_icon.isNull():
+            btn_copy.setIcon(copy_icon)
+        else:
+            btn_copy.setText("📋 Copy Key")
+        btn_copy.setMinimumHeight(34)
+        btn_copy.clicked.connect(lambda: QApplication.clipboard().setText(self.pending_recovery_key))
+        button_row.addWidget(btn_copy)
+
+        btn_close = QPushButton("Close")
+        btn_close.setMinimumHeight(34)
+        btn_close.clicked.connect(dialog.accept)
+        button_row.addWidget(btn_close)
+
+        layout.addLayout(button_row)
+        dialog.exec()
 
     # ── Load / Save ──────────────────────────────────────────────────
 
