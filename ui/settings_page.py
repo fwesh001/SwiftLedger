@@ -30,6 +30,7 @@ from database.queries import (
     set_loan_product_active,
 )
 from security import hash_credential, generate_secure_token
+from utils import format_currency_with_words
 
 
 class SettingsPage(QWidget):
@@ -456,7 +457,9 @@ class SettingsPage(QWidget):
             is_active = bool(product.get("is_active", 0))
 
             self.table_loan_products.setItem(row_idx, 0, QTableWidgetItem(name))
-            self.table_loan_products.setItem(row_idx, 1, QTableWidgetItem(f"₦{max_amount:,.2f}"))
+            amount_item = QTableWidgetItem(format_currency_with_words(max_amount, symbol="₦"))
+            amount_item.setData(Qt.ItemDataRole.UserRole, max_amount)
+            self.table_loan_products.setItem(row_idx, 1, amount_item)
             self.table_loan_products.setItem(row_idx, 2, QTableWidgetItem(f"{rate:.2f}%"))
             self.table_loan_products.setItem(row_idx, 3, QTableWidgetItem(f"{duration} months"))
             self.table_loan_products.setItem(row_idx, 4, QTableWidgetItem("Active" if is_active else "Inactive"))
@@ -558,9 +561,11 @@ class SettingsPage(QWidget):
             return
 
         selected_row = self.table_loan_products.selectionModel().selectedRows()[0].row()
+        max_item = self.table_loan_products.item(selected_row, 1)
+        max_amount_value = float(max_item.data(Qt.ItemDataRole.UserRole) or 0.0) if max_item else 0.0
         initial = {
             "name": self.table_loan_products.item(selected_row, 0).text() if self.table_loan_products.item(selected_row, 0) else "",
-            "max_amount": float((self.table_loan_products.item(selected_row, 1).text() if self.table_loan_products.item(selected_row, 1) else "0").replace("₦", "").replace(",", "")),
+            "max_amount": max_amount_value,
             "interest_rate": float((self.table_loan_products.item(selected_row, 2).text() if self.table_loan_products.item(selected_row, 2) else "0").replace("%", "")),
             "duration_months": int((self.table_loan_products.item(selected_row, 3).text() if self.table_loan_products.item(selected_row, 3) else "1").replace(" months", "")),
         }
