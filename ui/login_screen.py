@@ -152,15 +152,20 @@ class LoginScreen(QWidget):
             return
 
         if not self.auth_hash:
-            # No hash stored — allow entry and log a warning
+            # Fail closed: never allow login when auth hash is missing.
             log_event(
                 user="Admin",
                 category="Security",
-                description="Login allowed (no auth_hash configured — run setup wizard)",
-                status="Success",
+                description="Login blocked (auth_hash not configured)",
+                status="Failed",
                 db_path=self.db_path,
             )
-            self.login_successful.emit()
+            QMessageBox.critical(
+                self,
+                "Security Configuration Required",
+                "Credential is not configured for this installation.\n"
+                "Use Forgot Password with a valid Recovery Key or re-run setup.",
+            )
             return
 
         if verify_credential(user_input, self.auth_hash):
@@ -188,6 +193,16 @@ class LoginScreen(QWidget):
 
     def _forgot_password_flow(self) -> None:
         """Reset credential using recovery key."""
+        ok, settings = get_system_settings(self.db_path)
+        if not ok or not settings:
+            QMessageBox.critical(self, "Recovery Unavailable", "Could not load security settings.")
+            return
+
+        self.recovery_key_hash = str(settings.get("recovery_key_hash") or "")
+        self.security_mode = str(settings.get("security_mode") or self.security_mode).strip().lower().replace(" ", "_")
+        if self.security_mode not in ("pin", "password"):
+            self.security_mode = "password"
+
         if not self.recovery_key_hash:
             QMessageBox.warning(
                 self,
@@ -209,7 +224,8 @@ class LoginScreen(QWidget):
         new_credential, ok = QInputDialog.getText(
             self,
             "New Credential",
-            "Enter new PIN (4-6 digits) or password (6+ chars):",
+            "Enter new credential for current mode:\n"
+            f"{('PIN (4-6 digits)' if self.security_mode == 'pin' else 'Password (min 6 chars)')}",
             QLineEdit.EchoMode.Password,
         )
         if not ok:
