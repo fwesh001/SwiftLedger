@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout, QGridLayout,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox,
     QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog, QListWidget, QScrollArea,
-    QFileDialog, QProgressDialog, QTextEdit
+    QFileDialog, QProgressDialog, QTextEdit, QInputDialog
 )
 from PySide6.QtCore import Qt, QSize, QEvent, QTimer
 from PySide6.QtGui import QFont, QColor, QBrush, QPixmap
@@ -31,6 +31,7 @@ from database.queries import (
     apply_for_loan, get_member_loans, calculate_repayment_schedule,
     get_society_stats, check_overdue_loans, delete_member, update_member_profile,
     get_loan_products, add_loan_product, post_loan_repayment, get_member_loan_totals,
+    delete_all_members,
     has_active_loans, search_members, get_repayment_dashboard_rows, get_repayment_dashboard_summary,
 )
 from logic.analytics import (
@@ -45,6 +46,7 @@ from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
 from ui.theme_manager import build_theme_stylesheet
 from logic.data_manager import BulkDataManager
+from utils import format_currency
 
 QLineEdit = UppercaseLineEdit
 
@@ -871,6 +873,18 @@ class MembersPage(QWidget):
         )
         self.btn_delete.clicked.connect(self._delete_selected_member)
         del_row.addWidget(self.btn_delete)
+
+        self.btn_delete_all = QPushButton("Delete All Members")
+        self.btn_delete_all.setMinimumHeight(36)
+        self.btn_delete_all.setFont(QFont("Arial", 10))
+        self.btn_delete_all.setStyleSheet(
+            "QPushButton { background-color: #922b21; color: white; "
+            "border-radius: 5px; padding: 8px 16px; font-weight: bold; } "
+            "QPushButton:hover { background-color: #c0392b; }"
+        )
+        self.btn_delete_all.clicked.connect(self._delete_all_members)
+        del_row.addWidget(self.btn_delete_all)
+
         del_row.setContentsMargins(0, 6, 0, 0)
         main_layout.addLayout(del_row)
         main_layout.addSpacing(6)
@@ -1050,14 +1064,14 @@ class MembersPage(QWidget):
 
                 # Current Savings
                 savings = float(member.get('current_savings', 0.0) or 0.0)
-                savings_item = QTableWidgetItem(f"₦{savings:,.2f}")
+                savings_item = QTableWidgetItem(format_currency(savings, symbol="₦"))
                 savings_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 savings_item.setForeground(QBrush(QColor("#2ecc71")))
                 self.table_members.setItem(row_idx, 3, savings_item)
 
                 # Total Loans
                 loans = float(member.get('total_loans', 0.0) or 0.0)
-                loans_item = QTableWidgetItem(f"₦{loans:,.2f}")
+                loans_item = QTableWidgetItem(format_currency(loans, symbol="₦"))
                 loans_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 if member.get('active_loan_count', 0) > 0 and loans > 0:
                     loans_item.setForeground(QBrush(QColor("#ff6f61")))
@@ -1092,7 +1106,7 @@ class MembersPage(QWidget):
 
         reply = QMessageBox.question(
             self, "Confirm Deletion",
-            f"Delete member '{member_name}' and ALL related transactions/loans?\n\n"
+            f"Delete member '{member_name}' and ALL related transactions, repayments, and loans?\n\n"
             "This action cannot be undone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
@@ -1106,6 +1120,38 @@ class MembersPage(QWidget):
             self.load_data()
         else:
             QMessageBox.critical(self, "Error", msg)
+
+    def _delete_all_members(self) -> None:
+        """Delete all members and linked records after strict confirmation."""
+        reply = QMessageBox.warning(
+            self,
+            "Delete All Members",
+            "This will permanently delete ALL members and linked savings, loans, and repayments.\n\n"
+            "Type confirmation is required in the next step.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        confirm_text, ok_input = QInputDialog.getText(
+            self,
+            "Final Confirmation",
+            "Type DELETE ALL to continue:",
+        )
+        if not ok_input:
+            return
+
+        if (confirm_text or "").strip().upper() != "DELETE ALL":
+            QMessageBox.warning(self, "Cancelled", "Confirmation text did not match. No data was deleted.")
+            return
+
+        ok, message = delete_all_members(self.db_path)
+        if ok:
+            QMessageBox.information(self, "Delete All Completed", message)
+            self.load_data()
+        else:
+            QMessageBox.critical(self, "Delete All Failed", message)
 
     def _reset_registration_form(self) -> None:
         self.input_staff_number.clear()
