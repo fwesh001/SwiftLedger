@@ -4,6 +4,7 @@ Handles CRUD operations for members, savings, loans, and repayment schedules.
 """
 
 import sqlite3
+import re
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 
@@ -541,9 +542,11 @@ def reset_credential_with_recovery_key(
     if normalized_mode not in ("pin", "password"):
         return False, "Invalid security mode."
 
-    provided_key = (recovery_key or "").strip()
+    provided_key = (recovery_key or "").strip().upper()
     if not provided_key:
         return False, "Recovery key is required."
+    if re.fullmatch(r"[A-F0-9]{12}", provided_key) is None:
+        return False, "Invalid recovery key format."
 
     if normalized_mode == "pin":
         if not new_credential.isdigit() or not (4 <= len(new_credential) <= 6):
@@ -569,6 +572,8 @@ def reset_credential_with_recovery_key(
         recovery_hash = str(row[1] or "")
         if not recovery_hash:
             return False, "Recovery key is not configured."
+        if "$" not in recovery_hash:
+            return False, "Stored recovery key is invalid. Regenerate it in Settings."
 
         if not verify_credential(provided_key, recovery_hash):
             _safe_log_event(
