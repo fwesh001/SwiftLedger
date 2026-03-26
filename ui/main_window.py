@@ -1533,9 +1533,13 @@ class SavingsPage(QWidget):
                 mode_item = QTableWidgetItem(str(item.get('payment_mode', 'Salary Deduction')))
                 type_item = QTableWidgetItem(type_label)
                 transfer_item = QTableWidgetItem(str(item.get('transfer_reference', '') or ''))
-                amount_item = QTableWidgetItem(f"₦{float(item.get('amount', 0.0)):,.2f}")
-                balance_item = QTableWidgetItem(f"₦{float(item.get('running_balance', 0.0)):,.2f}")
+                amount_value = float(item.get('amount', 0.0) or 0.0)
+                balance_value = float(item.get('running_balance', 0.0) or 0.0)
+                amount_item = QTableWidgetItem(format_currency_with_words(amount_value, symbol="₦"))
+                balance_item = QTableWidgetItem(format_currency_with_words(balance_value, symbol="₦"))
                 id_item = QTableWidgetItem(str(item.get('id', '')))
+                amount_item.setData(Qt.ItemDataRole.UserRole, amount_value)
+                balance_item.setData(Qt.ItemDataRole.UserRole, balance_value)
 
                 trans_type = str(item.get('trans_type', ''))
                 if trans_type == "Lodgment":
@@ -1564,7 +1568,7 @@ class SavingsPage(QWidget):
                 self.table_savings.setItem(row_idx, 5, balance_item)
                 self.table_savings.setItem(row_idx, 6, id_item)
 
-            self.label_total_savings.setText(f"Total Savings: ₦{total_savings:,.2f}")
+            self.label_total_savings.setText(f"Total Savings: {format_currency_with_words(total_savings, symbol='₦')}")
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load savings: {str(e)}")
@@ -1625,7 +1629,7 @@ class SavingsPage(QWidget):
         self.combo_type.setEnabled(True)
         self._update_transaction_types_for_member(False)
         self.label_member_name.setText("Name: Not Selected")
-        self.label_total_savings.setText("Total Savings: ₦0.00")
+        self.label_total_savings.setText(f"Total Savings: {format_currency_with_words(0.0, symbol='₦')}")
         self.table_savings.setRowCount(0)
         self.btn_post.setEnabled(False)
 
@@ -1657,8 +1661,7 @@ class SavingsPage(QWidget):
             return
 
         tx_id = int(tx_id_item.text() or 0)
-        raw_amount = (amount_item.text() or "").replace("₦", "").replace("NGN", "").replace(",", "").strip()
-        current_amount = float(raw_amount or 0.0)
+        current_amount = float(amount_item.data(Qt.ItemDataRole.UserRole) or 0.0)
 
         new_amount, ok = QInputDialog.getDouble(
             self,
@@ -1699,8 +1702,7 @@ class SavingsPage(QWidget):
             QMessageBox.warning(self, "Invalid Selection", "Could not read selected transaction.")
             return
 
-        raw_amount = (amount_item.text() or "").replace("₦", "").replace("NGN", "").replace(",", "").strip()
-        amount = float(raw_amount or 0.0)
+        amount = float(amount_item.data(Qt.ItemDataRole.UserRole) or 0.0)
         type_text = type_item.text().lower()
 
         if "deposit" in type_text:
@@ -2557,9 +2559,12 @@ class LoansPage(QWidget):
             total_paid = float(item.get("total_paid", 0.0) or 0.0)
             outstanding = max(0.0, total_due - total_paid)
 
-            due_item = QTableWidgetItem(f"₦{total_due:,.2f}")
-            paid_item = QTableWidgetItem(f"₦{total_paid:,.2f}")
-            out_item = QTableWidgetItem(f"₦{outstanding:,.2f}")
+            due_item = QTableWidgetItem(format_currency_with_words(total_due, symbol="₦"))
+            paid_item = QTableWidgetItem(format_currency_with_words(total_paid, symbol="₦"))
+            out_item = QTableWidgetItem(format_currency_with_words(outstanding, symbol="₦"))
+            due_item.setData(Qt.ItemDataRole.UserRole, total_due)
+            paid_item.setData(Qt.ItemDataRole.UserRole, total_paid)
+            out_item.setData(Qt.ItemDataRole.UserRole, outstanding)
             due_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             paid_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             out_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -2600,7 +2605,7 @@ class LoansPage(QWidget):
             self.label_repay_overdue.setText("Overdue: 0")
             self.label_repay_due_week.setText("Due in 7 days: 0")
             self.label_repay_collection.setText("Collection Rate: 0.00%")
-            self.label_repay_outstanding.setText("Outstanding: ₦0.00")
+            self.label_repay_outstanding.setText(f"Outstanding: {format_currency_with_words(0.0, symbol='₦')}")
             return
 
         overdue = int(summary.get("overdue_count", 0.0) or 0.0)
@@ -2611,7 +2616,7 @@ class LoansPage(QWidget):
         self.label_repay_overdue.setText(f"Overdue: {overdue}")
         self.label_repay_due_week.setText(f"Due in 7 days: {due_week}")
         self.label_repay_collection.setText(f"Collection Rate: {collection_rate:.2f}%")
-        self.label_repay_outstanding.setText(f"Outstanding: ₦{outstanding:,.2f}")
+        self.label_repay_outstanding.setText(f"Outstanding: {format_currency_with_words(outstanding, symbol='₦')}")
 
         overdue_color = "#e74c3c" if overdue > 0 else "#27ae60"
         due_week_color = "#f39c12" if due_week > 0 else "#27ae60"
@@ -2680,7 +2685,7 @@ class LoansPage(QWidget):
             QMessageBox.warning(self, "Invalid Selection", "Selected row has no repayment ID.")
             return
 
-        current_paid = float((paid_item.text() or "").replace("₦", "").replace("NGN", "").replace(",", "").strip() or 0.0)
+        current_paid = float(paid_item.data(Qt.ItemDataRole.UserRole) or 0.0)
         new_paid, ok = QInputDialog.getDouble(
             self,
             "Edit Repayment",
