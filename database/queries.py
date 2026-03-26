@@ -332,7 +332,8 @@ def delete_member(db_path: str, member_id: int) -> Tuple[bool, str]:
             return False, f"Member ID {member_id} not found."
         staff_number, full_name = row
 
-        # Delete related data
+        # Delete related data in FK-safe order
+        cursor.execute("DELETE FROM loan_repayments WHERE member_id = ?", (member_id,))
         cursor.execute("DELETE FROM savings_transactions WHERE member_id = ?", (member_id,))
         cursor.execute("DELETE FROM loans WHERE member_id = ?", (member_id,))
         cursor.execute("DELETE FROM members WHERE member_id = ?", (member_id,))
@@ -362,6 +363,75 @@ def delete_member(db_path: str, member_id: int) -> Tuple[bool, str]:
         _safe_log_event("Admin", "Members",
                         f"Member deletion failed for ID {member_id} (error: {e})",
                         "Failed", db_path)
+        return False, f"Unexpected error: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
+def delete_all_members(db_path: str) -> Tuple[bool, str]:
+    """Delete all members and linked financial records in a single transaction."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("BEGIN;")
+
+        cursor.execute("SELECT COUNT(1) FROM members")
+        member_count = int(cursor.fetchone()[0] or 0)
+        if member_count == 0:
+            return True, "No members to delete."
+
+        cursor.execute("SELECT COUNT(1) FROM savings_transactions")
+        savings_count = int(cursor.fetchone()[0] or 0)
+        cursor.execute("SELECT COUNT(1) FROM loan_repayments")
+        repayment_count = int(cursor.fetchone()[0] or 0)
+        cursor.execute("SELECT COUNT(1) FROM loans")
+        loan_count = int(cursor.fetchone()[0] or 0)
+
+        cursor.execute("DELETE FROM loan_repayments")
+        cursor.execute("DELETE FROM savings_transactions")
+        cursor.execute("DELETE FROM loans")
+        cursor.execute("DELETE FROM members")
+
+        conn.commit()
+
+        _safe_log_event(
+            user="Admin",
+            category="Members",
+            description=(
+                "Delete all members completed "
+                f"(members={member_count}, loans={loan_count}, repayments={repayment_count}, savings={savings_count})"
+            ),
+            status="Success",
+            db_path=db_path,
+        )
+        return True, (
+            "Deleted all members and linked records "
+            f"(Members: {member_count}, Loans: {loan_count}, Repayments: {repayment_count}, Savings: {savings_count})."
+        )
+    except sqlite3.DatabaseError as e:
+        if conn:
+            conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Members",
+            description=f"Delete all members failed (DB error: {e})",
+            status="Failed",
+            db_path=db_path,
+        )
+        return False, f"Database error: {e}"
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Members",
+            description=f"Delete all members failed (error: {e})",
+            status="Failed",
+            db_path=db_path,
+        )
         return False, f"Unexpected error: {e}"
     finally:
         if conn:
@@ -2090,19 +2160,21 @@ def get_member_statement_data(
         loan_params: List[object] = [member_id]
         loan_query = (
             """
-            SELECT loan_id, principal, interest_rate, duration_months, status, date_issued,
-                   principal_paid, interest_paid, total_repaid
-            FROM loans
-            WHERE member_id = ?
+            SELECT l.loan_id, l.principal, l.interest_rate, l.duration_months, l.status, l.date_issued,
+                   l.principal_paid, l.interest_paid, l.total_repaid,
+                   COALESCE(lp.name, 'Unspecified') AS loan_type
+            FROM loans l
+            LEFT JOIN loan_products lp ON lp.product_id = l.product_id
+            WHERE l.member_id = ?
             """
         )
         if start_date:
-            loan_query += " AND DATE(date_issued) >= DATE(?)"
+            loan_query += " AND DATE(l.date_issued) >= DATE(?)"
             loan_params.append(start_date)
         if end_date:
-            loan_query += " AND DATE(date_issued) <= DATE(?)"
+            loan_query += " AND DATE(l.date_issued) <= DATE(?)"
             loan_params.append(end_date)
-        loan_query += " ORDER BY loan_id DESC"
+        loan_query += " ORDER BY l.loan_id DESC"
         cursor.execute(loan_query, loan_params)
         loans = [dict(row) for row in cursor.fetchall()]
 
