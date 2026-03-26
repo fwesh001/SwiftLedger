@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 
 from database.db_init import log_event
+from security import hash_credential, verify_credential
 
 
 def _safe_log_event(user: str, category: str, description: str, status: str, db_path: str) -> None:
@@ -489,6 +490,9 @@ def get_system_settings(db_path: str) -> Tuple[bool, Optional[Dict]]:
         'city_state': '',
         'phone': '',
         'email': '',
+        'auth_hash': '',
+        'recovery_key_hash': '',
+        'security_mode': 'password',
         'min_monthly_saving': 0.0,
         'default_interest_rate': 12.0,
         'loan_multiplier': 2.0,
@@ -521,6 +525,102 @@ def get_system_settings(db_path: str) -> Tuple[bool, Optional[Dict]]:
         return True, defaults
     except Exception:
         return True, defaults
+    finally:
+        if conn:
+            conn.close()
+
+
+def reset_credential_with_recovery_key(
+    db_path: str,
+    recovery_key: str,
+    new_credential: str,
+    security_mode: str,
+) -> Tuple[bool, str]:
+    """Reset login credential using a previously stored recovery key."""
+    normalized_mode = (security_mode or "").strip().lower().replace(" ", "_")
+    if normalized_mode not in ("pin", "password"):
+        return False, "Invalid security mode."
+
+    provided_key = (recovery_key or "").strip()
+    if not provided_key:
+        return False, "Recovery key is required."
+
+    if normalized_mode == "pin":
+        if not new_credential.isdigit() or not (4 <= len(new_credential) <= 6):
+            return False, "PIN must be 4-6 digits."
+    else:
+        if len(new_credential) < 6:
+            return False, "Password must be at least 6 characters."
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+
+        cursor.execute(
+            "SELECT id, recovery_key_hash FROM system_settings ORDER BY id DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        if not row:
+            return False, "System settings not found. Run initial setup first."
+
+        settings_id = int(row[0])
+        recovery_hash = str(row[1] or "")
+        if not recovery_hash:
+            return False, "Recovery key is not configured."
+
+        if not verify_credential(provided_key, recovery_hash):
+            _safe_log_event(
+                user="Admin",
+                category="Security",
+                description="Credential reset failed (invalid recovery key)",
+                status="Failed",
+                db_path=db_path,
+            )
+            return False, "Invalid recovery key."
+
+        new_hash = hash_credential(new_credential)
+        cursor.execute(
+            """
+            UPDATE system_settings
+            SET auth_hash = ?, security_mode = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (new_hash, normalized_mode, datetime.now().isoformat(timespec="seconds"), settings_id),
+        )
+        conn.commit()
+
+        _safe_log_event(
+            user="Admin",
+            category="Security",
+            description=f"Credential reset via recovery key (mode={normalized_mode})",
+            status="Success",
+            db_path=db_path,
+        )
+        return True, "Credential reset successful."
+    except sqlite3.DatabaseError as e:
+        if conn:
+            conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Security",
+            description=f"Credential reset failed (DB error: {e})",
+            status="Failed",
+            db_path=db_path,
+        )
+        return False, f"Database error: {e}"
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        _safe_log_event(
+            user="Admin",
+            category="Security",
+            description=f"Credential reset failed (error: {e})",
+            status="Failed",
+            db_path=db_path,
+        )
+        return False, f"Unexpected error: {e}"
     finally:
         if conn:
             conn.close()
