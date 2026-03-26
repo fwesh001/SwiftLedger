@@ -87,3 +87,60 @@ def format_currency(value: float | int | str | None, symbol: str = "NGN") -> str
     except (TypeError, ValueError):
         numeric_value = 0.0
     return f"{symbol} {numeric_value:,.2f}"
+
+
+def _int_to_words(number: int) -> str:
+    ones = [
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+        "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+    ]
+    tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+
+    if number < 20:
+        return ones[number]
+    if number < 100:
+        return tens[number // 10] + ("" if number % 10 == 0 else f"-{ones[number % 10]}")
+    if number < 1000:
+        rem = number % 100
+        return f"{ones[number // 100]} hundred" + ("" if rem == 0 else f" {_int_to_words(rem)}")
+
+    chunks = [
+        (1_000_000_000_000, "trillion"),
+        (1_000_000_000, "billion"),
+        (1_000_000, "million"),
+        (1_000, "thousand"),
+    ]
+    for value, label in chunks:
+        if number >= value:
+            major = number // value
+            rem = number % value
+            text = f"{_int_to_words(major)} {label}"
+            return text if rem == 0 else f"{text} {_int_to_words(rem)}"
+    return str(number)
+
+
+def amount_to_words(value: float | int | str | None) -> str:
+    """Return amount in words (naira/kobo)."""
+    try:
+        numeric_value = round(float(value or 0.0), 2)
+    except (TypeError, ValueError):
+        numeric_value = 0.0
+
+    negative = numeric_value < 0
+    absolute = abs(numeric_value)
+    naira = int(absolute)
+    kobo = int(round((absolute - naira) * 100))
+
+    naira_words = _int_to_words(naira)
+    if kobo > 0:
+        words = f"{naira_words} naira and {_int_to_words(kobo)} kobo"
+    else:
+        words = f"{naira_words} naira"
+    if negative:
+        words = f"minus {words}"
+    return words.title()
+
+
+def format_currency_with_words(value: float | int | str | None, symbol: str = "NGN") -> str:
+    """Return formatted amount with words, e.g. ``NGN 1,000,000.00 (One Million Naira)``."""
+    return f"{format_currency(value, symbol=symbol)} ({amount_to_words(value)})"
