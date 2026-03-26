@@ -1623,6 +1623,140 @@ def add_saving(
             conn.close()
 
 
+def update_savings_transaction(
+    db_path: str,
+    transaction_id: int,
+    new_amount: float,
+    reason: str,
+) -> Tuple[bool, str]:
+    """Update a savings transaction amount and recompute running balances for the member ledger."""
+    if transaction_id <= 0:
+        return False, "Invalid transaction ID."
+    if new_amount <= 0:
+        return False, "Amount must be greater than 0."
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("BEGIN;")
+
+        cursor.execute(
+            """
+            SELECT id, member_id, trans_type, amount
+            FROM savings_transactions
+            WHERE id = ?
+            """,
+            (transaction_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            conn.rollback()
+            return False, "Transaction not found."
+
+        _, member_id, trans_type, old_amount = row
+        trans_type = str(trans_type or "")
+        old_amount = float(old_amount or 0.0)
+        if trans_type not in ("Lodgment", "Deduction"):
+            conn.rollback()
+            return False, "Only Lodgment/Deduction entries can be edited directly."
+
+        cursor.execute(
+            "UPDATE savings_transactions SET amount = ? WHERE id = ?",
+            (float(new_amount), int(transaction_id)),
+        )
+
+        cursor.execute(
+            """
+            SELECT id, trans_type, amount
+            FROM savings_transactions
+            WHERE member_id = ?
+            ORDER BY id ASC
+            """,
+            (int(member_id),),
+        )
+        rows = cursor.fetchall()
+
+        running_balance = 0.0
+        for tx_id, tx_type, tx_amount in rows:
+            tx_type = str(tx_type or "")
+            amount = float(tx_amount or 0.0)
+            if tx_type in ("Lodgment", "Opening Balance"):
+                running_balance += amount
+            elif tx_type == "Deduction":
+                running_balance -= amount
+            cursor.execute(
+                "UPDATE savings_transactions SET running_balance = ? WHERE id = ?",
+                (round(running_balance, 2), int(tx_id)),
+            )
+
+        cursor.execute(
+            "UPDATE members SET current_savings = ? WHERE member_id = ?",
+            (round(running_balance, 2), int(member_id)),
+        )
+
+        conn.commit()
+        _safe_log_event(
+            user="Admin",
+            category="Savings",
+            description=(
+                f"Savings transaction edited (tx_id={transaction_id}, member_id={member_id}, "
+                f"old={old_amount:,.2f}, new={new_amount:,.2f}, reason={reason or 'N/A'})"
+            ),
+            status="Success",
+            db_path=db_path,
+        )
+        return True, "Savings transaction updated successfully."
+    except sqlite3.DatabaseError as e:
+        if conn:
+            conn.rollback()
+        return False, f"Database error: {e}"
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return False, f"Unexpected error: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
+def add_savings_correction_entry(
+    db_path: str,
+    member_id: int,
+    correction_type: str,
+    amount: float,
+    reason: str,
+) -> Tuple[bool, str]:
+    """Append a correction transaction (reversal/adjustment) for immutable-history workflows."""
+    normalized = (correction_type or "").strip().lower()
+    if normalized not in ("deposit", "withdrawal"):
+        return False, "Correction type must be Deposit or Withdrawal."
+
+    trans_type = "Lodgment" if normalized == "deposit" else "Deduction"
+    transfer_ref = f"CORRECTION: {reason.strip()[:90]}" if reason else "CORRECTION"
+    ok, msg = add_saving(
+        db_path,
+        int(member_id),
+        float(amount),
+        trans_type,
+        payment_mode="Cash",
+        transfer_reference=transfer_ref,
+    )
+    if ok:
+        _safe_log_event(
+            user="Admin",
+            category="Savings",
+            description=(
+                f"Savings correction entry posted (member_id={member_id}, "
+                f"type={trans_type}, amount={amount:,.2f}, reason={reason or 'N/A'})"
+            ),
+            status="Success",
+            db_path=db_path,
+        )
+    return ok, msg
+
+
 def get_member_loan_totals(db_path: str, member_id: int) -> Tuple[bool, Dict[str, float]]:
     """Return total issued, repaid and outstanding principal for a member's loans."""
     conn = None
@@ -1885,6 +2019,151 @@ def post_loan_repayment(
             db_path=db_path,
         )
         return False, f"Failed to post repayment: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
+def update_loan_repayment_entry(
+    db_path: str,
+    repayment_id: int,
+    new_total_paid: float,
+    reason: str,
+) -> Tuple[bool, str]:
+    """Update an existing repayment row and propagate deltas to loan/member aggregates."""
+    if repayment_id <= 0:
+        return False, "Invalid repayment ID."
+    if new_total_paid < 0:
+        return False, "Paid amount cannot be negative."
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("BEGIN;")
+
+        cursor.execute(
+            """
+            SELECT repayment_id, loan_id, member_id,
+                   principal_due, interest_due, total_due,
+                   principal_paid, interest_paid, total_paid
+            FROM loan_repayments
+            WHERE repayment_id = ?
+            """,
+            (int(repayment_id),),
+        )
+        row = cursor.fetchone()
+        if not row:
+            conn.rollback()
+            return False, "Repayment entry not found."
+
+        (
+            _repayment_id,
+            loan_id,
+            member_id,
+            principal_due,
+            interest_due,
+            total_due,
+            old_principal_paid,
+            old_interest_paid,
+            old_total_paid,
+        ) = row
+
+        principal_due = float(principal_due or 0.0)
+        interest_due = float(interest_due or 0.0)
+        total_due = float(total_due or 0.0)
+        old_principal_paid = float(old_principal_paid or 0.0)
+        old_interest_paid = float(old_interest_paid or 0.0)
+        old_total_paid = float(old_total_paid or 0.0)
+
+        capped_paid = min(float(new_total_paid), total_due)
+        new_interest_paid = min(capped_paid, interest_due)
+        new_principal_paid = min(max(0.0, capped_paid - new_interest_paid), principal_due)
+
+        delta_principal = new_principal_paid - old_principal_paid
+        delta_interest = new_interest_paid - old_interest_paid
+        delta_total = capped_paid - old_total_paid
+
+        if capped_paid <= 0.0:
+            status = "Pending"
+            payment_date = None
+        elif capped_paid + 0.005 >= total_due:
+            status = "Paid"
+            payment_date = datetime.now().isoformat(timespec="seconds")
+        else:
+            status = "Partial"
+            payment_date = datetime.now().isoformat(timespec="seconds")
+
+        cursor.execute(
+            """
+            UPDATE loan_repayments
+            SET principal_paid = ?,
+                interest_paid = ?,
+                total_paid = ?,
+                status = ?,
+                payment_date = ?
+            WHERE repayment_id = ?
+            """,
+            (new_principal_paid, new_interest_paid, capped_paid, status, payment_date, int(repayment_id)),
+        )
+
+        cursor.execute(
+            """
+            UPDATE loans
+            SET principal_paid = COALESCE(principal_paid, 0.0) + ?,
+                interest_paid = COALESCE(interest_paid, 0.0) + ?,
+                total_repaid = COALESCE(total_repaid, 0.0) + ?
+            WHERE loan_id = ?
+            """,
+            (delta_principal, delta_interest, delta_total, int(loan_id)),
+        )
+
+        cursor.execute(
+            """
+            UPDATE loans
+            SET status = CASE
+                WHEN COALESCE(principal_paid, 0.0) >= principal THEN 'Paid'
+                ELSE 'Active'
+            END
+            WHERE loan_id = ?
+            """,
+            (int(loan_id),),
+        )
+
+        cursor.execute(
+            """
+            UPDATE members
+            SET total_loans = (
+                SELECT COALESCE(SUM(MAX(0, principal - COALESCE(principal_paid, 0.0))), 0.0)
+                FROM loans
+                WHERE member_id = ?
+            )
+            WHERE member_id = ?
+            """,
+            (int(member_id), int(member_id)),
+        )
+
+        conn.commit()
+        _safe_log_event(
+            user="Admin",
+            category="Loans",
+            description=(
+                f"Repayment entry edited (repayment_id={repayment_id}, loan_id={loan_id}, "
+                f"old_paid={old_total_paid:,.2f}, new_paid={capped_paid:,.2f}, reason={reason or 'N/A'})"
+            ),
+            status="Success",
+            db_path=db_path,
+        )
+        return True, "Repayment entry updated successfully."
+    except sqlite3.DatabaseError as e:
+        if conn:
+            conn.rollback()
+        return False, f"Database error: {e}"
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return False, f"Unexpected error: {e}"
     finally:
         if conn:
             conn.close()
