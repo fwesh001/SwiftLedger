@@ -324,6 +324,13 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
         "CREATE INDEX IF NOT EXISTS idx_loan_repayments_member_due ON loan_repayments(member_id, due_date);"
     )
 
+    # Keep exactly one authoritative system_settings row (latest).
+    cursor.execute("SELECT id FROM system_settings ORDER BY id DESC")
+    setting_rows = cursor.fetchall()
+    if len(setting_rows) > 1:
+        keep_id = int(setting_rows[0][0])
+        cursor.execute("DELETE FROM system_settings WHERE id != ?", (keep_id,))
+
     conn.commit()
     return conn
 
@@ -363,15 +370,15 @@ def save_settings(data_dict: Dict[str, object], db_path: str = DB_PATH) -> None:
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # Check whether a settings row already exists
-    cursor.execute("SELECT COUNT(*) FROM system_settings;")
-    exists = cursor.fetchone()[0] > 0
-
-    if exists:
+    # Update latest row if present, otherwise insert.
+    cursor.execute("SELECT id FROM system_settings ORDER BY id DESC LIMIT 1;")
+    row = cursor.fetchone()
+    if row:
+        row_id = int(row[0])
         set_clause = ", ".join(f"{col} = ?" for col in filtered)
         cursor.execute(
-            f"UPDATE system_settings SET {set_clause} WHERE id = 1;",
-            list(filtered.values()),
+            f"UPDATE system_settings SET {set_clause} WHERE id = ?;",
+            list(filtered.values()) + [row_id],
         )
     else:
         columns = ", ".join(filtered.keys())
