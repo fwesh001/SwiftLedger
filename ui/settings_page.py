@@ -338,6 +338,11 @@ class SettingsPage(QWidget):
             self.input_confirm_credential.setPlaceholderText("Re-enter PIN")
             self.input_new_credential.setEnabled(True)
             self.input_confirm_credential.setEnabled(True)
+        else:
+            self.input_new_credential.setPlaceholderText("New password (min 6 chars)")
+            self.input_confirm_credential.setPlaceholderText("Re-enter password")
+            self.input_new_credential.setEnabled(True)
+            self.input_confirm_credential.setEnabled(True)
 
     def _generate_recovery_key(self) -> None:
         self.pending_recovery_key = generate_secure_token(6).upper()
@@ -348,11 +353,6 @@ class SettingsPage(QWidget):
             f"Recovery Key:\n{self.pending_recovery_key}\n\n"
             "Click Apply to store it.",
         )
-        else:
-            self.input_new_credential.setPlaceholderText("New password (min 6 chars)")
-            self.input_confirm_credential.setPlaceholderText("Re-enter password")
-            self.input_new_credential.setEnabled(True)
-            self.input_confirm_credential.setEnabled(True)
 
     # ── Load / Save ──────────────────────────────────────────────────
 
