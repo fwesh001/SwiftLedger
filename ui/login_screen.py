@@ -10,13 +10,13 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QMessageBox, QFrame,
+    QLineEdit, QMessageBox, QFrame, QInputDialog,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from database.queries import get_system_settings
+from database.queries import get_system_settings, reset_credential_with_recovery_key
 from database.db_init import log_event
 from security import verify_credential
 
@@ -36,6 +36,7 @@ class LoginScreen(QWidget):
         self.db_path = db_path
         self.security_mode = "pin"
         self.auth_hash = ""
+        self.recovery_key_hash = ""
         self._load_security_settings()
         self._build_ui()
 
@@ -53,6 +54,7 @@ class LoginScreen(QWidget):
                 normalized = "password"
             self.security_mode = normalized
             self.auth_hash = str(settings.get("auth_hash") or "")
+            self.recovery_key_hash = str(settings.get("recovery_key_hash") or "")
 
     # ── UI ───────────────────────────────────────────────────────────
 
@@ -121,6 +123,16 @@ class LoginScreen(QWidget):
         self.btn_login.clicked.connect(self._attempt_login)
         card_layout.addWidget(self.btn_login)
 
+        self.btn_forgot = QPushButton("Forgot Password?")
+        self.btn_forgot.setMinimumHeight(30)
+        self.btn_forgot.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_forgot.setStyleSheet(
+            "QPushButton { background: transparent; color: #7fb3d5; border: none; text-decoration: underline; } "
+            "QPushButton:hover { color: #aed6f1; }"
+        )
+        self.btn_forgot.clicked.connect(self._forgot_password_flow)
+        card_layout.addWidget(self.btn_forgot, alignment=Qt.AlignmentFlag.AlignCenter)
+
         # Enter key triggers login
         self.input_credential.returnPressed.connect(self._attempt_login)
 
@@ -173,4 +185,65 @@ class LoginScreen(QWidget):
                 "Incorrect credential. Please try again.",
             )
             self.input_credential.clear()
+
+    def _forgot_password_flow(self) -> None:
+        """Reset credential using recovery key."""
+        if not self.recovery_key_hash:
+            QMessageBox.warning(
+                self,
+                "Recovery Not Configured",
+                "Recovery key is not configured for this installation.\n"
+                "Open Settings after login to generate one.",
+            )
+            return
+
+        recovery_key, ok = QInputDialog.getText(
+            self,
+            "Forgot Password",
+            "Enter your recovery key:",
+            QLineEdit.EchoMode.Normal,
+        )
+        if not ok:
+            return
+
+        new_credential, ok = QInputDialog.getText(
+            self,
+            "New Credential",
+            "Enter new PIN (4-6 digits) or password (6+ chars):",
+            QLineEdit.EchoMode.Password,
+        )
+        if not ok:
+            return
+
+        confirm, ok = QInputDialog.getText(
+            self,
+            "Confirm Credential",
+            "Re-enter new credential:",
+            QLineEdit.EchoMode.Password,
+        )
+        if not ok:
+            return
+
+        if (new_credential or "") != (confirm or ""):
+            QMessageBox.warning(self, "Mismatch", "Credential confirmation does not match.")
+            return
+
+        mode = self.security_mode if self.security_mode in ("pin", "password") else "password"
+        ok_reset, message = reset_credential_with_recovery_key(
+            self.db_path,
+            recovery_key,
+            new_credential,
+            mode,
+        )
+        if not ok_reset:
+            QMessageBox.critical(self, "Reset Failed", message)
+            return
+
+        self._load_security_settings()
+        self.input_credential.clear()
+        QMessageBox.information(
+            self,
+            "Reset Successful",
+            "Credential has been reset. You can now log in with the new credential.",
+        )
 
