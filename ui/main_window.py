@@ -32,6 +32,7 @@ from database.queries import (
     get_society_stats, check_overdue_loans, delete_member, update_member_profile,
     get_loan_products, add_loan_product, post_loan_repayment, get_member_loan_totals,
     delete_all_members,
+    update_savings_transaction, add_savings_correction_entry, update_loan_repayment_entry,
     has_active_loans, search_members, get_repayment_dashboard_rows, get_repayment_dashboard_summary,
 )
 from logic.analytics import (
@@ -1419,6 +1420,19 @@ class SavingsPage(QWidget):
         history_font.setBold(True)
         history_title.setFont(history_font)
         main_layout.addWidget(history_title)
+
+        correction_row = QHBoxLayout()
+        correction_row.addStretch()
+        self.btn_edit_saving = QPushButton("Edit Selected")
+        self.btn_edit_saving.setMinimumWidth(120)
+        self.btn_edit_saving.clicked.connect(self.edit_selected_saving)
+        correction_row.addWidget(self.btn_edit_saving)
+
+        self.btn_reverse_saving = QPushButton("Reverse/Adjust")
+        self.btn_reverse_saving.setMinimumWidth(130)
+        self.btn_reverse_saving.clicked.connect(self.reverse_selected_saving)
+        correction_row.addWidget(self.btn_reverse_saving)
+        main_layout.addLayout(correction_row)
         
         self.table_savings = QTableWidget()
         self.table_savings.setColumnCount(7)
@@ -1620,6 +1634,99 @@ class SavingsPage(QWidget):
         if self.current_member_id is None:
             self.clear_selection()
             return
+        self.load_savings_data()
+
+    def edit_selected_saving(self) -> None:
+        if not self.current_member_id:
+            QMessageBox.warning(self, "No Member", "Select a member first.")
+            return
+        row = self.table_savings.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "No Selection", "Select a transaction row first.")
+            return
+
+        tx_id_item = self.table_savings.item(row, 6)
+        type_item = self.table_savings.item(row, 1)
+        amount_item = self.table_savings.item(row, 4)
+        if not tx_id_item or not type_item or not amount_item:
+            QMessageBox.warning(self, "Invalid Selection", "Could not read selected transaction.")
+            return
+
+        if "Loan Repayment" in type_item.text():
+            QMessageBox.warning(self, "Not Editable", "Loan repayment rows are not directly editable from savings history.")
+            return
+
+        tx_id = int(tx_id_item.text() or 0)
+        raw_amount = (amount_item.text() or "").replace("₦", "").replace("NGN", "").replace(",", "").strip()
+        current_amount = float(raw_amount or 0.0)
+
+        new_amount, ok = QInputDialog.getDouble(
+            self,
+            "Edit Transaction",
+            "New amount:",
+            value=current_amount,
+            minValue=0.01,
+            maxValue=100000000.0,
+            decimals=2,
+        )
+        if not ok:
+            return
+
+        reason, ok = QInputDialog.getText(self, "Reason", "Reason for edit:")
+        if not ok:
+            return
+
+        success, message = update_savings_transaction(self.db_path, tx_id, new_amount, reason)
+        if not success:
+            QMessageBox.warning(self, "Update Failed", message)
+            return
+
+        QMessageBox.information(self, "Updated", message)
+        self.load_savings_data()
+
+    def reverse_selected_saving(self) -> None:
+        if not self.current_member_id:
+            QMessageBox.warning(self, "No Member", "Select a member first.")
+            return
+        row = self.table_savings.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "No Selection", "Select a transaction row first.")
+            return
+
+        type_item = self.table_savings.item(row, 1)
+        amount_item = self.table_savings.item(row, 4)
+        if not type_item or not amount_item:
+            QMessageBox.warning(self, "Invalid Selection", "Could not read selected transaction.")
+            return
+
+        raw_amount = (amount_item.text() or "").replace("₦", "").replace("NGN", "").replace(",", "").strip()
+        amount = float(raw_amount or 0.0)
+        type_text = type_item.text().lower()
+
+        if "deposit" in type_text:
+            correction_type = "withdrawal"
+        elif "withdrawal" in type_text:
+            correction_type = "deposit"
+        else:
+            QMessageBox.warning(self, "Unsupported", "Only deposit/withdrawal rows can be reversed.")
+            return
+
+        reason, ok = QInputDialog.getText(self, "Reason", "Reason for reversal/adjustment:")
+        if not ok:
+            return
+
+        success, message = add_savings_correction_entry(
+            self.db_path,
+            int(self.current_member_id),
+            correction_type,
+            amount,
+            reason,
+        )
+        if not success:
+            QMessageBox.warning(self, "Correction Failed", message)
+            return
+
+        QMessageBox.information(self, "Correction Posted", message)
         self.load_savings_data()
 
     def _format_savings_type(self, trans_type: str) -> str:
@@ -1996,6 +2103,17 @@ class LoansPage(QWidget):
         self.btn_post_selected_repayment.setMinimumWidth(170)
         self.btn_post_selected_repayment.clicked.connect(self.post_selected_repayment)
         action_row.addWidget(self.btn_post_selected_repayment, 1, 3)
+
+        self.btn_edit_selected_repayment = QPushButton("Edit Selected")
+        self.btn_edit_selected_repayment.setMinimumWidth(140)
+        self.btn_edit_selected_repayment.clicked.connect(self.edit_selected_repayment)
+        action_row.addWidget(self.btn_edit_selected_repayment, 1, 1)
+
+        self.btn_reverse_selected_repayment = QPushButton("Reverse")
+        self.btn_reverse_selected_repayment.setMinimumWidth(120)
+        self.btn_reverse_selected_repayment.clicked.connect(self.reverse_selected_repayment)
+        action_row.addWidget(self.btn_reverse_selected_repayment, 1, 2)
+
         action_row.setColumnStretch(4, 1)
         main_layout.addLayout(action_row)
 
@@ -2428,7 +2546,9 @@ class LoansPage(QWidget):
             member_item = QTableWidgetItem(member_text)
             member_item.setData(Qt.ItemDataRole.UserRole, int(item.get("member_id", 0) or 0))
             self.table_repayments.setItem(row_idx, 0, member_item)
-            self.table_repayments.setItem(row_idx, 1, QTableWidgetItem(str(item.get("loan_id", ""))))
+            loan_item = QTableWidgetItem(str(item.get("loan_id", "")))
+            loan_item.setData(Qt.ItemDataRole.UserRole, int(item.get("repayment_id", 0) or 0))
+            self.table_repayments.setItem(row_idx, 1, loan_item)
             self.table_repayments.setItem(row_idx, 2, QTableWidgetItem(str(item.get("installment_no", ""))))
             self.table_repayments.setItem(row_idx, 3, QTableWidgetItem(str(item.get("due_date", ""))[:10]))
             self.table_repayments.setItem(row_idx, 4, QTableWidgetItem(str(item.get("payment_date", ""))[:10]))
@@ -2540,6 +2660,92 @@ class LoansPage(QWidget):
         self.load_repayment_dashboard()
 
         if self.current_member_id == member_id:
+            self.load_active_loans()
+
+    def edit_selected_repayment(self) -> None:
+        selected_rows = self.table_repayments.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, "No Selection", "Select a repayment row first.")
+            return
+
+        row = selected_rows[0].row()
+        loan_item = self.table_repayments.item(row, 1)
+        paid_item = self.table_repayments.item(row, 6)
+        if not loan_item or not paid_item:
+            QMessageBox.warning(self, "Invalid Selection", "Could not read selected repayment row.")
+            return
+
+        repayment_id = int(loan_item.data(Qt.ItemDataRole.UserRole) or 0)
+        if repayment_id <= 0:
+            QMessageBox.warning(self, "Invalid Selection", "Selected row has no repayment ID.")
+            return
+
+        current_paid = float((paid_item.text() or "").replace("₦", "").replace("NGN", "").replace(",", "").strip() or 0.0)
+        new_paid, ok = QInputDialog.getDouble(
+            self,
+            "Edit Repayment",
+            "New paid amount for this installment:",
+            value=current_paid,
+            minValue=0.0,
+            maxValue=100000000.0,
+            decimals=2,
+        )
+        if not ok:
+            return
+
+        reason, ok = QInputDialog.getText(self, "Reason", "Reason for edit:")
+        if not ok:
+            return
+
+        success, message = update_loan_repayment_entry(self.db_path, repayment_id, new_paid, reason)
+        if not success:
+            QMessageBox.warning(self, "Update Failed", message)
+            return
+
+        QMessageBox.information(self, "Updated", message)
+        self.load_repayment_dashboard()
+        if self.current_member_id:
+            self.load_active_loans()
+
+    def reverse_selected_repayment(self) -> None:
+        selected_rows = self.table_repayments.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, "No Selection", "Select a repayment row first.")
+            return
+
+        row = selected_rows[0].row()
+        loan_item = self.table_repayments.item(row, 1)
+        if not loan_item:
+            QMessageBox.warning(self, "Invalid Selection", "Could not read selected repayment row.")
+            return
+
+        repayment_id = int(loan_item.data(Qt.ItemDataRole.UserRole) or 0)
+        if repayment_id <= 0:
+            QMessageBox.warning(self, "Invalid Selection", "Selected row has no repayment ID.")
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Reversal",
+            "Set selected repayment paid amount to 0.00?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        reason, ok = QInputDialog.getText(self, "Reason", "Reason for reversal:")
+        if not ok:
+            return
+
+        success, message = update_loan_repayment_entry(self.db_path, repayment_id, 0.0, reason)
+        if not success:
+            QMessageBox.warning(self, "Reversal Failed", message)
+            return
+
+        QMessageBox.information(self, "Reversed", message)
+        self.load_repayment_dashboard()
+        if self.current_member_id:
             self.load_active_loans()
 
     def export_repayment_dashboard_csv(self) -> None:
