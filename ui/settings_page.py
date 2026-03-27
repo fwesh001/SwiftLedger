@@ -103,9 +103,22 @@ class SettingsPage(QWidget):
 
         # Theme
         self.combo_theme = QComboBox()
-        self.combo_theme.addItems(["Dark", "Light"])
+        self.combo_theme.addItems(["Dark", "Light", "Custom"])
         self.combo_theme.setFont(QFont("Arial", 11))
-        appear_form.addRow("Theme:", self.combo_theme)
+        
+        self.btn_edit_custom_theme = QPushButton("Edit Custom Colors...")
+        self.btn_edit_custom_theme.setVisible(False)
+        self.btn_edit_custom_theme.clicked.connect(self._open_custom_theme_dialog)
+        
+        theme_layout = QHBoxLayout()
+        theme_layout.addWidget(self.combo_theme)
+        theme_layout.addWidget(self.btn_edit_custom_theme)
+        
+        self.combo_theme.currentTextChanged.connect(
+            lambda t: self.btn_edit_custom_theme.setVisible(t == "Custom")
+        )
+        
+        appear_form.addRow("Theme:", theme_layout)
 
         # Text scale
         scale_row = QHBoxLayout()
