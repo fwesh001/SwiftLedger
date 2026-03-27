@@ -102,7 +102,12 @@ class AuditLogPage(QWidget):
         self.btn_refresh.clicked.connect(self.refresh_logs)
         filter_row.addWidget(self.btn_refresh)
 
-        self.btn_export = QPushButton("Export Log to PDF")
+        self.btn_export = QPushButton()
+        try:
+            from utils import set_button_icon
+            set_button_icon(self.btn_export, "document-export", "⇱ Export Log to PDF")
+        except Exception:
+            self.btn_export.setText("⇱ Export Log to PDF")
         self.btn_export.setMinimumWidth(140)
         self.btn_export.setMinimumHeight(34)
         self.btn_export.clicked.connect(self.export_to_pdf)
