@@ -423,6 +423,10 @@ class SettingsPage(QWidget):
         idx = self.combo_theme.findText(theme)
         if idx >= 0:
             self.combo_theme.setCurrentIndex(idx)
+            
+        self.custom_colors["bg"] = settings.get("custom_theme_bg", "#121212")
+        self.custom_colors["fg"] = settings.get("custom_theme_fg", "#ffffff")
+        self.custom_colors["sidebar"] = settings.get("custom_theme_sidebar", "#1e1e1e")
 
         scale_pct = int(float(settings.get('text_scale', 1.0)) * 100)
         self.slider_scale.setValue(max(80, min(150, scale_pct)))
@@ -623,6 +627,43 @@ class SettingsPage(QWidget):
         self._load_loan_products_table()
         self.settings_changed.emit()
         QMessageBox.information(self, "Updated", message)
+
+    def _open_custom_theme_dialog(self) -> None:
+        from PySide6.QtGui import QColor
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Custom Theme Colors")
+        dialog.setMinimumWidth(300)
+        layout = QFormLayout(dialog)
+        
+        btn_bg = QPushButton("Pick Base Background")
+        btn_fg = QPushButton("Pick Text/Foreground")
+        btn_sidebar = QPushButton("Pick Sidebar Background")
+        
+        def pick_bg():
+            color = QColorDialog.getColor(QColor(self.custom_colors["bg"]), self, "Pick Base Background")
+            if color.isValid(): self.custom_colors["bg"] = color.name()
+        
+        def pick_fg():
+            color = QColorDialog.getColor(QColor(self.custom_colors["fg"]), self, "Pick Target Text Color")
+            if color.isValid(): self.custom_colors["fg"] = color.name()
+            
+        def pick_sidebar():
+            color = QColorDialog.getColor(QColor(self.custom_colors["sidebar"]), self, "Pick Sidebar Color")
+            if color.isValid(): self.custom_colors["sidebar"] = color.name()
+
+        btn_bg.clicked.connect(pick_bg)
+        btn_fg.clicked.connect(pick_fg)
+        btn_sidebar.clicked.connect(pick_sidebar)
+        
+        layout.addRow("Main Area:", btn_bg)
+        layout.addRow("Text Color:", btn_fg)
+        layout.addRow("Sidebar Area:", btn_sidebar)
+        
+        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        btn_box.accepted.connect(dialog.accept)
+        layout.addRow(btn_box)
+        
+        dialog.exec()
 
     def _apply_settings(self) -> None:
         mode = self.combo_security_mode.currentText().lower().replace(" ", "_")
