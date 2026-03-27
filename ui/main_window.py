@@ -3228,9 +3228,9 @@ class MainWindow(QMainWindow):
         stylesheet = build_theme_stylesheet(theme=theme, text_scale=text_scale, custom_colors=custom_colors)
         self.setStyleSheet(stylesheet)
         
-        # Apply custom cursor - store as instance variable to prevent garbage collection
+        # Apply custom cursor - store both pixmap and cursor as instance variables to prevent garbage collection
         try:
-            self.custom_cursor = create_custom_cursor(theme, custom_colors)
+            self.custom_cursor_pixmap, self.custom_cursor = create_custom_cursor(theme, custom_colors)
             self.setCursor(self.custom_cursor)
             # Also set for all child widgets to ensure consistency
             for widget in self.findChildren(QWidget):
