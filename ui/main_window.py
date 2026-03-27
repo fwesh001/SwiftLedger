@@ -814,7 +814,8 @@ class MembersPage(QWidget):
         btn_font = QFont("Arial", 10)
         btn_font.setBold(True)
 
-        self.btn_download_template = QPushButton("Download Template")
+        self.btn_download_template = QPushButton()
+        set_button_icon(self.btn_download_template, "document-save", "⇲ Download Template")
         self.btn_download_template.setMinimumHeight(40)
         self.btn_download_template.setFont(btn_font)
         self.btn_download_template.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -2121,7 +2122,8 @@ class LoansPage(QWidget):
         self.btn_refresh_repayments.clicked.connect(self.load_repayment_dashboard)
         repayments_filter_row.addWidget(self.btn_refresh_repayments, 1, 4)
 
-        self.btn_export_repayments = QPushButton("Export CSV")
+        self.btn_export_repayments = QPushButton()
+        set_button_icon(self.btn_export_repayments, "document-export", "⇱ Export CSV")
         self.btn_export_repayments.setMinimumWidth(120)
         self.btn_export_repayments.clicked.connect(self.export_repayment_dashboard_csv)
         repayments_filter_row.addWidget(self.btn_export_repayments, 1, 5)
