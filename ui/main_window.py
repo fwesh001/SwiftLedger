@@ -47,7 +47,7 @@ from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
 from ui.theme_manager import build_theme_stylesheet
 from logic.data_manager import BulkDataManager
-from utils import format_currency, format_currency_with_words
+from utils import format_currency, format_currency_with_words, amount_to_words
 
 QLineEdit = UppercaseLineEdit
 
@@ -321,16 +321,16 @@ class DashboardPage(QWidget):
 
         # Stat cards
         self.card_members[2].setText(str(stats.get('total_members', 0)))
-        self.card_savings[2].setText(format_currency_with_words(stats.get('total_savings', 0), symbol="₦"))
-        self.card_loans[2].setText(format_currency_with_words(stats.get('total_loans_disbursed', 0), symbol="₦"))
-        self.card_interest[2].setText(format_currency_with_words(stats.get('total_projected_interest', 0), symbol="₦"))
+        self.card_savings[2].setText(format_currency(stats.get('total_savings', 0), symbol="₦"))
+        self.card_loans[2].setText(format_currency(stats.get('total_loans_disbursed', 0), symbol="₦"))
+        self.card_interest[2].setText(format_currency(stats.get('total_projected_interest', 0), symbol="₦"))
 
         # Dividend cards
         self.member_div_card[1].setText(
-            format_currency_with_words(stats.get('members_dividend_share', 0), symbol="₦")
+            format_currency(stats.get('members_dividend_share', 0), symbol="₦")
         )
         self.society_div_card[1].setText(
-            format_currency_with_words(stats.get('society_dividend_share', 0), symbol="₦")
+            format_currency(stats.get('society_dividend_share', 0), symbol="₦")
         )
 
         # LTS Ratio
@@ -540,9 +540,9 @@ class MemberProfileDialog(QDialog):
         loans = float(self.member_data.get("total_loans", 0.0) or 0.0)
         net = savings - loans
 
-        score_layout.addLayout(self._make_score_block("Total Savings", format_currency_with_words(savings, symbol="₦"), "#27ae60"))
-        score_layout.addLayout(self._make_score_block("Total Loans", format_currency_with_words(loans, symbol="₦"), "#e74c3c"))
-        score_layout.addLayout(self._make_score_block("Net Position", format_currency_with_words(net, symbol="₦"), "#34495e"))
+        score_layout.addLayout(self._make_score_block("Total Savings", format_currency(savings, symbol="₦"), "#27ae60"))
+        score_layout.addLayout(self._make_score_block("Total Loans", format_currency(loans, symbol="₦"), "#e74c3c"))
+        score_layout.addLayout(self._make_score_block("Net Position", format_currency(net, symbol="₦"), "#34495e"))
 
         outer.addWidget(scoreboard)
 
@@ -1065,14 +1065,14 @@ class MembersPage(QWidget):
 
                 # Current Savings
                 savings = float(member.get('current_savings', 0.0) or 0.0)
-                savings_item = QTableWidgetItem(format_currency_with_words(savings, symbol="₦"))
+                savings_item = QTableWidgetItem(format_currency(savings, symbol="₦"))
                 savings_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 savings_item.setForeground(QBrush(QColor("#2ecc71")))
                 self.table_members.setItem(row_idx, 3, savings_item)
 
                 # Total Loans
                 loans = float(member.get('total_loans', 0.0) or 0.0)
-                loans_item = QTableWidgetItem(format_currency_with_words(loans, symbol="₦"))
+                loans_item = QTableWidgetItem(format_currency(loans, symbol="₦"))
                 loans_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 if member.get('active_loan_count', 0) > 0 and loans > 0:
                     loans_item.setForeground(QBrush(QColor("#ff6f61")))
@@ -1348,14 +1348,28 @@ class SavingsPage(QWidget):
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         
-        # Amount input
+        # Amount input with real-time conversion label
         self.input_amount = QDoubleSpinBox()
         self.input_amount.setRange(0, 1_000_000)
         self.input_amount.setValue(0)
         self.input_amount.setDecimals(2)
         self.input_amount.setSingleStep(100)
         self.input_amount.setPrefix("₦")
-        form_layout.addRow("Amount:", self.input_amount)
+        self.input_amount.valueChanged.connect(self._update_amount_words_label)
+        
+        # Label to show money-words conversion
+        self.lbl_amount_words = QLabel()
+        self.lbl_amount_words.setStyleSheet("color: #7f8c8d; font-size: 9pt; font-style: italic;")
+        
+        amount_layout = QHBoxLayout()
+        amount_layout.setContentsMargins(0, 0, 0, 0)
+        amount_layout.setSpacing(8)
+        amount_layout.addWidget(self.input_amount)
+        amount_layout.addWidget(self.lbl_amount_words)
+        amount_layout.addStretch()
+        amount_widget = QWidget()
+        amount_widget.setLayout(amount_layout)
+        form_layout.addRow("Amount:", amount_widget)
         
         # Transaction type and payment mode
         self.combo_type = QComboBox()
@@ -1568,10 +1582,18 @@ class SavingsPage(QWidget):
                 self.table_savings.setItem(row_idx, 5, balance_item)
                 self.table_savings.setItem(row_idx, 6, id_item)
 
-            self.label_total_savings.setText(f"Total Savings: {format_currency_with_words(total_savings, symbol='₦')}")
+            self.label_total_savings.setText(f"Total Savings: {format_currency(total_savings, symbol='₦')}")
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load savings: {str(e)}")
+    
+    def _update_amount_words_label(self, value: float) -> None:
+        """Update the real-time money-words conversion label for savings amount."""
+        if value > 0:
+            words = amount_to_words(value)
+            self.lbl_amount_words.setText(f"({words})")
+        else:
+            self.lbl_amount_words.setText("")
     
     def post_saving(self) -> None:
         """Post a new savings transaction."""
@@ -1629,7 +1651,7 @@ class SavingsPage(QWidget):
         self.combo_type.setEnabled(True)
         self._update_transaction_types_for_member(False)
         self.label_member_name.setText("Name: Not Selected")
-        self.label_total_savings.setText(f"Total Savings: {format_currency_with_words(0.0, symbol='₦')}")
+        self.label_total_savings.setText(f"Total Savings: {format_currency(0.0, symbol='₦')}"))
         self.table_savings.setRowCount(0)
         self.btn_post.setEnabled(False)
 
@@ -1886,7 +1908,7 @@ class LoansPage(QWidget):
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         
-        # Principal input
+        # Principal input with real-time conversion label
         self.input_principal = QDoubleSpinBox()
         self.input_principal.setRange(0, 10_000_000)
         self.input_principal.setValue(0)
@@ -1894,7 +1916,21 @@ class LoansPage(QWidget):
         self.input_principal.setSingleStep(1000)
         self.input_principal.setPrefix("₦")
         self.input_principal.valueChanged.connect(self.validate_principal)
-        form_layout.addRow("Requested Principal:", self.input_principal)
+        self.input_principal.valueChanged.connect(self._update_principal_words_label)
+        
+        # Label to show money-words conversion for principal
+        self.lbl_principal_words = QLabel()
+        self.lbl_principal_words.setStyleSheet("color: #7f8c8d; font-size: 9pt; font-style: italic;")
+        
+        principal_layout = QHBoxLayout()
+        principal_layout.setContentsMargins(0, 0, 0, 0)
+        principal_layout.setSpacing(8)
+        principal_layout.addWidget(self.input_principal)
+        principal_layout.addWidget(self.lbl_principal_words)
+        principal_layout.addStretch()
+        principal_widget = QWidget()
+        principal_widget.setLayout(principal_layout)
+        form_layout.addRow("Requested Principal:", principal_widget)
 
         self.combo_loan_product = QComboBox()
         form_layout.addRow("Loan Plan:", self.combo_loan_product)
@@ -2357,6 +2393,14 @@ class LoansPage(QWidget):
         
         # Clear validation status
         self.label_validation_status.setText("")
+    
+    def _update_principal_words_label(self, value: float) -> None:
+        """Update the real-time money-words conversion label for loan principal."""
+        if value > 0:
+            words = amount_to_words(value)
+            self.lbl_principal_words.setText(f"({words})")
+        else:
+            self.lbl_principal_words.setText("")
     
     def validate_principal(self) -> None:
         """Real-time validation as principal amount changes."""
