@@ -1651,7 +1651,7 @@ class SavingsPage(QWidget):
         self.combo_type.setEnabled(True)
         self._update_transaction_types_for_member(False)
         self.label_member_name.setText("Name: Not Selected")
-        self.label_total_savings.setText(f"Total Savings: {format_currency(0.0, symbol='₦')}"))
+        self.label_total_savings.setText(f"Total Savings: {format_currency(0.0, symbol='₦')}")
         self.table_savings.setRowCount(0)
         self.btn_post.setEnabled(False)
 
