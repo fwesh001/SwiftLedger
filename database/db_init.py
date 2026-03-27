@@ -249,6 +249,12 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN theme TEXT DEFAULT 'dark';")
     if "text_scale" not in settings_columns:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN text_scale REAL DEFAULT 1.0;")
+    if "custom_theme_bg" not in settings_columns:
+        cursor.execute("ALTER TABLE system_settings ADD COLUMN custom_theme_bg TEXT DEFAULT '#121212';")
+    if "custom_theme_fg" not in settings_columns:
+        cursor.execute("ALTER TABLE system_settings ADD COLUMN custom_theme_fg TEXT DEFAULT '#ffffff';")
+    if "custom_theme_sidebar" not in settings_columns:
+        cursor.execute("ALTER TABLE system_settings ADD COLUMN custom_theme_sidebar TEXT DEFAULT '#1e1e1e';")
     if "address" not in settings_columns:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN address TEXT;")
     if "min_monthly_saving" not in settings_columns:
