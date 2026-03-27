@@ -46,7 +46,7 @@ from ui.settings_page import SettingsPage
 from ui.widgets import SearchFilterWidget, UppercaseLineEdit
 from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
-from ui.theme_manager import build_theme_stylesheet
+from ui.theme_manager import build_theme_stylesheet, create_custom_cursor
 from logic.data_manager import BulkDataManager
 from utils import format_currency, format_currency_with_words, amount_to_words
 
@@ -3213,12 +3213,28 @@ class MainWindow(QMainWindow):
         ok, settings = get_system_settings(self.db_path)
         theme = "dark"
         text_scale = 1.0
+        custom_colors = None
         if ok and settings:
             theme = str(settings.get("theme", "dark")).lower()
             text_scale = float(settings.get("text_scale", 1.0))
+            if theme == "custom":
+                custom_colors = {
+                    "bg": settings.get("custom_theme_bg", "#121212"),
+                    "fg": settings.get("custom_theme_fg", "#ffffff"),
+                    "sidebar": settings.get("custom_theme_sidebar", "#1e1e1e"),
+                }
 
-        stylesheet = build_theme_stylesheet(theme=theme, text_scale=text_scale)
+        stylesheet = build_theme_stylesheet(theme=theme, text_scale=text_scale, custom_colors=custom_colors)
         self.setStyleSheet(stylesheet)
+        
+        # Apply custom cursor
+        app = QApplication.instance()
+        if app:
+            try:
+                cursor = create_custom_cursor(theme, custom_colors)
+                app.setOverrideCursor(cursor)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
