@@ -2763,6 +2763,195 @@ def get_all_logs(db_path: str) -> Tuple[bool, List[Dict]]:
             conn.close()
 
 
+def get_report_pack_savings(
+    db_path: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Tuple[bool, List[Dict]]:
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        query = (
+            """
+            SELECT
+                st.id,
+                st.trans_date,
+                m.member_id,
+                m.staff_number,
+                m.full_name,
+                st.trans_type,
+                st.payment_mode,
+                st.transfer_reference,
+                st.amount,
+                st.running_balance
+            FROM savings_transactions st
+            JOIN members m ON m.member_id = st.member_id
+            WHERE 1=1
+            """
+        )
+        params: List[object] = []
+        if start_date:
+            query += " AND DATE(st.trans_date) >= DATE(?)"
+            params.append(start_date)
+        if end_date:
+            query += " AND DATE(st.trans_date) <= DATE(?)"
+            params.append(end_date)
+        query += " ORDER BY st.id DESC"
+
+        cursor.execute(query, params)
+        return True, [dict(row) for row in cursor.fetchall()]
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_report_pack_loans(
+    db_path: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Tuple[bool, List[Dict]]:
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        query = (
+            """
+            SELECT
+                l.loan_id,
+                l.date_issued,
+                m.member_id,
+                m.staff_number,
+                m.full_name,
+                COALESCE(lp.name, 'Unspecified') AS loan_type,
+                l.principal,
+                l.interest_rate,
+                l.duration_months,
+                l.status,
+                l.principal_paid,
+                l.interest_paid,
+                l.total_repaid,
+                l.due_date,
+                MAX(0, l.principal - COALESCE(l.principal_paid, 0.0)) AS outstanding_principal
+            FROM loans l
+            JOIN members m ON m.member_id = l.member_id
+            LEFT JOIN loan_products lp ON lp.product_id = l.product_id
+            WHERE 1=1
+            """
+        )
+        params: List[object] = []
+        if start_date:
+            query += " AND DATE(l.date_issued) >= DATE(?)"
+            params.append(start_date)
+        if end_date:
+            query += " AND DATE(l.date_issued) <= DATE(?)"
+            params.append(end_date)
+        query += " ORDER BY l.loan_id DESC"
+
+        cursor.execute(query, params)
+        return True, [dict(row) for row in cursor.fetchall()]
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_report_pack_repayments(
+    db_path: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Tuple[bool, List[Dict]]:
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        query = (
+            """
+            SELECT
+                lr.repayment_id,
+                lr.loan_id,
+                lr.installment_no,
+                lr.member_id,
+                m.staff_number,
+                m.full_name,
+                lr.due_date,
+                lr.payment_date,
+                lr.principal_due,
+                lr.interest_due,
+                lr.total_due,
+                lr.principal_paid,
+                lr.interest_paid,
+                lr.total_paid,
+                lr.status,
+                MAX(0, COALESCE(lr.total_due, 0.0) - COALESCE(lr.total_paid, 0.0)) AS outstanding
+            FROM loan_repayments lr
+            JOIN members m ON m.member_id = lr.member_id
+            WHERE 1=1
+            """
+        )
+        params: List[object] = []
+        if start_date:
+            query += " AND DATE(COALESCE(lr.payment_date, lr.due_date)) >= DATE(?)"
+            params.append(start_date)
+        if end_date:
+            query += " AND DATE(COALESCE(lr.payment_date, lr.due_date)) <= DATE(?)"
+            params.append(end_date)
+        query += " ORDER BY lr.repayment_id DESC"
+
+        cursor.execute(query, params)
+        return True, [dict(row) for row in cursor.fetchall()]
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_report_pack_audit_logs(
+    db_path: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Tuple[bool, List[Dict]]:
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        query = (
+            """
+            SELECT id, timestamp, user, category, description, status
+            FROM audit_logs
+            WHERE 1=1
+            """
+        )
+        params: List[object] = []
+        if start_date:
+            query += " AND DATE(timestamp) >= DATE(?)"
+            params.append(start_date)
+        if end_date:
+            query += " AND DATE(timestamp) <= DATE(?)"
+            params.append(end_date)
+        query += " ORDER BY id DESC"
+
+        cursor.execute(query, params)
+        return True, [dict(row) for row in cursor.fetchall()]
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
+
+
 if __name__ == "__main__":
     # Example usage
     db_path = "swiftledger.db"
