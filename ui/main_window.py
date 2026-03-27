@@ -2660,7 +2660,7 @@ class LoansPage(QWidget):
         self.label_repay_overdue.setText(f"Overdue: {overdue}")
         self.label_repay_due_week.setText(f"Due in 7 days: {due_week}")
         self.label_repay_collection.setText(f"Collection Rate: {collection_rate:.2f}%")
-        self.label_repay_outstanding.setText(f"Outstanding: {format_currency(outstanding, symbol='₦')}"))
+        self.label_repay_outstanding.setText(f"Outstanding: {format_currency(outstanding, symbol='₦')}")
 
         overdue_color = "#e74c3c" if overdue > 0 else "#27ae60"
         due_week_color = "#f39c12" if due_week > 0 else "#27ae60"
