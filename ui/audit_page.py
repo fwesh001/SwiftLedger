@@ -300,8 +300,12 @@ class AuditLogPage(QWidget):
             QMessageBox.warning(self, "No Data", "No logs to export.")
             return
 
+        cat_text = self.combo_category.currentText()
+        export_type = "System logs (pdf)" if cat_text in ["All Categories", "System"] else f"{cat_text} logs (pdf)"
+        default_dir = get_export_path("Audit page", export_type)
+
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save Audit Report", "SwiftLedger_Audit_Report.pdf",
+            self, "Save Audit Report", str(default_dir / "SwiftLedger_Audit_Report.pdf"),
             "PDF Files (*.pdf)"
         )
         if not path:
