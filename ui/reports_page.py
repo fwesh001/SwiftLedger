@@ -19,6 +19,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional
 
+from utils import get_export_path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QLineEdit, QMessageBox,
@@ -1095,9 +1096,10 @@ class ReportsPage(QWidget):
         if pdf is None or member is None:
             return
 
+        default_dir = get_export_path("Report page", "Members statement (pdf)", member.get("full_name"), staff)
         path, _ = QFileDialog.getSaveFileName(
             self, "Save Member Statement",
-            f"SwiftLedger_Statement_{staff}.pdf", "PDF Files (*.pdf)",
+            str(default_dir / f"SwiftLedger_Statement_{staff}.pdf"), "PDF Files (*.pdf)",
         )
         if not path:
             return
@@ -1126,9 +1128,10 @@ class ReportsPage(QWidget):
         if pdf is None:
             return
 
+        default_dir = get_export_path("Report page", "Society statement (pdf)")
         path, _ = QFileDialog.getSaveFileName(
             self, "Save Society Summary",
-            "SwiftLedger_Society_Summary.pdf", "PDF Files (*.pdf)",
+            str(default_dir / "SwiftLedger_Society_Summary.pdf"), "PDF Files (*.pdf)",
         )
         if not path:
             return
@@ -1150,10 +1153,11 @@ class ReportsPage(QWidget):
             return
 
         now_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_dir = get_export_path("Report page", "Chairman’s review (xls)")
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Chairman Review Pack",
-            f"SwiftLedger_Chairman_Review_Pack_{now_stamp}.xlsx",
+            str(default_dir / f"SwiftLedger_Chairman_Review_Pack_{now_stamp}.xlsx"),
             "Excel Files (*.xlsx)",
         )
         if not path:
