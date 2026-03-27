@@ -52,6 +52,7 @@ class SettingsPage(QWidget):
         self.db_path = db_path
         self.current_auth_hash = ""
         self.pending_recovery_key = ""
+        self.custom_colors = {"bg": "#121212", "fg": "#ffffff", "sidebar": "#1e1e1e"}
         self._build_ui()
         self._load_current_settings()
         self._load_loan_products_table()
