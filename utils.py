@@ -141,6 +141,26 @@ def amount_to_words(value: float | int | str | None) -> str:
     return words.title()
 
 
+def get_export_path(page: str, export_type: str, member_name: str = None, staff_id: str = None) -> Path:
+    """
+    Returns a standardized export path on the user's Desktop.
+    Format: Desktop/Swift-Ledger/{Page}/{Type}/{Year}/{Month}
+    If member info is provided: .../Member-360/{FullName_StaffID}
+    """
+    import datetime
+    now = datetime.datetime.now()
+    year = now.strftime("%Y")
+    month = now.strftime("%m")
+    
+    base_path = Path.home() / "Desktop" / "Swift-Ledger" / page / export_type / year / month
+    if member_name and staff_id:
+        safe_name = "".join(c for c in member_name if c.isalnum() or c in " -_").strip()
+        safe_id = "".join(c for c in staff_id if c.isalnum() or c in " -_").strip()
+        base_path = base_path / "Member-360" / f"{safe_name}_{safe_id}"
+        
+    base_path.mkdir(parents=True, exist_ok=True)
+    return base_path
+
 def format_currency_with_words(value: float | int | str | None, symbol: str = "NGN") -> str:
     """Return formatted amount with words, e.g. ``NGN 1,000,000.00 (One Million Naira)``."""
     return f"{format_currency(value, symbol=symbol)} ({amount_to_words(value)})"
