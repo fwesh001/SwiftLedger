@@ -48,7 +48,7 @@ from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
 from ui.theme_manager import build_theme_stylesheet, create_custom_cursor
 from logic.data_manager import BulkDataManager
-from utils import format_currency, format_currency_with_words, amount_to_words
+from utils import format_currency, format_currency_with_words, amount_to_words, set_button_icon
 
 QLineEdit = UppercaseLineEdit
 
@@ -575,7 +575,6 @@ class MemberProfileDialog(QDialog):
         self.btn_edit.clicked.connect(self._toggle_edit)
 
         self.btn_export = QPushButton()
-        from utils import set_button_icon
         set_button_icon(self.btn_export, "document-export", "⇱ Export PDF")
         self.btn_export.setMinimumHeight(36)
         self.btn_export.setStyleSheet(
