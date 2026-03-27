@@ -17,7 +17,7 @@ from pathlib import Path
 # ─────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent
 PROJECT_NAME = "SwiftLedger"
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 DIST_DIR = PROJECT_ROOT / "dist"
 BUILD_DIR = PROJECT_ROOT / "build"
 MAIN_SCRIPT = PROJECT_ROOT / "main.py"
