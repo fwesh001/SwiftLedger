@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QComboBox, QScrollArea, QFrame, QLineEdit, QDoubleSpinBox,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QDialog,
     QDialogButtonBox, QApplication, QToolTip,
-    QTabWidget,
+    QTabWidget, QColorDialog
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QIcon
