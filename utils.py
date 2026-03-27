@@ -141,6 +141,15 @@ def amount_to_words(value: float | int | str | None) -> str:
     return words.title()
 
 
+def set_button_icon(btn, theme_name: str, fallback_text: str) -> None:
+    from PySide6.QtGui import QIcon
+    icon = QIcon.fromTheme(theme_name)
+    if not icon.isNull():
+        btn.setIcon(icon)
+        btn.setText(fallback_text.replace("⇱", "").replace("⇲", "").strip())
+    else:
+        btn.setText(fallback_text)
+
 def get_export_path(page: str, export_type: str, member_name: str = None, staff_id: str = None) -> Path:
     """
     Returns a standardized export path on the user's Desktop.
