@@ -213,7 +213,12 @@ class ReportsPage(QWidget):
         )
         self.btn_society_pdf.clicked.connect(self._generate_society_pdf)
 
-        self.btn_chairman_pack = QPushButton("Export Chairman Review Pack (Excel)")
+        self.btn_chairman_pack = QPushButton()
+        try:
+            from utils import set_button_icon
+            set_button_icon(self.btn_chairman_pack, "document-export", "⇱ Export Chairman Review Pack (Excel)")
+        except Exception:
+            self.btn_chairman_pack.setText("⇱ Export Chairman Review Pack (Excel)")
         self.btn_chairman_pack.setMinimumHeight(38)
         self.btn_chairman_pack.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_chairman_pack.setStyleSheet(
