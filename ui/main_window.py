@@ -115,13 +115,13 @@ class DashboardPage(QWidget):
             "👥  Total Members", "0", self.CARD_COLOURS['members']
         )
         self.card_savings = self._create_stat_card(
-            "💰  Total Savings", format_currency_with_words(0.0, symbol="₦"), self.CARD_COLOURS['savings']
+            "💰  Total Savings", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['savings']
         )
         self.card_loans = self._create_stat_card(
-            "🏦  Loans Disbursed", format_currency_with_words(0.0, symbol="₦"), self.CARD_COLOURS['loans']
+            "🏦  Loans Disbursed", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['loans']
         )
         self.card_interest = self._create_stat_card(
-            "📈  Projected Interest", format_currency_with_words(0.0, symbol="₦"), self.CARD_COLOURS['interest']
+            "📈  Projected Interest", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['interest']
         )
 
         cards_layout.addWidget(self.card_members[0], 0, 0)
@@ -144,10 +144,10 @@ class DashboardPage(QWidget):
         div_layout.setSpacing(20)
 
         self.member_div_card = self._create_dividend_card(
-            "Members' Share (60%)", format_currency_with_words(0.0, symbol="₦"), "#27ae60"
+            "Members' Share (60%)", format_currency(0.0, symbol="₦"), "#27ae60"
         )
         self.society_div_card = self._create_dividend_card(
-            "Society Reserve (40%)", format_currency_with_words(0.0, symbol="₦"), "#e74c3c"
+            "Society Reserve (40%)", format_currency(0.0, symbol="₦"), "#e74c3c"
         )
 
         div_layout.addWidget(self.member_div_card[0])
@@ -191,9 +191,9 @@ class DashboardPage(QWidget):
         liquidity_group = QGroupBox("Liquidity Status")
         liquidity_group.setFont(QFont("Arial", 12))
         liquidity_layout = QVBoxLayout(liquidity_group)
-        self.lbl_available_cash = QLabel(f"Available Cash: {format_currency_with_words(0.0, symbol='₦')}")
+        self.lbl_available_cash = QLabel(f"Available Cash: {format_currency(0.0, symbol='₦')}")
         self.lbl_available_cash.setStyleSheet("color: #27ae60; font-weight: bold;")
-        self.lbl_outstanding_loans = QLabel(f"Outstanding Loans: {format_currency_with_words(0.0, symbol='₦')}")
+        self.lbl_outstanding_loans = QLabel(f"Outstanding Loans: {format_currency(0.0, symbol='₦')}")
         self.lbl_outstanding_loans.setStyleSheet("color: #ff6f61; font-weight: bold;")
         liquidity_layout.addWidget(self.lbl_available_cash)
         liquidity_layout.addWidget(self.lbl_outstanding_loans)
@@ -1549,8 +1549,8 @@ class SavingsPage(QWidget):
                 transfer_item = QTableWidgetItem(str(item.get('transfer_reference', '') or ''))
                 amount_value = float(item.get('amount', 0.0) or 0.0)
                 balance_value = float(item.get('running_balance', 0.0) or 0.0)
-                amount_item = QTableWidgetItem(format_currency_with_words(amount_value, symbol="₦"))
-                balance_item = QTableWidgetItem(format_currency_with_words(balance_value, symbol="₦"))
+                amount_item = QTableWidgetItem(format_currency(amount_value, symbol="₦"))
+                balance_item = QTableWidgetItem(format_currency(balance_value, symbol="₦"))
                 id_item = QTableWidgetItem(str(item.get('id', '')))
                 amount_item.setData(Qt.ItemDataRole.UserRole, amount_value)
                 balance_item.setData(Qt.ItemDataRole.UserRole, balance_value)
@@ -2468,7 +2468,7 @@ class LoansPage(QWidget):
         layout = QVBoxLayout(preview_dialog)
         
         # Info label
-        info_text = f"Loan: {format_currency_with_words(principal, symbol='₦')} @ {interest_rate}% for {duration} months"
+        info_text = f"Loan: {format_currency(principal, symbol='₦')} @ {interest_rate}% for {duration} months"
         info_label = QLabel(info_text)
         info_font = QFont("Arial", 11)
         info_font.setBold(True)
@@ -2488,19 +2488,19 @@ class LoansPage(QWidget):
             month_item = QTableWidgetItem(str(month_data['month_number']))
             table.setItem(row_idx, 0, month_item)
             
-            principal_item = QTableWidgetItem(format_currency_with_words(month_data['principal_payment'], symbol="₦"))
+            principal_item = QTableWidgetItem(format_currency(month_data['principal_payment'], symbol="₦"))
             principal_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
             table.setItem(row_idx, 1, principal_item)
             
-            interest_item = QTableWidgetItem(format_currency_with_words(month_data['interest_payment'], symbol="₦"))
+            interest_item = QTableWidgetItem(format_currency(month_data['interest_payment'], symbol="₦"))
             interest_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
             table.setItem(row_idx, 2, interest_item)
             
-            total_item = QTableWidgetItem(format_currency_with_words(month_data['total_payment'], symbol="₦"))
+            total_item = QTableWidgetItem(format_currency(month_data['total_payment'], symbol="₦"))
             total_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
             table.setItem(row_idx, 3, total_item)
             
-            remaining_item = QTableWidgetItem(format_currency_with_words(month_data['remaining_balance'], symbol="₦"))
+            remaining_item = QTableWidgetItem(format_currency(month_data['remaining_balance'], symbol="₦"))
             remaining_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
             table.setItem(row_idx, 4, remaining_item)
         
@@ -2603,9 +2603,9 @@ class LoansPage(QWidget):
             total_paid = float(item.get("total_paid", 0.0) or 0.0)
             outstanding = max(0.0, total_due - total_paid)
 
-            due_item = QTableWidgetItem(format_currency_with_words(total_due, symbol="₦"))
-            paid_item = QTableWidgetItem(format_currency_with_words(total_paid, symbol="₦"))
-            out_item = QTableWidgetItem(format_currency_with_words(outstanding, symbol="₦"))
+            due_item = QTableWidgetItem(format_currency(total_due, symbol="₦"))
+            paid_item = QTableWidgetItem(format_currency(total_paid, symbol="₦"))
+            out_item = QTableWidgetItem(format_currency(outstanding, symbol="₦"))
             due_item.setData(Qt.ItemDataRole.UserRole, total_due)
             paid_item.setData(Qt.ItemDataRole.UserRole, total_paid)
             out_item.setData(Qt.ItemDataRole.UserRole, outstanding)
@@ -2649,7 +2649,7 @@ class LoansPage(QWidget):
             self.label_repay_overdue.setText("Overdue: 0")
             self.label_repay_due_week.setText("Due in 7 days: 0")
             self.label_repay_collection.setText("Collection Rate: 0.00%")
-            self.label_repay_outstanding.setText(f"Outstanding: {format_currency_with_words(0.0, symbol='₦')}")
+            self.label_repay_outstanding.setText(f"Outstanding: {format_currency(0.0, symbol='₦')}")
             return
 
         overdue = int(summary.get("overdue_count", 0.0) or 0.0)
@@ -2660,7 +2660,7 @@ class LoansPage(QWidget):
         self.label_repay_overdue.setText(f"Overdue: {overdue}")
         self.label_repay_due_week.setText(f"Due in 7 days: {due_week}")
         self.label_repay_collection.setText(f"Collection Rate: {collection_rate:.2f}%")
-        self.label_repay_outstanding.setText(f"Outstanding: {format_currency_with_words(outstanding, symbol='₦')}")
+        self.label_repay_outstanding.setText(f"Outstanding: {format_currency(outstanding, symbol='₦')}"))
 
         overdue_color = "#e74c3c" if overdue > 0 else "#27ae60"
         due_week_color = "#f39c12" if due_week > 0 else "#27ae60"
@@ -2854,7 +2854,7 @@ class LoansPage(QWidget):
                 self.table_loans.setItem(row_idx, 0, loan_id_item)
                 
                 # Principal
-                principal_item = QTableWidgetItem(format_currency_with_words(loan['principal'], symbol="₦"))
+                principal_item = QTableWidgetItem(format_currency(loan['principal'], symbol="₦"))
                 principal_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 self.table_loans.setItem(row_idx, 1, principal_item)
                 
@@ -2865,13 +2865,13 @@ class LoansPage(QWidget):
 
                 # Total Repaid
                 total_repaid = float(loan.get('total_repaid', 0.0) or 0.0)
-                repaid_item = QTableWidgetItem(format_currency_with_words(total_repaid, symbol="₦"))
+                repaid_item = QTableWidgetItem(format_currency(total_repaid, symbol="₦"))
                 repaid_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 self.table_loans.setItem(row_idx, 3, repaid_item)
 
                 # Outstanding
                 outstanding = float(loan.get('outstanding_principal', 0.0) or 0.0)
-                outstanding_item = QTableWidgetItem(format_currency_with_words(outstanding, symbol="₦"))
+                outstanding_item = QTableWidgetItem(format_currency(outstanding, symbol="₦"))
                 outstanding_item.setTextAlignment(Qt.AlignmentFlag.AlignRight)
                 self.table_loans.setItem(row_idx, 4, outstanding_item)
                 
