@@ -36,6 +36,7 @@ from database.queries import (
     get_member_savings, get_member_loans, get_society_stats,
     get_all_members,
     get_member_statement_data, get_society_report_stats, search_members, get_report_date_bounds,
+    get_report_pack_savings, get_report_pack_loans, get_report_pack_repayments, get_report_pack_audit_logs,
 )
 from database.db_init import log_event
 from ui.widgets import SearchFilterWidget
@@ -201,10 +202,21 @@ class ReportsPage(QWidget):
         )
         self.btn_society_pdf.clicked.connect(self._generate_society_pdf)
 
+        self.btn_chairman_pack = QPushButton("Export Chairman Review Pack (Excel)")
+        self.btn_chairman_pack.setMinimumHeight(38)
+        self.btn_chairman_pack.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_chairman_pack.setStyleSheet(
+            "QPushButton { background-color: #8e44ad; color: white; "
+            "border-radius: 6px; padding: 8px 20px; font-weight: bold; } "
+            "QPushButton:hover { background-color: #9b59b6; }"
+        )
+        self.btn_chairman_pack.clicked.connect(self._generate_chairman_review_pack)
+
         summary_actions = QHBoxLayout()
         summary_actions.setSpacing(12)
         summary_actions.addWidget(self.btn_society_preview)
         summary_actions.addWidget(self.btn_society_pdf)
+        summary_actions.addWidget(self.btn_chairman_pack)
         summary_layout.addLayout(summary_actions)
 
         main.addWidget(summary_group)
@@ -1132,6 +1144,252 @@ class ReportsPage(QWidget):
         log_event("Admin", "Reports", "Society summary report exported",
                   "Success", self.db_path)
         QMessageBox.information(self, "Exported", f"Summary saved to:\n{path}")
+
+    def _generate_chairman_review_pack(self) -> None:
+        if not self._validate_date_range():
+            return
+
+        now_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Chairman Review Pack",
+            f"SwiftLedger_Chairman_Review_Pack_{now_stamp}.xlsx",
+            "Excel Files (*.xlsx)",
+        )
+        if not path:
+            return
+
+        ok, message = self._build_chairman_review_pack(path)
+        if not ok:
+            QMessageBox.warning(self, "Export Error", message)
+            return
+
+        log_event("Admin", "Reports", "Chairman review pack exported", "Success", self.db_path)
+        QMessageBox.information(self, "Exported", f"Chairman review pack saved to:\n{path}")
+
+    def _build_chairman_review_pack(self, path: str) -> tuple[bool, str]:
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment
+        except Exception:
+            return False, "openpyxl is required for Excel export."
+
+        filters = self._current_filters()
+        start_date = str(filters.get("start_date") or "")
+        end_date = str(filters.get("end_date") or "")
+
+        ok_members, members = get_all_members(self.db_path)
+        ok_savings, savings = get_report_pack_savings(self.db_path, start_date=start_date, end_date=end_date)
+        ok_loans, loans = get_report_pack_loans(self.db_path, start_date=start_date, end_date=end_date)
+        ok_repayments, repayments = get_report_pack_repayments(self.db_path, start_date=start_date, end_date=end_date)
+        ok_audit, audits = get_report_pack_audit_logs(self.db_path, start_date=start_date, end_date=end_date)
+        ok_stats, stats = get_society_report_stats(
+            self.db_path,
+            start_date=start_date,
+            end_date=end_date,
+            include_savings=True,
+            include_loans=True,
+            include_repayments=True,
+        )
+
+        if not (ok_members and ok_savings and ok_loans and ok_repayments and ok_audit and ok_stats):
+            return False, "Failed to gather all report data."
+
+        info = self._society_header()
+        generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        snapshot_id = f"SLRP-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+        total_member_savings = sum(float(m.get("current_savings", 0) or 0) for m in members)
+        total_member_loans = sum(float(m.get("total_loans", 0) or 0) for m in members)
+        checksum = round(total_member_savings + total_member_loans + float(stats.get("total_repayments", 0.0) or 0.0), 2)
+
+        wb = Workbook()
+        ws_summary = wb.active
+        ws_summary.title = "Summary"
+        ws_members = wb.create_sheet("Members")
+        ws_savings = wb.create_sheet("Savings")
+        ws_loans = wb.create_sheet("Loans")
+        ws_repayments = wb.create_sheet("Repayments")
+        ws_audit = wb.create_sheet("Audit")
+        ws_meta = wb.create_sheet("Metadata")
+
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
+
+        def _write_sheet(ws, headers, rows):
+            for col_idx, header in enumerate(headers, start=1):
+                cell = ws.cell(row=1, column=col_idx, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            ws.freeze_panes = "A2"
+
+            for row_idx, row_values in enumerate(rows, start=2):
+                for col_idx, value in enumerate(row_values, start=1):
+                    ws.cell(row=row_idx, column=col_idx, value=value)
+
+            self._auto_fit_worksheet(ws)
+
+        summary_rows = [
+            ["Society Name", info.get("name", "SwiftLedger")],
+            ["Report Scope", "Full Chairman Review Pack"],
+            ["Date Range", f"{start_date} to {end_date}"],
+            ["Generated At", generated_at],
+            ["Snapshot ID", snapshot_id],
+            ["Total Members", int(stats.get("total_members", 0) or 0)],
+            ["Total Savings", float(stats.get("total_savings", 0.0) or 0.0)],
+            ["Total Loans Disbursed", float(stats.get("total_loans_disbursed", 0.0) or 0.0)],
+            ["Total Repayments", float(stats.get("total_repayments", 0.0) or 0.0)],
+            ["Projected Interest", float(stats.get("total_projected_interest", 0.0) or 0.0)],
+            ["Members Dividend (60%)", float(stats.get("members_dividend_share", 0.0) or 0.0)],
+            ["Society Reserve (40%)", float(stats.get("society_dividend_share", 0.0) or 0.0)],
+        ]
+        _write_sheet(ws_summary, ["Metric", "Value"], summary_rows)
+
+        member_rows = [
+            [
+                m.get("member_id", ""),
+                m.get("staff_number", ""),
+                m.get("full_name", ""),
+                m.get("phone", ""),
+                m.get("bank_name", ""),
+                m.get("account_no", ""),
+                m.get("department", ""),
+                m.get("date_joined", ""),
+                float(m.get("current_savings", 0.0) or 0.0),
+                float(m.get("total_loans", 0.0) or 0.0),
+            ]
+            for m in members
+        ]
+        _write_sheet(
+            ws_members,
+            ["Member ID", "Staff Number", "Full Name", "Phone", "Bank Name", "Account No", "Department", "Date Joined", "Current Savings", "Total Loans"],
+            member_rows,
+        )
+
+        savings_rows = [
+            [
+                r.get("id", ""),
+                r.get("trans_date", ""),
+                r.get("member_id", ""),
+                r.get("staff_number", ""),
+                r.get("full_name", ""),
+                r.get("trans_type", ""),
+                r.get("payment_mode", ""),
+                r.get("transfer_reference", ""),
+                float(r.get("amount", 0.0) or 0.0),
+                float(r.get("running_balance", 0.0) or 0.0),
+            ]
+            for r in savings
+        ]
+        _write_sheet(
+            ws_savings,
+            ["ID", "Transaction Date", "Member ID", "Staff Number", "Full Name", "Type", "Payment Mode", "Transfer Ref", "Amount", "Running Balance"],
+            savings_rows,
+        )
+
+        loan_rows = [
+            [
+                r.get("loan_id", ""),
+                r.get("date_issued", ""),
+                r.get("member_id", ""),
+                r.get("staff_number", ""),
+                r.get("full_name", ""),
+                r.get("loan_type", ""),
+                float(r.get("principal", 0.0) or 0.0),
+                float(r.get("interest_rate", 0.0) or 0.0),
+                int(r.get("duration_months", 0) or 0),
+                r.get("status", ""),
+                float(r.get("principal_paid", 0.0) or 0.0),
+                float(r.get("interest_paid", 0.0) or 0.0),
+                float(r.get("total_repaid", 0.0) or 0.0),
+                float(r.get("outstanding_principal", 0.0) or 0.0),
+                r.get("due_date", ""),
+            ]
+            for r in loans
+        ]
+        _write_sheet(
+            ws_loans,
+            ["Loan ID", "Date Issued", "Member ID", "Staff Number", "Full Name", "Loan Type", "Principal", "Interest Rate", "Duration Months", "Status", "Principal Paid", "Interest Paid", "Total Repaid", "Outstanding Principal", "Due Date"],
+            loan_rows,
+        )
+
+        repayment_rows = [
+            [
+                r.get("repayment_id", ""),
+                r.get("loan_id", ""),
+                r.get("installment_no", ""),
+                r.get("member_id", ""),
+                r.get("staff_number", ""),
+                r.get("full_name", ""),
+                r.get("due_date", ""),
+                r.get("payment_date", ""),
+                float(r.get("principal_due", 0.0) or 0.0),
+                float(r.get("interest_due", 0.0) or 0.0),
+                float(r.get("total_due", 0.0) or 0.0),
+                float(r.get("principal_paid", 0.0) or 0.0),
+                float(r.get("interest_paid", 0.0) or 0.0),
+                float(r.get("total_paid", 0.0) or 0.0),
+                float(r.get("outstanding", 0.0) or 0.0),
+                r.get("status", ""),
+            ]
+            for r in repayments
+        ]
+        _write_sheet(
+            ws_repayments,
+            ["Repayment ID", "Loan ID", "Installment No", "Member ID", "Staff Number", "Full Name", "Due Date", "Payment Date", "Principal Due", "Interest Due", "Total Due", "Principal Paid", "Interest Paid", "Total Paid", "Outstanding", "Status"],
+            repayment_rows,
+        )
+
+        audit_rows = [
+            [
+                r.get("id", ""),
+                r.get("timestamp", ""),
+                r.get("user", ""),
+                r.get("category", ""),
+                r.get("description", ""),
+                r.get("status", ""),
+            ]
+            for r in audits
+        ]
+        _write_sheet(ws_audit, ["ID", "Timestamp", "User", "Category", "Description", "Status"], audit_rows)
+
+        metadata_rows = [
+            ["snapshot_id", snapshot_id],
+            ["generated_at", generated_at],
+            ["generated_by", "Admin"],
+            ["review_mode", "Chairman view-only"],
+            ["date_from", start_date],
+            ["date_to", end_date],
+            ["members_rows", len(member_rows)],
+            ["savings_rows", len(savings_rows)],
+            ["loans_rows", len(loan_rows)],
+            ["repayments_rows", len(repayment_rows)],
+            ["audit_rows", len(audit_rows)],
+            ["members_total_savings", round(total_member_savings, 2)],
+            ["members_total_loans", round(total_member_loans, 2)],
+            ["summary_total_repayments", round(float(stats.get("total_repayments", 0.0) or 0.0), 2)],
+            ["checksum", checksum],
+        ]
+        _write_sheet(ws_meta, ["Key", "Value"], metadata_rows)
+
+        try:
+            wb.save(path)
+        except Exception as exc:
+            return False, f"Failed to save Excel file: {exc}"
+
+        return True, "OK"
+
+    @staticmethod
+    def _auto_fit_worksheet(ws) -> None:
+        for col in ws.columns:
+            max_len = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                value = "" if cell.value is None else str(cell.value)
+                if len(value) > max_len:
+                    max_len = len(value)
+            ws.column_dimensions[col_letter].width = min(max(12, max_len + 2), 50)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
