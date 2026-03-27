@@ -7,7 +7,12 @@ from utils import get_asset_path
 from PySide6.QtGui import QCursor, QPixmap, QPainter, QPolygon, QColor
 from PySide6.QtCore import Qt, QPoint
 
-def create_custom_cursor(theme: str, custom_colors: dict = None) -> QCursor:
+def create_custom_cursor(theme: str, custom_colors: dict = None) -> tuple:
+    """Create custom cursor and return both pixmap and cursor.
+    
+    Returns:
+        Tuple of (QPixmap, QCursor) to allow caller to store both and prevent GC.
+    """
     size = 32
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -36,7 +41,8 @@ def create_custom_cursor(theme: str, custom_colors: dict = None) -> QCursor:
     painter.drawPolygon(poly)
     painter.end()
     
-    return QCursor(pixmap, 2, 2)
+    cursor = QCursor(pixmap, 2, 2)
+    return pixmap, cursor
 
 def build_theme_stylesheet(theme: str = "dark", text_scale: float = 1.0, custom_colors: dict = None) -> str:
     """Load a QSS template and inject scaled font size.
