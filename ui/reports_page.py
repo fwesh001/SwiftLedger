@@ -534,8 +534,8 @@ class ReportsPage(QWidget):
                     str(tx.get("trans_date", ""))[:10],
                     str(tx.get("trans_type", "")),
                     str(tx.get("payment_mode", "")),
-                    format_currency_with_words(tx.get('amount', 0), symbol='NGN'),
-                    format_currency_with_words(tx.get('running_balance', 0), symbol='NGN'),
+                    format_currency(tx.get('amount', 0), symbol='NGN'),
+                    format_currency(tx.get('running_balance', 0), symbol='NGN'),
                 ]
                 for tx in savings_txns
             ]
@@ -552,12 +552,12 @@ class ReportsPage(QWidget):
                 [
                     str(loan.get("loan_id", "")),
                     str(loan.get("loan_type", "Unspecified")),
-                    format_currency_with_words(loan.get('principal', 0), symbol='NGN'),
+                    format_currency(loan.get('principal', 0), symbol='NGN'),
                     f"{float(loan.get('interest_rate', 0) or 0):.2f}%",
                     f"{int(loan.get('duration_months', 0) or 0)}",
                     str(loan.get("status", "")),
                     str(loan.get("date_issued", ""))[:10],
-                    format_currency_with_words(loan.get('total_repaid', 0), symbol='NGN'),
+                    format_currency(loan.get('total_repaid', 0), symbol='NGN'),
                 ]
                 for loan in loans
             ]
@@ -576,9 +576,9 @@ class ReportsPage(QWidget):
                     str(repayment.get("loan_id", "")),
                     str(repayment.get("due_date", ""))[:10],
                     str(repayment.get("status", "")),
-                    format_currency_with_words(repayment.get('total_due', 0), symbol='NGN'),
-                    format_currency_with_words(repayment.get('total_paid', 0), symbol='NGN'),
-                    format_currency_with_words(max(0.0, float(repayment.get('total_due', 0) or 0) - float(repayment.get('total_paid', 0) or 0)), symbol='NGN'),
+                    format_currency(repayment.get('total_due', 0), symbol='NGN'),
+                    format_currency(repayment.get('total_paid', 0), symbol='NGN'),
+                    format_currency(max(0.0, float(repayment.get('total_due', 0) or 0) - float(repayment.get('total_paid', 0) or 0)), symbol='NGN'),
                 ]
                 for repayment in repayments
             ]
@@ -612,13 +612,13 @@ class ReportsPage(QWidget):
         summary_rows = [
             ["Reporting Period", f"{filters.get('start_date')} to {filters.get('end_date')}"] ,
             ["Total Members", str(stats.get("total_members", 0))],
-            ["Total Savings", format_currency_with_words(stats.get('total_savings', 0), symbol='NGN')],
-            ["Total Loans Disbursed", format_currency_with_words(stats.get('total_loans_disbursed', 0), symbol='NGN')],
-            ["Total Loan Repayments", format_currency_with_words(stats.get('total_repayments', 0), symbol='NGN')],
+            ["Total Savings", format_currency(stats.get('total_savings', 0), symbol='NGN')],
+            ["Total Loans Disbursed", format_currency(stats.get('total_loans_disbursed', 0), symbol='NGN')],
+            ["Total Loan Repayments", format_currency(stats.get('total_repayments', 0), symbol='NGN')],
             ["Average Loan Duration", f"{float(stats.get('average_duration_months', 0) or 0):,.2f} months"],
-            ["Projected Interest", format_currency_with_words(stats.get('total_projected_interest', 0), symbol='NGN')],
-            ["Members' Dividend (60%)", format_currency_with_words(stats.get('members_dividend_share', 0), symbol='NGN')],
-            ["Society Reserve (40%)", format_currency_with_words(stats.get('society_dividend_share', 0), symbol='NGN')],
+            ["Projected Interest", format_currency(stats.get('total_projected_interest', 0), symbol='NGN')],
+            ["Members' Dividend (60%)", format_currency(stats.get('members_dividend_share', 0), symbol='NGN')],
+            ["Society Reserve (40%)", format_currency(stats.get('society_dividend_share', 0), symbol='NGN')],
         ]
         content_layout.addWidget(self._build_preview_table(["Metric", "Value"], summary_rows))
 
@@ -628,8 +628,8 @@ class ReportsPage(QWidget):
                 str(member.get("staff_number", "")),
                 str(member.get("full_name", "")),
                 str(member.get("phone", "") or ""),
-                format_currency_with_words(member.get('current_savings', 0), symbol='NGN'),
-                format_currency_with_words(member.get('total_loans', 0), symbol='NGN'),
+                format_currency(member.get('current_savings', 0), symbol='NGN'),
+                format_currency(member.get('total_loans', 0), symbol='NGN'),
             ]
             for member in members
         ]
@@ -715,9 +715,9 @@ class ReportsPage(QWidget):
         total_due = sum(float(repayment.get("total_due", 0) or 0) for repayment in repayments)
         total_paid = sum(float(repayment.get("total_paid", 0) or 0) for repayment in repayments)
         repayment_outstanding = max(0.0, total_due - total_paid)
-        pdf.cell(0, 6, f"Current Savings: {format_currency_with_words(savings_bal, symbol='NGN')}   |   Outstanding Loans: {format_currency_with_words(loans_bal, symbol='NGN')}",
+        pdf.cell(0, 6, f"Current Savings: {format_currency(savings_bal, symbol='NGN')}   |   Outstanding Loans: {format_currency(loans_bal, symbol='NGN')}",
                  new_x="LMARGIN", new_y="NEXT")
-        pdf.cell(0, 6, f"Total Repaid (Loans): {format_currency_with_words(total_repaid, symbol='NGN')}   |   Repayment Outstanding: {format_currency_with_words(repayment_outstanding, symbol='NGN')}",
+        pdf.cell(0, 6, f"Total Repaid (Loans): {format_currency(total_repaid, symbol='NGN')}   |   Repayment Outstanding: {format_currency(repayment_outstanding, symbol='NGN')}",
              new_x="LMARGIN", new_y="NEXT")
         pdf.cell(0, 6, f"Reporting Period: {start_date} to {end_date}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
