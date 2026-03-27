@@ -3226,14 +3226,15 @@ class MainWindow(QMainWindow):
         stylesheet = build_theme_stylesheet(theme=theme, text_scale=text_scale, custom_colors=custom_colors)
         self.setStyleSheet(stylesheet)
         
-        # Apply custom cursor
-        app = QApplication.instance()
-        if app:
-            try:
-                cursor = create_custom_cursor(theme, custom_colors)
-                app.setOverrideCursor(cursor)
-            except Exception:
-                pass
+        # Apply custom cursor - store as instance variable to prevent garbage collection
+        try:
+            self.custom_cursor = create_custom_cursor(theme, custom_colors)
+            self.setCursor(self.custom_cursor)
+            # Also set for all child widgets to ensure consistency
+            for widget in self.findChildren(QWidget):
+                widget.setCursor(self.custom_cursor)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
