@@ -1398,7 +1398,7 @@ def update_member_profile(db_path: str, member_id: int, updates: Dict[str, str])
     Returns:
         A tuple (success: bool, message: str)
     """
-    allowed = {"phone", "bank_name", "account_no", "department", "date_joined", "avatar_path"}
+    allowed = {"phone", "bank_name", "account_no", "department", "date_joined", "avatar_path", "full_name", "staff_number"}
     filtered = {k: v for k, v in updates.items() if k in allowed}
     if not filtered:
         return False, "No valid fields to update."
@@ -1408,6 +1408,12 @@ def update_member_profile(db_path: str, member_id: int, updates: Dict[str, str])
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("PRAGMA foreign_keys = ON;")
+
+        if "staff_number" in filtered:
+            cursor.execute("SELECT member_id FROM members WHERE staff_number = ? AND member_id != ?", 
+                           (filtered["staff_number"], member_id))
+            if cursor.fetchone():
+                return False, f"Staff ID {filtered['staff_number']} is already in use by another member."
 
         set_clause = ", ".join(f"{col} = ?" for col in filtered)
         values = list(filtered.values()) + [member_id]
