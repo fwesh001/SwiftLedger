@@ -574,7 +574,9 @@ class MemberProfileDialog(QDialog):
         )
         self.btn_edit.clicked.connect(self._toggle_edit)
 
-        self.btn_export = QPushButton("Export PDF")
+        self.btn_export = QPushButton()
+        from utils import set_button_icon
+        set_button_icon(self.btn_export, "document-export", "⇱ Export PDF")
         self.btn_export.setMinimumHeight(36)
         self.btn_export.setStyleSheet(
             "QPushButton { background-color: #2c3e50; color: white; border-radius: 6px; "
@@ -822,7 +824,8 @@ class MembersPage(QWidget):
         )
         self.btn_download_template.clicked.connect(self._download_import_template)
 
-        self.btn_import_members = QPushButton("Import Members")
+        self.btn_import_members = QPushButton()
+        set_button_icon(self.btn_import_members, "document-import", "⇲ Import Members")
         self.btn_import_members.setMinimumHeight(40)
         self.btn_import_members.setFont(btn_font)
         self.btn_import_members.setCursor(Qt.CursorShape.PointingHandCursor)
