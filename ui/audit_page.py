@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QAbstractItemView,
     QLineEdit, QComboBox, QMessageBox, QFileDialog,
+    QDialog, QFormLayout, QTextEdit,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
@@ -23,14 +24,41 @@ from database.queries import get_all_logs
 class AuditLogPage(QWidget):
     """Full audit-log viewer with search, colour cues, and PDF export."""
 
-    # Colour mapping for status values
+    CATEGORY_ALIASES = {
+        "member": "Registration",
+        "members": "Registration",
+        "registration": "Registration",
+        "profile": "Registration",
+        "profile update": "Registration",
+        "savings": "Financial",
+        "loans": "Financial",
+        "loan": "Financial",
+        "financial": "Financial",
+        "report": "Financial",
+        "reports": "Financial",
+        "security": "Security",
+        "settings": "System",
+        "system": "System",
+        "preference": "System",
+        "preferences": "System",
+    }
+
+    CATEGORY_COLOURS = {
+        "Registration": QColor("#27ae60"),
+        "Security": QColor("#e74c3c"),
+        "Financial": QColor("#3498db"),
+        "System": QColor("#8e44ad"),
+        "Unknown": QColor("#7f8c8d"),
+    }
+
     STATUS_COLOURS = {
-        'Failed':   QColor('#e74c3c'),  # Red
-        'FAILURE':  QColor('#e74c3c'),
-        'Security': QColor('#e74c3c'),
-        'SECURITY': QColor('#e74c3c'),
-        'Financial': QColor('#3498db'),  # Blue
-        'FINANCIAL': QColor('#3498db'),
+        "success": QColor("#27ae60"),
+        "ok": QColor("#27ae60"),
+        "failed": QColor("#e74c3c"),
+        "failure": QColor("#e74c3c"),
+        "error": QColor("#e74c3c"),
+        "pending": QColor("#f39c12"),
+        "warning": QColor("#f39c12"),
     }
 
     def __init__(self, db_path: str = "swiftledger.db"):
@@ -89,6 +117,7 @@ class AuditLogPage(QWidget):
         ])
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.itemDoubleClicked.connect(self._open_log_details_from_item)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
@@ -116,7 +145,13 @@ class AuditLogPage(QWidget):
 
         # Rebuild category combo while preserving selection
         prev = self.combo_category.currentText()
-        categories = sorted({log.get('category', '') for log in logs if log.get('category')})
+        categories = sorted(
+            {
+                self._canonical_category(str(log.get('category', '')))
+                for log in logs
+                if str(log.get('category', '')).strip()
+            }
+        )
         self.combo_category.blockSignals(True)
         self.combo_category.clear()
         self.combo_category.addItem("All Categories")
@@ -134,7 +169,8 @@ class AuditLogPage(QWidget):
 
         filtered = []
         for log in self.all_logs:
-            if cat_filter != "All Categories" and log.get('category', '') != cat_filter:
+            canonical_category = self._canonical_category(str(log.get('category', '')))
+            if cat_filter != "All Categories" and canonical_category != cat_filter:
                 continue
             if search:
                 haystack = f"{log.get('user', '')} {log.get('description', '')}".lower()
@@ -151,16 +187,22 @@ class AuditLogPage(QWidget):
 
             ts = QTableWidgetItem(str(log.get('timestamp', '')))
             user = QTableWidgetItem(str(log.get('user', '')))
-            cat = QTableWidgetItem(str(log.get('category', '')))
+            canonical_category = self._canonical_category(str(log.get('category', '')))
+            cat = QTableWidgetItem(canonical_category)
             desc = QTableWidgetItem(str(log.get('description', '')))
             status_text = str(log.get('status', ''))
             status = QTableWidgetItem(status_text)
 
-            # Colour the status and category cells
-            colour = self._resolve_colour(status_text, str(log.get('category', '')))
-            if colour:
-                status.setForeground(colour)
-                cat.setForeground(colour)
+            for item in (ts, user, cat, desc, status):
+                item.setData(Qt.ItemDataRole.UserRole, log)
+
+            category_colour = self._resolve_category_colour(canonical_category)
+            if category_colour is not None:
+                cat.setForeground(category_colour)
+
+            status_colour = self._resolve_status_colour(status_text)
+            if status_colour is not None:
+                status.setForeground(status_colour)
 
             self.table.setItem(row_idx, 0, ts)
             self.table.setItem(row_idx, 1, user)
@@ -168,11 +210,87 @@ class AuditLogPage(QWidget):
             self.table.setItem(row_idx, 3, desc)
             self.table.setItem(row_idx, 4, status)
 
-    def _resolve_colour(self, status: str, category: str) -> QColor | None:
-        for key in (status, category):
-            if key in self.STATUS_COLOURS:
-                return self.STATUS_COLOURS[key]
-        return None
+    @staticmethod
+    def _normalize_key(value: str) -> str:
+        return value.strip().lower()
+
+    def _canonical_category(self, category: str) -> str:
+        normalized = self._normalize_key(category)
+        if not normalized:
+            return "Unknown"
+        return self.CATEGORY_ALIASES.get(normalized, category.strip().title())
+
+    def _resolve_category_colour(self, category: str) -> QColor | None:
+        return self.CATEGORY_COLOURS.get(category)
+
+    def _resolve_status_colour(self, status: str) -> QColor | None:
+        normalized = self._normalize_key(status)
+        return self.STATUS_COLOURS.get(normalized)
+
+    def _open_log_details_from_item(self, item: QTableWidgetItem) -> None:
+        row = item.row()
+        source_item = self.table.item(row, 0)
+        if source_item is None:
+            return
+
+        log = source_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(log, dict):
+            return
+
+        self._show_log_detail_dialog(log)
+
+    def _show_log_detail_dialog(self, log: dict) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Audit Log Details")
+        dialog.resize(720, 420)
+
+        root = QVBoxLayout(dialog)
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        log_id = QLabel(str(log.get("id", "")))
+        timestamp = QLabel(str(log.get("timestamp", "")))
+        user = QLabel(str(log.get("user", "")))
+        category_value = self._canonical_category(str(log.get("category", "")))
+        category = QLabel(category_value)
+        status_text = str(log.get("status", ""))
+        status = QLabel(status_text)
+
+        category_colour = self._resolve_category_colour(category_value)
+        if category_colour is not None:
+            category.setStyleSheet(f"color: {category_colour.name()}; font-weight: 600;")
+
+        status_colour = self._resolve_status_colour(status_text)
+        if status_colour is not None:
+            status.setStyleSheet(f"color: {status_colour.name()}; font-weight: 600;")
+
+        description = QTextEdit()
+        description.setReadOnly(True)
+        description.setPlainText(str(log.get("description", "")))
+        description.setMinimumHeight(180)
+
+        form.addRow("Log ID:", log_id)
+        form.addRow("Timestamp:", timestamp)
+        form.addRow("User:", user)
+        form.addRow("Category:", category)
+        form.addRow("Status:", status)
+        root.addLayout(form)
+
+        desc_title = QLabel("Description")
+        desc_font = QFont("Arial", 10)
+        desc_font.setBold(True)
+        desc_title.setFont(desc_font)
+        root.addWidget(desc_title)
+        root.addWidget(description)
+
+        close_row = QHBoxLayout()
+        close_row.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.accept)
+        close_row.addWidget(close_btn)
+        root.addLayout(close_row)
+
+        dialog.exec()
 
     # ── PDF Export ───────────────────────────────────────────────────
 
