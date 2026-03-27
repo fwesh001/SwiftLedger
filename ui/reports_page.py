@@ -40,7 +40,7 @@ from database.queries import (
 )
 from database.db_init import log_event
 from ui.widgets import SearchFilterWidget
-from utils import format_currency_with_words
+from utils import format_currency, format_currency_with_words
 
 
 class ReportsPage(QWidget):
