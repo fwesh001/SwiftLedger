@@ -3,6 +3,7 @@ Main application window for SwiftLedger.
 Contains the sidebar navigation and stacked widget for multiple pages.
 """
 
+from utils import get_export_path
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QFrame,
     QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout, QGridLayout,
@@ -646,10 +647,11 @@ class MemberProfileDialog(QDialog):
         if pdf is None or member is None:
             return
 
+        default_dir = get_export_path("Report page", "Members statement (pdf)", member.get("full_name"), staff_number)
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Member Statement",
-            f"SwiftLedger_Statement_{staff_number}.pdf",
+            str(default_dir / f"SwiftLedger_Statement_{staff_number}.pdf"),
             "PDF Files (*.pdf)",
         )
         if not path:
@@ -979,10 +981,11 @@ class MembersPage(QWidget):
             QMessageBox.critical(self, "Error", message)
 
     def _download_import_template(self) -> None:
+        default_dir = get_export_path("Members page", "Import-template (xls)")
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Import Template",
-            "SwiftLedger_Import_Template.xlsx",
+            str(default_dir / "SwiftLedger_Import_Template.xlsx"),
             "Excel Files (*.xlsx)",
         )
         if not path:
@@ -1244,10 +1247,11 @@ class ImportErrorDialog(QDialog):
         self.errors = errors
 
     def _save_log(self) -> None:
+        default_dir = get_export_path("Members page", "Import-template (xls)")
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Error Log",
-            "SwiftLedger_Import_Errors.txt",
+            str(default_dir / "SwiftLedger_Import_Errors.txt"),
             "Text Files (*.txt)",
         )
         if not path:
