@@ -2981,6 +2981,8 @@ class MainWindow(QMainWindow):
         self.db_path = db_path
         self.last_interaction_time = time.time()
         self.is_locked = False
+        self.custom_cursor = None
+        self.custom_cursor_pixmap = None
         self.setWindowTitle("SwiftLedger - Thrift Society Management")
         self.setGeometry(100, 100, 1200, 700)
         
