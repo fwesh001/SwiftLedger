@@ -445,6 +445,8 @@ class MemberProfileDialog(QDialog):
 
         # Header
         header = QHBoxLayout()
+        
+        avatar_layout = QVBoxLayout()
         avatar = QLabel()
         avatar.setFixedSize(72, 72)
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -453,26 +455,40 @@ class MemberProfileDialog(QDialog):
             f"QLabel {{ border-radius: 36px; background-image: url('{avatar_path}'); "
             "background-position: center; background-repeat: no-repeat; }}"
         )
+        
+        def show_image(event):
+            if event.button() == Qt.MouseButton.LeftButton:
+                dlg = QDialog(self)
+                dlg.setWindowTitle("View Photo")
+                l = QVBoxLayout(dlg)
+                img = QLabel()
+                pix = QPixmap(avatar_path)
+                img.setPixmap(pix.scaled(600, 600, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                l.addWidget(img)
+                dlg.exec()
+        avatar.mousePressEvent = show_image
         self._avatar_label = avatar
+        
         upload_btn = QPushButton("Upload Photo")
         upload_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         upload_btn.clicked.connect(self._upload_photo)
-        header.addWidget(avatar)
+        
+        avatar_layout.addWidget(avatar)
+        avatar_layout.addWidget(upload_btn)
+        header.addLayout(avatar_layout)
 
         header_text = QVBoxLayout()
-        name_label = QLabel(self.member_data.get("full_name", ""))
+        self.input_full_name = QLineEdit(self.member_data.get("full_name", ""))
         name_font = QFont("Arial", 16)
         name_font.setBold(True)
-        name_label.setFont(name_font)
+        self.input_full_name.setFont(name_font)
 
-        staff_label = QLabel(f"Staff ID: {self.member_data.get('staff_number', '')}")
-        staff_label.setStyleSheet("color: #7f8c8d; font-size: 12px;")
+        self.input_staff_number = QLineEdit(self.member_data.get('staff_number', ''))
 
-        header_text.addWidget(name_label)
-        header_text.addWidget(staff_label)
+        header_text.addWidget(self.input_full_name)
+        header_text.addWidget(self.input_staff_number)
         header_text.addStretch()
         header.addLayout(header_text)
-        header.addWidget(upload_btn)
         header.addStretch()
         outer.addLayout(header)
 
@@ -605,8 +621,15 @@ class MemberProfileDialog(QDialog):
         return "5y+"
 
     def _set_editable(self, enabled: bool) -> None:
-        fields = [self.input_phone, self.input_department, self.input_bank_name, self.input_account_no]
-        for field in fields:
+        self.edit_fields = [
+            self.input_full_name,
+            self.input_staff_number,
+            self.input_phone,
+            self.input_department,
+            self.input_bank_name,
+            self.input_account_no
+        ]
+        for field in self.edit_fields:
             field.setReadOnly(not enabled)
             field.setStyleSheet(
                 ("QLineEdit { background-color: #ffffff; color: #2c3e50; }") if enabled
@@ -621,6 +644,8 @@ class MemberProfileDialog(QDialog):
             return
 
         updates = {
+            "full_name": self.input_full_name.text().strip(),
+            "staff_number": self.input_staff_number.text().strip(),
             "phone": self.input_phone.text().strip(),
             "department": self.input_department.text().strip(),
             "bank_name": self.input_bank_name.text().strip(),
