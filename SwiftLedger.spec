@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['C:\\Users\\zabdiel\\Desktop\\SwiftLedger\\main.py'],
+    ['c:\\Users\\zabdiel\\Desktop\\SwiftLedger\\main.py'],
     pathex=[],
     binaries=[],
-    datas=[('C:\\Users\\zabdiel\\Desktop\\SwiftLedger\\assets', 'assets'), ('C:\\Users\\zabdiel\\Desktop\\SwiftLedger\\database', 'database')],
+    datas=[('c:\\Users\\zabdiel\\Desktop\\SwiftLedger\\assets', 'assets'), ('c:\\Users\\zabdiel\\Desktop\\SwiftLedger\\database', 'database')],
     hiddenimports=['PySide6', 'matplotlib', 'pandas', 'openpyxl', 'fpdf'],
     hookspath=[],
     hooksconfig={},
@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\Users\\zabdiel\\Desktop\\SwiftLedger\\assets\\app_icon.ico'],
+    icon=['c:\\Users\\zabdiel\\Desktop\\SwiftLedger\\assets\\app_icon.ico'],
 )
