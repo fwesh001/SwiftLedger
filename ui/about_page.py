@@ -9,10 +9,11 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QGroupBox,
     QScrollArea, QFrame,
-    QTabWidget,
+    QTabWidget, QStackedWidget,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
+from ui.widgets import HorizontalNavBar
 
 # ── About page ───────────────────────────────────────────────────────
 
@@ -37,6 +38,31 @@ class AboutPage(QWidget):
         main.setContentsMargins(20, 20, 20, 20)
         main.setSpacing(20)
 
+        # ── Horizontal nav bar ─────────────────────────────────────
+        self.nav_bar = HorizontalNavBar(["About", "Help"])
+        main.addWidget(self.nav_bar)
+
+        # ── Stacked content for the two tabs ────────────────────────
+        self.stack = QStackedWidget()
+        main.addWidget(self.stack)
+
+        self._build_about_tab()
+        self._build_help_tab()
+
+        self.nav_bar.currentChanged.connect(self.stack.setCurrentIndex)
+
+        main.addStretch()
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
+    # ── Tab: About ─────────────────────────────────────────────────
+
+    def _build_about_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(20)
+
         # ── Software info ────────────────────────────────────────────
         info_group = QGroupBox("Software Information")
         info_group.setFont(QFont("Arial", 12))
@@ -60,7 +86,7 @@ class AboutPage(QWidget):
         tagline.setStyleSheet("font-size: 13px; color: #bdc3c7; font-style: italic;")
         info_layout.addWidget(tagline)
 
-        main.addWidget(info_group)
+        layout.addWidget(info_group)
 
         # ── About SwiftLedger ──────────────────────────────────────
         about_group = QGroupBox("About SwiftLedger")
@@ -78,7 +104,7 @@ class AboutPage(QWidget):
         about_text.setStyleSheet("font-size: 13px; line-height: 1.6; padding: 10px;")
         about_layout.addWidget(about_text)
 
-        main.addWidget(about_group)
+        layout.addWidget(about_group)
 
         # ── About the Developer ─────────────────────────────────────
         dev_group = QGroupBox("About the Developer")
@@ -103,7 +129,18 @@ class AboutPage(QWidget):
         signature.setStyleSheet("font-size: 12px; font-style: italic; color: #7f8c8d; padding-right: 14px;")
         dev_layout.addWidget(signature)
 
-        main.addWidget(dev_group)
+        layout.addWidget(dev_group)
+        layout.addStretch()
+
+        self.stack.addWidget(tab)
+
+    # ── Tab: Help ──────────────────────────────────────────────────
+
+    def _build_help_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(20)
 
         # ── Help tabs ────────────────────────────────────────────────
         help_group = QGroupBox("Help")
@@ -230,8 +267,7 @@ class AboutPage(QWidget):
         )
 
         help_layout.addWidget(tabs)
-        main.addWidget(help_group)
+        layout.addWidget(help_group)
+        layout.addStretch()
 
-        main.addStretch()
-        scroll.setWidget(content)
-        outer.addWidget(scroll)
+        self.stack.addWidget(tab)
