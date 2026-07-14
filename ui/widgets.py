@@ -2,8 +2,9 @@
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QComboBox, QLineEdit, QPushButton, QButtonGroup,
+    QCompleter, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QStringListModel
 
 
 class HorizontalNavBar(QWidget):
@@ -126,6 +127,66 @@ class UppercaseLineEdit(QLineEdit):
         self.setCursorPosition(min(cursor_pos, len(upper_text)))
 
 
+class ToggleSwitch(QWidget):
+    """
+    A compact on/off toggle switch built from a QPushButton.
+
+    Emits ``toggled`` with the new boolean state. Use ``setChecked`` to set the
+    state programmatically and ``isChecked`` to read it.
+    """
+
+    toggled = Signal(bool)
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._checked = False
+        self._track = QPushButton(self)
+        self._track.setFixedSize(46, 26)
+        self._track.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._track.clicked.connect(self._on_click)
+        self._layout = QHBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(0)
+        self._layout.addWidget(self._track)
+        self._refresh()
+
+    def _on_click(self) -> None:
+        self.setChecked(not self._checked)
+
+    def setChecked(self, checked: bool) -> None:
+        if self._checked == bool(checked):
+            return
+        self._checked = bool(checked)
+        self._refresh()
+        self.toggled.emit(self._checked)
+
+    def isChecked(self) -> bool:
+        return self._checked
+
+    def _refresh(self) -> None:
+        if self._checked:
+            bg, border, pad, color = (
+                "#3498db", "#2980b9", "padding-right: 6px;", "#ffffff"
+            )
+            glyph = "●"
+        else:
+            bg, border, pad, color = (
+                "#bdc3c7", "#95a5a6", "padding-left: 6px;", "#7f8c8d"
+            )
+            glyph = "○"
+        self._track.setStyleSheet(
+            "QPushButton {"
+            f"  background-color: {bg};"
+            f"  border: 1px solid {border};"
+            "  border-radius: 13px;"
+            f"  color: {color};"
+            f"  {pad}"
+            "  font-size: 14px;"
+            "}"
+        )
+        self._track.setText(glyph)
+
+
 class SearchFilterWidget(QWidget):
     """
     Search bar with integrated dropdown filter.
@@ -134,6 +195,7 @@ class SearchFilterWidget(QWidget):
     """
     
     queryChanged = Signal(str, str)  # (filter_type, query_text)
+    suggestionSelected = Signal(str, str)  # (filter_type, query_text)
     
     FILTER_OPTIONS = {
         "All Fields": "all",
@@ -144,6 +206,7 @@ class SearchFilterWidget(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._suggestion_map: dict[str, str] = {}  # display -> raw query
         self._init_ui()
     
     def _init_ui(self) -> None:
@@ -157,11 +220,23 @@ class SearchFilterWidget(QWidget):
         self.combo_filter.addItems(self.FILTER_OPTIONS.keys())
         self.combo_filter.setMaximumWidth(120)
         self.combo_filter.setToolTip("Select search field: All Fields, Staff ID, Full Name, or Phone")
+        self.combo_filter.currentTextChanged.connect(lambda _: self._refresh_suggestions())
         
         # Search input
         self.input_search = UppercaseLineEdit()
         self.input_search.setPlaceholderText("Search by Staff ID, Name, or Phone...")
+        self.input_search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.input_search.textChanged.connect(self._on_text_changed)
+        
+        # Dropdown suggestion menu (completer) — same width as the bar
+        self._completer_model = QStringListModel()
+        self.completer = QCompleter(self._completer_model, self)
+        self.completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self.completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self.completer.setMaxVisibleItems(12)
+        self.completer.activated.connect(self._on_suggestion_activated)
+        self.input_search.setCompleter(self.completer)
         
         layout.addWidget(self.combo_filter)
         layout.addWidget(self.input_search)
@@ -171,6 +246,39 @@ class SearchFilterWidget(QWidget):
         """Emit signal when search text changes."""
         filter_type = self.get_filter_type()
         self.queryChanged.emit(filter_type, text)
+        self._refresh_suggestions()
+    
+    def _refresh_suggestions(self) -> None:
+        """Rebuild the suggestion dropdown from the current query + filter."""
+        query = self.input_search.text().strip()
+        filter_type = self.get_filter_type()
+        suggestions = self.build_suggestions(query, filter_type)
+        self._completer_model.setStringList(suggestions)
+        if suggestions and query:
+            self.completer.complete()
+    
+    def build_suggestions(self, query: str, filter_type: str) -> list[str]:
+        """
+        Return dropdown suggestion strings for the current query.
+        Override or set ``suggestion_provider`` to supply real data.
+        Each entry is a display string; the raw query is mapped for activation.
+        """
+        provider = getattr(self, "suggestion_provider", None)
+        if provider is None:
+            return []
+        try:
+            return provider(query, filter_type)
+        except Exception:
+            return []
+    
+    def set_suggestion_provider(self, provider) -> None:
+        """Set a callable ``provider(query, filter_type) -> list[str]``."""
+        self.suggestion_provider = provider
+    
+    def _on_suggestion_activated(self, text: str) -> None:
+        """When a dropdown item is chosen, emit suggestionSelected."""
+        filter_type = self.get_filter_type()
+        self.suggestionSelected.emit(filter_type, text)
     
     def get_filter_type(self) -> str:
         """Get current filter type (e.g., 'all', 'staff_number', 'full_name', 'phone')."""

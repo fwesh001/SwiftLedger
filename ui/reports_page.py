@@ -37,6 +37,7 @@ from database.queries import (
     get_member_savings, get_member_loans, get_society_stats,
     get_all_members,
     get_member_statement_data, get_society_report_stats, search_members, get_report_date_bounds,
+    get_investment_summary, get_investments,
     get_report_pack_savings, get_report_pack_loans, get_report_pack_repayments, get_report_pack_audit_logs,
 )
 from database.db_init import log_event
@@ -142,6 +143,9 @@ class ReportsPage(QWidget):
         toggle_row.addWidget(self.chk_include_loans)
         toggle_row.addWidget(self.chk_include_repayments)
         toggle_row.addWidget(self.chk_include_duration)
+        self.chk_include_investments = QCheckBox("Investments")
+        self.chk_include_investments.setChecked(True)
+        toggle_row.addWidget(self.chk_include_investments)
         toggle_wrap = QWidget()
         toggle_wrap.setLayout(toggle_row)
         filter_form.addRow("Include:", toggle_wrap)
@@ -172,6 +176,8 @@ class ReportsPage(QWidget):
 
         self.search_member_widget = SearchFilterWidget()
         self.search_member_widget.queryChanged.connect(self._on_member_search_changed)
+        self.search_member_widget.set_suggestion_provider(self._member_suggestions)
+        self.search_member_widget.suggestionSelected.connect(self._on_member_suggestion)
 
         self.label_selected_member = QLabel("Member: Not selected")
         self.label_selected_member.setFont(QFont("Arial", 10))
@@ -362,6 +368,7 @@ class ReportsPage(QWidget):
             "include_loans": self.chk_include_loans.isChecked(),
             "include_repayments": self.chk_include_repayments.isChecked(),
             "include_duration": self.chk_include_duration.isChecked(),
+            "include_investments": self.chk_include_investments.isChecked(),
         }
     def _initialize_date_filters(self) -> None:
         """Set default report dates to actual data range when available."""
@@ -383,6 +390,7 @@ class ReportsPage(QWidget):
         include_loans = self.chk_include_loans.isChecked()
         include_repayments = self.chk_include_repayments.isChecked()
         include_duration = self.chk_include_duration.isChecked()
+        include_investments = self.chk_include_investments.isChecked()
 
         member_query = self.search_member_widget.get_query()
         member_filter_index = self.search_member_widget.combo_filter.currentIndex()
@@ -393,6 +401,7 @@ class ReportsPage(QWidget):
         self.chk_include_loans.setChecked(include_loans)
         self.chk_include_repayments.setChecked(include_repayments)
         self.chk_include_duration.setChecked(include_duration)
+        self.chk_include_investments.setChecked(include_investments)
 
         self.search_member_widget.combo_filter.setCurrentIndex(member_filter_index)
         self.search_member_widget.set_query(member_query)
@@ -512,6 +521,37 @@ class ReportsPage(QWidget):
                 self.label_selected_member.setText(f"Member: {member_name}")
         else:
             self.label_selected_member.setText("Member: Not found")
+
+    def _member_suggestions(self, query: str, filter_type: str) -> list[str]:
+        """Build dropdown suggestion strings from matching members."""
+        if not query:
+            return []
+        success, members = search_members(self.db_path, query, filter_field=filter_type)
+        if not success or not members:
+            return []
+        suggestions = []
+        for m in members[:12]:
+            name = str(m.get("full_name") or "").strip()
+            staff = str(m.get("staff_number") or "").strip()
+            phone = str(m.get("phone") or "").strip()
+            label = name or staff or "Unknown"
+            if staff:
+                label = f"{label} ({staff})"
+            elif phone:
+                label = f"{label} ({phone})"
+            suggestions.append(label)
+        seen = set()
+        unique = []
+        for s in suggestions:
+            if s not in seen:
+                seen.add(s)
+                unique.append(s)
+        return unique
+
+    def _on_member_suggestion(self, filter_type: str, text: str) -> None:
+        """Handle a chosen dropdown suggestion: fill the bar and resolve the member."""
+        self.search_member_widget.set_query(text)
+        self._on_member_search_changed(filter_type, text)
 
     def _validate_scope(self, target: str, for_export: bool = False) -> bool:
         # Scope is now implicit per tab (Members tab -> member, Society tab -> society),
@@ -734,6 +774,34 @@ class ReportsPage(QWidget):
             ["Staff #", "Name", "Phone", "Savings", "Loans"],
             member_rows,
         ))
+
+        if bool(filters.get("include_investments", True)):
+            ok_inv, inv_summary = get_investment_summary(self.db_path)
+            if ok_inv:
+                content_layout.addWidget(QLabel("Investments"))
+                inv_rows = [
+                    ["Total Invested", format_currency(inv_summary.get('total_invested', 0), symbol='NGN')],
+                    ["Expected Interest", format_currency(inv_summary.get('total_expected_interest', 0), symbol='NGN')],
+                    ["Records", str(inv_summary.get('investment_count', 0))],
+                ]
+                content_layout.addWidget(self._build_preview_table(["Metric", "Value"], inv_rows))
+
+                ok_list, inv_list = get_investments(self.db_path)
+                if ok_list and inv_list:
+                    inv_detail = [
+                        [
+                            str(inv.get("instrument_name", "")),
+                            str(inv.get("holder_name", "")),
+                            str(inv.get("inv_type", "")),
+                            format_currency(inv.get('invested_amount', 0), symbol='NGN'),
+                            f"{float(inv.get('expected_interest', 0) or 0):.2f} %",
+                        ]
+                        for inv in inv_list
+                    ]
+                    content_layout.addWidget(self._build_preview_table(
+                        ["Instrument", "Holder", "Type", "Amount", "Exp. Interest"],
+                        inv_detail,
+                    ))
 
         scroll.setWidget(content)
         root.addWidget(scroll)

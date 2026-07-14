@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QProgressDialog, QTextEdit, QInputDialog
 )
 from PySide6.QtCore import Qt, QSize, QEvent, QTimer
-from PySide6.QtGui import QFont, QColor, QBrush, QPixmap
+from PySide6.QtGui import QFont, QColor, QBrush, QPixmap, QShortcut, QKeySequence
 from PySide6.QtWidgets import QHeaderView
 import csv
 import shutil
@@ -35,6 +35,7 @@ from database.queries import (
     delete_all_members,
     update_savings_transaction, add_savings_correction_entry, update_loan_repayment_entry,
     has_active_loans, search_members, get_repayment_dashboard_rows, get_repayment_dashboard_summary,
+    get_investment_summary, get_investments,
 )
 from logic.analytics import (
     get_monthly_snapshot, get_monthly_trend, calculate_lts_ratio, get_liquidity_status
@@ -42,6 +43,7 @@ from logic.analytics import (
 from ui.analytics_charts import InteractiveMonthlyChart, LTSRiskGauge
 from ui.audit_page import AuditLogPage
 from ui.about_page import AboutPage
+from ui.investment_page import InvestmentPage
 from ui.settings_page import SettingsPage
 from ui.widgets import SearchFilterWidget, UppercaseLineEdit, HorizontalNavBar
 from ui.reports_page import ReportsPage
@@ -63,6 +65,7 @@ class DashboardPage(QWidget):
         'savings':  '#27ae60',  # Green
         'loans':    '#e67e22',  # Orange
         'interest': '#9b59b6',  # Purple
+        'investments': '#16a085',  # Teal
     }
 
     def __init__(self, db_path: str = "swiftledger.db"):
@@ -157,13 +160,30 @@ class DashboardPage(QWidget):
         self.card_interest = self._create_stat_card(
             "📈  Projected Interest", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['interest']
         )
+        self.card_investments = self._create_stat_card(
+            "📊  Investments", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['investments']
+        )
 
         cards_layout.addWidget(self.card_members[0], 0, 0)
         cards_layout.addWidget(self.card_savings[0], 0, 1)
         cards_layout.addWidget(self.card_loans[0], 1, 0)
         cards_layout.addWidget(self.card_interest[0], 1, 1)
+        cards_layout.addWidget(self.card_investments[0], 2, 0)
+        cards_layout.addWidget(self._create_stat_card("", "", "#2b2b2b")[0], 2, 1)
 
         layout.addLayout(cards_layout)
+
+        # ── Investment summary ─────────────────────────────────────
+        investment_group = QGroupBox("Investment Portfolio")
+        investment_group.setFont(QFont("Arial", 12))
+        investment_layout = QVBoxLayout(investment_group)
+        self.lbl_investment_summary = QLabel("Total Invested: ₦0.00  |  Expected Interest: ₦0.00")
+        self.lbl_investment_summary.setStyleSheet("color: #16a085; font-weight: bold;")
+        investment_layout.addWidget(self.lbl_investment_summary)
+        self.list_investments = QListWidget()
+        self.list_investments.setMaximumHeight(120)
+        investment_layout.addWidget(self.list_investments)
+        layout.addWidget(investment_group)
 
         # ── Dividend section ────────────────────────────────────────
         dividend_group = QGroupBox("Dividend Breakdown")
@@ -380,6 +400,27 @@ class DashboardPage(QWidget):
             self.lbl_outstanding_loans.setText(
                 f"Outstanding Loans: {format_currency_with_words(liquidity.get('outstanding_loans', 0), symbol='₦')}"
             )
+
+        # Investment summary
+        inv_ok, inv_summary = get_investment_summary(self.db_path)
+        if inv_ok:
+            self.card_investments[2].setText(
+                format_currency(inv_summary.get('total_invested', 0.0), symbol="₦")
+            )
+            self.lbl_investment_summary.setText(
+                f"Total Invested: {format_currency(inv_summary.get('total_invested', 0.0), symbol='₦')}  |  "
+                f"Expected Interest: {format_currency(inv_summary.get('total_expected_interest', 0.0), symbol='₦')}"
+            )
+            self.list_investments.clear()
+            ok_inv, inv_rows = get_investments(self.db_path)
+            if ok_inv:
+                for inv in inv_rows[:20]:
+                    self.list_investments.addItem(
+                        f"{inv.get('instrument_name', '?')} — {inv.get('inv_type', '?')} "
+                        f"({format_currency(float(inv.get('invested_amount', 0.0)), symbol='₦')})"
+                    )
+                if not inv_rows:
+                    self.list_investments.addItem("No investments recorded yet")
 
         # Monthly trends chart
         self.monthly_chart._refresh_chart()
@@ -1453,6 +1494,8 @@ class SavingsPage(QWidget):
 
         self.search_widget = SearchFilterWidget()
         self.search_widget.queryChanged.connect(self._on_search_query_changed)
+        self.search_widget.set_suggestion_provider(self._member_suggestions)
+        self.search_widget.suggestionSelected.connect(self._on_search_suggestion)
 
         search_layout.addWidget(self.search_widget)
         search_layout.addStretch()
@@ -1676,6 +1719,38 @@ class SavingsPage(QWidget):
         
         # Enable post button
         self.btn_post.setEnabled(True)
+    
+    def _member_suggestions(self, query: str, filter_type: str) -> list[str]:
+        """Build dropdown suggestion strings from matching members."""
+        if not query:
+            return []
+        success, members = search_members(self.db_path, query, filter_field=filter_type)
+        if not success or not members:
+            return []
+        suggestions = []
+        for m in members[:12]:
+            name = str(m.get("full_name") or "").strip()
+            staff = str(m.get("staff_number") or "").strip()
+            phone = str(m.get("phone") or "").strip()
+            label = name or staff or "Unknown"
+            if staff:
+                label = f"{label} ({staff})"
+            elif phone:
+                label = f"{label} ({phone})"
+            suggestions.append(label)
+        # De-duplicate while preserving order
+        seen = set()
+        unique = []
+        for s in suggestions:
+            if s not in seen:
+                seen.add(s)
+                unique.append(s)
+        return unique
+    
+    def _on_search_suggestion(self, filter_type: str, text: str) -> None:
+        """Handle a chosen dropdown suggestion: fill the bar and run the search."""
+        self.search_widget.set_query(text)
+        self.search_member()
     
     def load_savings_data(self) -> None:
         """Load and display current savings balance for the member."""
@@ -2040,6 +2115,8 @@ class LoansPage(QWidget):
 
         self.search_widget = SearchFilterWidget()
         self.search_widget.queryChanged.connect(self._on_search_query_changed)
+        self.search_widget.set_suggestion_provider(self._member_suggestions)
+        self.search_widget.suggestionSelected.connect(self._on_search_suggestion)
 
         search_layout.addWidget(self.search_widget)
         search_layout.addStretch()
@@ -2531,6 +2608,37 @@ class LoansPage(QWidget):
         self.search_debounce_timer.stop()
         if query.strip():
             self.search_debounce_timer.start(300)  # 300ms debounce
+    
+    def _member_suggestions(self, query: str, filter_type: str) -> list[str]:
+        """Build dropdown suggestion strings from matching members."""
+        if not query:
+            return []
+        success, members = search_members(self.db_path, query, filter_field=filter_type)
+        if not success or not members:
+            return []
+        suggestions = []
+        for m in members[:12]:
+            name = str(m.get("full_name") or "").strip()
+            staff = str(m.get("staff_number") or "").strip()
+            phone = str(m.get("phone") or "").strip()
+            label = name or staff or "Unknown"
+            if staff:
+                label = f"{label} ({staff})"
+            elif phone:
+                label = f"{label} ({phone})"
+            suggestions.append(label)
+        seen = set()
+        unique = []
+        for s in suggestions:
+            if s not in seen:
+                seen.add(s)
+                unique.append(s)
+        return unique
+    
+    def _on_search_suggestion(self, filter_type: str, text: str) -> None:
+        """Handle a chosen dropdown suggestion: fill the bar and run the search."""
+        self.search_widget.set_query(text)
+        self.search_member()
     
     def search_member(self) -> None:
         """Search for a member based on current filter widget state."""
@@ -3170,6 +3278,9 @@ class MainWindow(QMainWindow):
         self.stacked_widget = QStackedWidget()
         self.create_pages()
         main_layout.addWidget(self.stacked_widget)
+
+        # Keyboard shortcuts
+        self._setup_shortcuts()
         
         # Apply stylesheet
         self.apply_stylesheet()
@@ -3254,6 +3365,7 @@ class MainWindow(QMainWindow):
         self.btn_members = QPushButton("Members")
         self.btn_savings = QPushButton("Savings")
         self.btn_loans = QPushButton("Loans")
+        self.btn_investments = QPushButton("Investments")
         self.btn_reports = QPushButton("Reports")
         self.btn_audit = QPushButton("Audit Logs")
         self.btn_settings = QPushButton("Settings")
@@ -3264,6 +3376,7 @@ class MainWindow(QMainWindow):
             self.btn_members,
             self.btn_savings,
             self.btn_loans,
+            self.btn_investments,
             self.btn_reports,
             self.btn_audit,
             self.btn_settings,
@@ -3289,6 +3402,7 @@ class MainWindow(QMainWindow):
         self.members_page = MembersPage(self.db_path)
         self.savings_page = SavingsPage(self.db_path)
         self.loans_page = LoansPage(self.db_path)
+        self.investments_page = InvestmentPage(self.db_path)
         self.reports_page = ReportsPage(self.db_path)
         # Link chart widget to reports page for PDF embedding
         self.reports_page.set_monthly_chart(self.dashboard_page.monthly_chart)
@@ -3302,6 +3416,7 @@ class MainWindow(QMainWindow):
             self.members_page,
             self.savings_page,
             self.loans_page,
+            self.investments_page,
             self.reports_page,
             self.audit_page,
             self.settings_page,
@@ -3319,10 +3434,11 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.members_page)     # 1
         self.stacked_widget.addWidget(self.savings_page)     # 2
         self.stacked_widget.addWidget(self.loans_page)       # 3
-        self.stacked_widget.addWidget(self.reports_page)     # 4
-        self.stacked_widget.addWidget(self.audit_page)       # 5
-        self.stacked_widget.addWidget(self.settings_page)    # 6
-        self.stacked_widget.addWidget(self.about_page)       # 7
+        self.stacked_widget.addWidget(self.investments_page) # 4
+        self.stacked_widget.addWidget(self.reports_page)     # 5
+        self.stacked_widget.addWidget(self.audit_page)       # 6
+        self.stacked_widget.addWidget(self.settings_page)    # 7
+        self.stacked_widget.addWidget(self.about_page)       # 8
         
         # Set default page
         self.stacked_widget.setCurrentIndex(0)
@@ -3348,9 +3464,64 @@ class MainWindow(QMainWindow):
         elif page_index == 3:
             self.loans_page.refresh_page()
         elif page_index == 4:
-            self.reports_page.refresh_page()
+            self.investments_page.refresh_page()
         elif page_index == 5:
+            self.reports_page.refresh_page()
+        elif page_index == 6:
             self.audit_page.refresh_logs()
+    
+    def _setup_shortcuts(self) -> None:
+        """Register global keyboard shortcuts for navigation and scrolling."""
+        # Page navigation
+        nav_map = {
+            Qt.Key.Key_D: 0,  # Dashboard
+            Qt.Key.Key_M: 1,  # Members
+            Qt.Key.Key_S: 2,  # Savings
+            Qt.Key.Key_L: 3,  # Loans
+            Qt.Key.Key_I: 4,  # Investments
+            Qt.Key.Key_R: 5,  # Reports
+            Qt.Key.Key_A: 8,  # About/Help
+            Qt.Key.Key_H: 8,  # About/Help
+        }
+        for key, index in nav_map.items():
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            shortcut.activated.connect(
+                lambda idx=index: self.navigate_to_page(idx)
+            )
+
+        # Settings — Ctrl+S (avoids clash with Savings [S])
+        settings_shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
+        settings_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        settings_shortcut.activated.connect(lambda: self.navigate_to_page(7))
+
+        # Scrolling the active page
+        scroll_down = QShortcut(QKeySequence(Qt.Key.Key_Down), self)
+        scroll_down.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        scroll_down.activated.connect(lambda: self._scroll_active_page(120))
+
+        scroll_up = QShortcut(QKeySequence(Qt.Key.Key_Up), self)
+        scroll_up.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        scroll_up.activated.connect(lambda: self._scroll_active_page(-120))
+
+        pgdn = QShortcut(QKeySequence(Qt.Key.Key_PageDown), self)
+        pgdn.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        pgdn.activated.connect(lambda: self._scroll_active_page(400))
+
+        pgup = QShortcut(QKeySequence(Qt.Key.Key_PageUp), self)
+        pgup.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        pgup.activated.connect(lambda: self._scroll_active_page(-400))
+
+    def _scroll_active_page(self, delta: int) -> None:
+        """Scroll the currently visible page's top-level scroll area by delta pixels."""
+        current = self.stacked_widget.currentWidget()
+        if current is None:
+            return
+        scroll = current.findChild(QScrollArea)
+        if scroll is not None:
+            scroll.verticalScrollBar().setValue(
+                scroll.verticalScrollBar().value() + delta
+            )
     
     def update_button_styles(self, active_index: int) -> None:
         """Update button styles to highlight the active button."""
@@ -3360,6 +3531,7 @@ class MainWindow(QMainWindow):
             self.btn_members,
             self.btn_savings,
             self.btn_loans,
+            self.btn_investments,
             self.btn_reports,
             self.btn_audit,
             self.btn_settings,
@@ -3394,14 +3566,20 @@ class MainWindow(QMainWindow):
 
         stylesheet = build_theme_stylesheet(theme=theme, text_scale=text_scale, custom_colors=custom_colors)
         self.setStyleSheet(stylesheet)
-        
-        # Apply custom cursor - store both pixmap and cursor as instance variables to prevent garbage collection
+
+        # Apply custom cursor only when enabled in settings
+        custom_cursor_on = bool(settings.get("custom_cursor_enabled", 0)) if (ok and settings) else False
         try:
-            self.custom_cursor_pixmap, self.custom_cursor = create_custom_cursor(theme, custom_colors)
-            self.setCursor(self.custom_cursor)
-            # Also set for all child widgets to ensure consistency
-            for widget in self.findChildren(QWidget):
-                widget.setCursor(self.custom_cursor)
+            if custom_cursor_on:
+                self.custom_cursor_pixmap, self.custom_cursor = create_custom_cursor(theme, custom_colors)
+                self.setCursor(self.custom_cursor)
+                for widget in self.findChildren(QWidget):
+                    widget.setCursor(self.custom_cursor)
+            else:
+                self.custom_cursor = None
+                self.unsetCursor()
+                for widget in self.findChildren(QWidget):
+                    widget.unsetCursor()
         except Exception:
             pass
 

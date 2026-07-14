@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QComboBox, QScrollArea, QFrame, QLineEdit, QDoubleSpinBox,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QDialog,
     QDialogButtonBox, QApplication, QToolTip,
-    QTabWidget, QColorDialog, QStackedWidget,
+    QTabWidget, QColorDialog, QStackedWidget, QButtonGroup,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QIcon
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import QHeaderView
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.db_init import save_settings, log_event
-from ui.widgets import UppercaseLineEdit, HorizontalNavBar
+from ui.widgets import UppercaseLineEdit, HorizontalNavBar, ToggleSwitch
 from database.queries import (
     get_system_settings,
     get_loan_products,
@@ -29,7 +29,7 @@ from database.queries import (
     update_loan_product,
     set_loan_product_active,
 )
-from security import hash_credential, generate_secure_token
+from security import hash_credential, generate_secure_token, verify_credential
 from utils import format_currency_with_words
 
 
@@ -53,6 +53,8 @@ class SettingsPage(QWidget):
         self.current_auth_hash = ""
         self.pending_recovery_key = ""
         self.custom_colors = {"bg": "#121212", "fg": "#ffffff", "sidebar": "#1e1e1e"}
+        self._security_unlocked = False
+        self._security_tab_index = 2
         self._build_ui()
         self._load_current_settings()
         self._load_loan_products_table()
@@ -98,7 +100,7 @@ class SettingsPage(QWidget):
         self.stack.addWidget(policy_tab)
         self.stack.addWidget(security_tab)
 
-        self.nav_bar.currentChanged.connect(self.stack.setCurrentIndex)
+        self.nav_bar.currentChanged.connect(self._on_tab_changed)
 
         # ── Appearance group ────────────────────────────────────────
         appear_group = QGroupBox("Appearance")
@@ -132,12 +134,25 @@ class SettingsPage(QWidget):
         theme_layout.addWidget(self.btn_theme_custom)
         theme_layout.addStretch()
 
-        self.btn_edit_custom_theme = QPushButton("Edit Custom Colors...")
-        self.btn_edit_custom_theme.setVisible(False)
-        self.btn_edit_custom_theme.clicked.connect(self._open_custom_theme_dialog)
-        theme_layout.addWidget(self.btn_edit_custom_theme)
-
         appear_form.addRow("Theme:", theme_layout)
+
+        # Custom color tray — inline, shown only when "Custom" is selected
+        self.custom_tray = QFrame()
+        self.custom_tray.setFrameShape(QFrame.Shape.StyledPanel)
+        self.custom_tray.setVisible(False)
+        tray_layout = QHBoxLayout(self.custom_tray)
+        tray_layout.setContentsMargins(8, 8, 8, 8)
+        tray_layout.setSpacing(12)
+
+        self.swatch_bg = self._make_swatch("Main Background", "bg")
+        self.swatch_fg = self._make_swatch("Text Color", "fg")
+        self.swatch_sidebar = self._make_swatch("Sidebar", "sidebar")
+        tray_layout.addWidget(self.swatch_bg)
+        tray_layout.addWidget(self.swatch_fg)
+        tray_layout.addWidget(self.swatch_sidebar)
+        tray_layout.addStretch()
+
+        appear_form.addRow("Custom Colors:", self.custom_tray)
 
         # Text scale
         scale_row = QHBoxLayout()
@@ -153,6 +168,11 @@ class SettingsPage(QWidget):
         scale_row.addWidget(self.slider_scale)
         scale_row.addWidget(self.lbl_scale)
         appear_form.addRow("Text Scale:", scale_row)
+
+        # Custom cursor toggle
+        self.toggle_custom_cursor = ToggleSwitch()
+        self.toggle_custom_cursor.setToolTip("Turn the custom themed cursor on or off")
+        appear_form.addRow("Custom Cursor:", self.toggle_custom_cursor)
 
         general_layout.addWidget(appear_group)
 
@@ -277,34 +297,64 @@ class SettingsPage(QWidget):
 
         policy_layout.addWidget(products_group, 2)
 
-        # ── Security group ──────────────────────────────────────────
+        # ── Security group (3 sub-sections) ─────────────────────────
         sec_group = QGroupBox("Security")
         sec_group.setFont(QFont("Arial", 12))
-        sec_form = QFormLayout(sec_group)
-        self._apply_form_rhythm(sec_form)
+        sec_outer = QVBoxLayout(sec_group)
+        sec_outer.setContentsMargins(14, 20, 14, 14)
+        sec_outer.setSpacing(14)
 
-        # Security mode
+        # 1) Change Password / Credential
+        change_group = QGroupBox("Change Password")
+        change_group.setFont(QFont("Arial", 11))
+        change_form = QFormLayout(change_group)
+        self._apply_form_rhythm(change_form)
+
         self.combo_security_mode = QComboBox()
         self.combo_security_mode.addItems(["PIN", "Password"])
         self.combo_security_mode.setFont(QFont("Arial", 11))
         self.combo_security_mode.currentTextChanged.connect(self._sync_security_placeholders)
-        sec_form.addRow("Security Mode:", self.combo_security_mode)
+        change_form.addRow("Security Mode:", self.combo_security_mode)
 
-        # New credential fields
         self.input_new_credential = QLineEdit()
         self.input_new_credential.setEchoMode(QLineEdit.EchoMode.Password)
         self.input_new_credential.setMinimumHeight(34)
-        sec_form.addRow("New Credential:", self.input_new_credential)
+        change_form.addRow("New Credential:", self.input_new_credential)
 
         self.input_confirm_credential = QLineEdit()
         self.input_confirm_credential.setEchoMode(QLineEdit.EchoMode.Password)
         self.input_confirm_credential.setMinimumHeight(34)
-        sec_form.addRow("Confirm Credential:", self.input_confirm_credential)
+        change_form.addRow("Confirm Credential:", self.input_confirm_credential)
+
+        sec_outer.addWidget(change_group)
+
+        # 2) Recovery Key
+        recovery_group = QGroupBox("Recovery Key")
+        recovery_group.setFont(QFont("Arial", 11))
+        recovery_layout = QVBoxLayout(recovery_group)
+        recovery_layout.setContentsMargins(14, 20, 14, 14)
+        recovery_layout.setSpacing(10)
+
+        recovery_note = QLabel(
+            "Generate a new recovery key to regain access if the credential is forgotten. "
+            "The key is shown once — store it securely, then click Apply."
+        )
+        recovery_note.setWordWrap(True)
+        recovery_note.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        recovery_layout.addWidget(recovery_note)
 
         self.btn_generate_recovery = QPushButton("Generate New Recovery Key")
         self.btn_generate_recovery.setMinimumHeight(34)
         self.btn_generate_recovery.clicked.connect(self._generate_recovery_key)
-        sec_form.addRow("Recovery Key:", self.btn_generate_recovery)
+        recovery_layout.addWidget(self.btn_generate_recovery)
+
+        sec_outer.addWidget(recovery_group)
+
+        # 3) Auto-Lock Timeout
+        timeout_group = QGroupBox("Auto-Lock Timeout")
+        timeout_group.setFont(QFont("Arial", 11))
+        timeout_form = QFormLayout(timeout_group)
+        self._apply_form_rhythm(timeout_form)
 
         timeout_row = QHBoxLayout()
         self.slider_timeout = QSlider(Qt.Orientation.Horizontal)
@@ -323,7 +373,9 @@ class SettingsPage(QWidget):
         timeout_row.addWidget(self.slider_timeout)
         timeout_row.addWidget(self.spin_timeout)
 
-        sec_form.addRow("Auto-Lock Timeout:", timeout_row)
+        timeout_form.addRow("Lock after:", timeout_row)
+        sec_outer.addWidget(timeout_group)
+
         security_layout.addWidget(sec_group)
 
         # ── Apply button ────────────────────────────────────────────
@@ -376,6 +428,84 @@ class SettingsPage(QWidget):
             self.input_confirm_credential.setPlaceholderText("Re-enter password")
             self.input_new_credential.setEnabled(True)
             self.input_confirm_credential.setEnabled(True)
+
+    def _on_tab_changed(self, index: int) -> None:
+        """Gate the Security tab behind a passcode prompt."""
+        if index != self._security_tab_index:
+            self.stack.setCurrentIndex(index)
+            return
+
+        if self._security_unlocked:
+            self.stack.setCurrentIndex(index)
+            return
+
+        if self._prompt_security_passcode():
+            self._security_unlocked = True
+            self.stack.setCurrentIndex(index)
+        else:
+            # Revert nav bar to the previously selected (non-security) tab.
+            self.nav_bar.blockSignals(True)
+            self.nav_bar.set_current_index(self.stack.currentIndex())
+            self.nav_bar.blockSignals(False)
+
+    def _prompt_security_passcode(self) -> bool:
+        """Prompt for the current PIN/password; return True if verified."""
+        ok, settings = get_system_settings(self.db_path)
+        mode = "password"
+        auth_hash = ""
+        if ok and settings:
+            mode = str(settings.get("security_mode") or "password").strip().lower().replace(" ", "_")
+            if mode in ("system", "system_auth", "system_authentication"):
+                mode = "password"
+            if mode not in ("pin", "password"):
+                mode = "password"
+            auth_hash = str(settings.get("auth_hash") or "")
+
+        label = "PIN" if mode == "pin" else "Password"
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Security Verification Required")
+        dialog.setMinimumWidth(360)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        info = QLabel(f"Enter your current {label} to access Security settings.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        input_field = QLineEdit()
+        input_field.setEchoMode(QLineEdit.EchoMode.Password)
+        input_field.setMinimumHeight(34)
+        input_field.setPlaceholderText(label)
+        layout.addWidget(input_field)
+
+        err_label = QLabel("")
+        err_label.setStyleSheet("color: #e74c3c; font-size: 11px;")
+        layout.addWidget(err_label)
+
+        btn_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btn_box.accepted.connect(dialog.accept)
+        btn_box.rejected.connect(dialog.reject)
+        layout.addWidget(btn_box)
+
+        input_field.returnPressed.connect(dialog.accept)
+        dialog.setLayout(layout)
+
+        # If no credential is set yet, allow access without verification.
+        if not auth_hash:
+            return True
+
+        while True:
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return False
+            entered = input_field.text().strip()
+            if verify_credential(entered, auth_hash):
+                return True
+            err_label.setText(f"Incorrect {label}. Please try again.")
+            input_field.clear()
+            input_field.setFocus()
 
     def _generate_recovery_key(self) -> None:
         self.pending_recovery_key = generate_secure_token(6).upper()
@@ -447,6 +577,8 @@ class SettingsPage(QWidget):
         scale_pct = int(float(settings.get('text_scale', 1.0)) * 100)
         self.slider_scale.setValue(max(80, min(150, scale_pct)))
         self.lbl_scale.setText(f"{self.slider_scale.value()} %")
+
+        self.toggle_custom_cursor.setChecked(bool(settings.get('custom_cursor_enabled', 0)))
 
         timeout = int(settings.get('timeout_minutes', 10))
         self.slider_timeout.setValue(timeout)
@@ -669,7 +801,7 @@ class SettingsPage(QWidget):
         )
 
     def _select_theme(self, name: str) -> None:
-        """Highlight the matching theme button and toggle the custom edit button."""
+        """Highlight the matching theme button and toggle the custom color tray."""
         mapping = {
             "light": self.btn_theme_light,
             "dark": self.btn_theme_dark,
@@ -679,7 +811,9 @@ class SettingsPage(QWidget):
             is_active = key == name
             btn.setChecked(is_active)
             btn.setStyleSheet(self._theme_button_stylesheet(is_active))
-        self.btn_edit_custom_theme.setVisible(name == "custom")
+        self.custom_tray.setVisible(name == "custom")
+        if name == "custom":
+            self._refresh_swatch_previews()
 
     def _on_theme_button_clicked(self, button: QPushButton) -> None:
         name = {
@@ -698,42 +832,34 @@ class SettingsPage(QWidget):
         }
         return mapping.get(checked, "dark")
 
-    def _open_custom_theme_dialog(self) -> None:
+    def _make_swatch(self, label: str, key: str) -> QPushButton:
+        """Create a color swatch button that opens the color picker on click."""
         from PySide6.QtGui import QColor
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Custom Theme Colors")
-        dialog.setMinimumWidth(300)
-        layout = QFormLayout(dialog)
-        
-        btn_bg = QPushButton("Pick Base Background")
-        btn_fg = QPushButton("Pick Text/Foreground")
-        btn_sidebar = QPushButton("Pick Sidebar Background")
-        
-        def pick_bg():
-            color = QColorDialog.getColor(QColor(self.custom_colors["bg"]), self, "Pick Base Background")
-            if color.isValid(): self.custom_colors["bg"] = color.name()
-        
-        def pick_fg():
-            color = QColorDialog.getColor(QColor(self.custom_colors["fg"]), self, "Pick Target Text Color")
-            if color.isValid(): self.custom_colors["fg"] = color.name()
-            
-        def pick_sidebar():
-            color = QColorDialog.getColor(QColor(self.custom_colors["sidebar"]), self, "Pick Sidebar Color")
-            if color.isValid(): self.custom_colors["sidebar"] = color.name()
+        btn = QPushButton(label)
+        btn.setMinimumHeight(40)
+        btn.setMinimumWidth(120)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setProperty("color_key", key)
+        btn.clicked.connect(lambda _=False, k=key: self._pick_custom_color(k))
+        return btn
 
-        btn_bg.clicked.connect(pick_bg)
-        btn_fg.clicked.connect(pick_fg)
-        btn_sidebar.clicked.connect(pick_sidebar)
-        
-        layout.addRow("Main Area:", btn_bg)
-        layout.addRow("Text Color:", btn_fg)
-        layout.addRow("Sidebar Area:", btn_sidebar)
-        
-        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-        btn_box.accepted.connect(dialog.accept)
-        layout.addRow(btn_box)
-        
-        dialog.exec()
+    def _refresh_swatch_previews(self) -> None:
+        for swatch in (self.swatch_bg, self.swatch_fg, self.swatch_sidebar):
+            key = swatch.property("color_key")
+            color = self.custom_colors.get(key, "#000000")
+            swatch.setStyleSheet(
+                f"QPushButton {{ background-color: {color}; color: #ffffff; "
+                f"border: 1px solid #888888; border-radius: 6px; padding: 6px 10px; }}"
+                f"QPushButton:hover {{ border: 2px solid #3498db; }}"
+            )
+
+    def _pick_custom_color(self, key: str) -> None:
+        from PySide6.QtGui import QColor
+        current = QColor(self.custom_colors.get(key, "#000000"))
+        color = QColorDialog.getColor(current, self, f"Pick {key} color")
+        if color.isValid():
+            self.custom_colors[key] = color.name()
+            self._refresh_swatch_previews()
 
     def _apply_settings(self) -> None:
         mode = self.combo_security_mode.currentText().lower().replace(" ", "_")
@@ -769,6 +895,7 @@ class SettingsPage(QWidget):
             'custom_theme_fg': self.custom_colors["fg"],
             'custom_theme_sidebar': self.custom_colors["sidebar"],
             'text_scale': round(self.slider_scale.value() / 100.0, 2),
+            'custom_cursor_enabled': 1 if self.toggle_custom_cursor.isChecked() else 0,
             'timeout_minutes': self.spin_timeout.value(),
             'security_mode': mode,
             'society_name': self.input_society_name.text().strip(),

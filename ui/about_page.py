@@ -266,6 +266,21 @@ class AboutPage(QWidget):
             "Settings",
         )
 
+        tabs.addTab(
+            make_help_tab(
+                "Investments",
+                "Records society investments (bonds, stocks, fixed deposits, treasury bills, and more) and tracks totals.",
+                [
+                    "Open Investments from the sidebar.",
+                    "On Add Record, enter instrument name, holder name, type, amount, expected interest, and maturity date.",
+                    "Choose a type from the dropdown or pick '+ Add Type...' to create a custom type.",
+                    "Click Save Investment; review and delete records under the Portfolio tab.",
+                ],
+                "Investment totals appear on the Dashboard and in the Society report when 'Investments' is ticked.",
+            ),
+            "Investments",
+        )
+
         help_layout.addWidget(tabs)
         layout.addWidget(help_group)
         layout.addStretch()

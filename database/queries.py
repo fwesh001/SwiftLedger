@@ -2958,6 +2958,115 @@ def get_report_pack_audit_logs(
             conn.close()
 
 
+def add_investment(
+    db_path: str,
+    instrument_name: str,
+    holder_name: str,
+    inv_type: str,
+    invested_amount: float,
+    expected_interest: float = 0.0,
+    duration_date: Optional[str] = None,
+    notes: str = "",
+) -> Tuple[bool, str]:
+    """Insert a new investment record."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO investments
+                (instrument_name, holder_name, inv_type, invested_amount,
+                 expected_interest, duration_date, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                instrument_name.strip(),
+                holder_name.strip(),
+                inv_type.strip(),
+                float(invested_amount),
+                float(expected_interest),
+                duration_date,
+                notes.strip(),
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+        conn.commit()
+        return True, "Investment recorded successfully."
+    except Exception as e:
+        return False, f"Failed to record investment: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_investments(
+    db_path: str,
+    inv_type: Optional[str] = None,
+    search: Optional[str] = None,
+) -> Tuple[bool, List[Dict]]:
+    """Return all investment records, optionally filtered by type or search term."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        query = "SELECT * FROM investments WHERE 1=1"
+        params: List[object] = []
+        if inv_type:
+            query += " AND inv_type = ?"
+            params.append(inv_type)
+        if search:
+            query += " AND (LOWER(instrument_name) LIKE LOWER(?) OR LOWER(holder_name) LIKE LOWER(?))"
+            like = f"%{search.strip()}%"
+            params.extend([like, like])
+        query += " ORDER BY created_at DESC"
+        cursor.execute(query, params)
+        return True, [dict(row) for row in cursor.fetchall()]
+    except Exception:
+        return False, []
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_investment_summary(db_path: str) -> Tuple[bool, Dict]:
+    """Return aggregate investment totals for the dashboard / reports."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*), COALESCE(SUM(invested_amount), 0.0), "
+                       "COALESCE(SUM(expected_interest), 0.0) FROM investments")
+        count, total_invested, total_expected = cursor.fetchone()
+        return True, {
+            "investment_count": int(count or 0),
+            "total_invested": round(float(total_invested or 0.0), 2),
+            "total_expected_interest": round(float(total_expected or 0.0), 2),
+        }
+    except Exception:
+        return False, {"investment_count": 0, "total_invested": 0.0, "total_expected_interest": 0.0}
+    finally:
+        if conn:
+            conn.close()
+
+
+def delete_investment(db_path: str, investment_id: int) -> Tuple[bool, str]:
+    """Delete an investment record by id."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM investments WHERE investment_id = ?", (investment_id,))
+        conn.commit()
+        return True, "Investment deleted."
+    except Exception as e:
+        return False, f"Failed to delete investment: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+
 if __name__ == "__main__":
     # Example usage
     db_path = "swiftledger.db"

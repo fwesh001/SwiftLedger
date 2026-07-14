@@ -239,6 +239,21 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
         );
     """)
 
+    # ── investments ───────────────────────────────────────────────
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS investments (
+            investment_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            instrument_name TEXT NOT NULL,
+            holder_name     TEXT NOT NULL,
+            inv_type        TEXT NOT NULL,
+            invested_amount REAL NOT NULL,
+            expected_interest REAL NOT NULL DEFAULT 0.0,
+            duration_date   TEXT,
+            notes           TEXT DEFAULT '',
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
     cursor.execute("PRAGMA table_info(system_settings);")
     settings_columns = {row[1] for row in cursor.fetchall()}
     if "show_charts" not in settings_columns:
@@ -255,6 +270,8 @@ def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN custom_theme_fg TEXT DEFAULT '#ffffff';")
     if "custom_theme_sidebar" not in settings_columns:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN custom_theme_sidebar TEXT DEFAULT '#1e1e1e';")
+    if "custom_cursor_enabled" not in settings_columns:
+        cursor.execute("ALTER TABLE system_settings ADD COLUMN custom_cursor_enabled INTEGER DEFAULT 0;")
     if "address" not in settings_columns:
         cursor.execute("ALTER TABLE system_settings ADD COLUMN address TEXT;")
     if "min_monthly_saving" not in settings_columns:
@@ -361,6 +378,8 @@ def save_settings(data_dict: Dict[str, object], db_path: str = DB_PATH) -> None:
         "reg_no", "logo_path", "security_mode", "auth_hash", "recovery_key_hash",
         "timeout_minutes", "show_charts", "show_alerts",
         "theme", "text_scale", "min_monthly_saving",
+        "custom_theme_bg", "custom_theme_fg", "custom_theme_sidebar",
+        "custom_cursor_enabled",
         "default_interest_rate", "loan_multiplier", "default_duration", "updated_at",
     }
 
