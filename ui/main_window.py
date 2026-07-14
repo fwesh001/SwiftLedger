@@ -43,11 +43,12 @@ from ui.analytics_charts import InteractiveMonthlyChart, LTSRiskGauge
 from ui.audit_page import AuditLogPage
 from ui.about_page import AboutPage
 from ui.settings_page import SettingsPage
-from ui.widgets import SearchFilterWidget, UppercaseLineEdit
+from ui.widgets import SearchFilterWidget, UppercaseLineEdit, HorizontalNavBar
 from ui.reports_page import ReportsPage
 from ui.login_screen import LoginScreen
 from ui.theme_manager import build_theme_stylesheet, create_custom_cursor
 from logic.data_manager import BulkDataManager
+from security import verify_credential
 from utils import format_currency, format_currency_with_words, amount_to_words, set_button_icon
 
 QLineEdit = UppercaseLineEdit
@@ -83,7 +84,7 @@ class DashboardPage(QWidget):
         content = QWidget()
         main_layout = QVBoxLayout(content)
         main_layout.setContentsMargins(24, 24, 24, 24)
-        main_layout.setSpacing(22)
+        main_layout.setSpacing(18)
 
         # Title row
         header_row = QHBoxLayout()
@@ -106,6 +107,38 @@ class DashboardPage(QWidget):
         self.btn_refresh.clicked.connect(self.refresh_dashboard)
         header_row.addWidget(self.btn_refresh)
         main_layout.addLayout(header_row)
+
+        # ── Horizontal nav bar ─────────────────────────────────────
+        self.nav_bar = HorizontalNavBar(["Status", "Financial Health"])
+        main_layout.addWidget(self.nav_bar)
+
+        # ── Stacked content for the two tabs ────────────────────────
+        self.stack = QStackedWidget()
+        main_layout.addWidget(self.stack)
+
+        self._build_status_tab()
+        self._build_financial_health_tab()
+
+        self.nav_bar.currentChanged.connect(self.stack.setCurrentIndex)
+
+        # ── Status bar ──────────────────────────────────────────────
+        self.lbl_status = QLabel("Last refreshed: —")
+        self.lbl_status.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+        self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignRight)
+        main_layout.addWidget(self.lbl_status)
+
+        main_layout.addStretch()
+
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
+    # ── Tab: Status ────────────────────────────────────────────────
+
+    def _build_status_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(22)
 
         # ── Stat cards grid ────────────────────────────────────────
         cards_layout = QGridLayout()
@@ -130,7 +163,7 @@ class DashboardPage(QWidget):
         cards_layout.addWidget(self.card_loans[0], 1, 0)
         cards_layout.addWidget(self.card_interest[0], 1, 1)
 
-        main_layout.addLayout(cards_layout)
+        layout.addLayout(cards_layout)
 
         # ── Dividend section ────────────────────────────────────────
         dividend_group = QGroupBox("Dividend Breakdown")
@@ -154,7 +187,51 @@ class DashboardPage(QWidget):
         div_layout.addWidget(self.member_div_card[0])
         div_layout.addWidget(self.society_div_card[0])
 
-        main_layout.addWidget(dividend_group)
+        layout.addWidget(dividend_group)
+
+        # ── Liquidity Status ────────────────────────────────────────
+        liquidity_group = QGroupBox("Liquidity Status")
+        liquidity_group.setFont(QFont("Arial", 12))
+        liquidity_layout = QVBoxLayout(liquidity_group)
+        self.lbl_available_cash = QLabel(f"Available Cash: {format_currency(0.0, symbol='₦')}")
+        self.lbl_available_cash.setStyleSheet("color: #27ae60; font-weight: bold;")
+        self.lbl_outstanding_loans = QLabel(f"Outstanding Loans: {format_currency(0.0, symbol='₦')}")
+        self.lbl_outstanding_loans.setStyleSheet("color: #ff6f61; font-weight: bold;")
+        liquidity_layout.addWidget(self.lbl_available_cash)
+        liquidity_layout.addWidget(self.lbl_outstanding_loans)
+        liquidity_layout.addStretch()
+        layout.addWidget(liquidity_group)
+
+        # ── Quick Start Guide ───────────────────────────────────────
+        help_group = QGroupBox("Quick Start Guide")
+        help_group.setFont(QFont("Arial", 12))
+        help_layout = QVBoxLayout(help_group)
+        help_layout.setSpacing(6)
+        help_items = [
+            "1. Register members on the Members page (Staff Number + Name).",
+            "2. Post savings via the Savings page (Lodgment / Deduction).",
+            "3. Apply for loans on the Loans page — eligibility is 2× savings.",
+            "4. Check overdue alerts above, or toggle them in Settings.",
+            "5. Export branded PDFs from the Reports page.",
+            "6. All actions are tracked — review them on the Audit Logs page.",
+        ]
+        for item in help_items:
+            lbl = QLabel(item)
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet("font-size: 11px; padding: 2px 0;")
+            help_layout.addWidget(lbl)
+        layout.addWidget(help_group)
+
+        layout.addStretch()
+        self.stack.addWidget(tab)
+
+    # ── Tab: Financial Health ──────────────────────────────────────
+
+    def _build_financial_health_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(22)
 
         # ── Interactive Monthly Trend Chart ──────────────────────────
         trend_group = QGroupBox("Monthly Trends")
@@ -162,7 +239,7 @@ class DashboardPage(QWidget):
         trend_layout = QVBoxLayout(trend_group)
         self.monthly_chart = InteractiveMonthlyChart(self.db_path)
         trend_layout.addWidget(self.monthly_chart)
-        main_layout.addWidget(trend_group)
+        layout.addWidget(trend_group)
 
         # ── LTS Risk Gauge + Alerts row ──────────────────────────────
         gauge_alerts_row = QHBoxLayout()
@@ -183,24 +260,9 @@ class DashboardPage(QWidget):
         alerts_layout.addWidget(self.list_overdue)
         gauge_alerts_row.addWidget(alerts_group)
 
-        main_layout.addLayout(gauge_alerts_row)
+        layout.addLayout(gauge_alerts_row)
 
-        # ── Liquidity Status + Financial Health ─────────────────────
-        status_health_row = QHBoxLayout()
-        status_health_row.setSpacing(16)
-
-        liquidity_group = QGroupBox("Liquidity Status")
-        liquidity_group.setFont(QFont("Arial", 12))
-        liquidity_layout = QVBoxLayout(liquidity_group)
-        self.lbl_available_cash = QLabel(f"Available Cash: {format_currency(0.0, symbol='₦')}")
-        self.lbl_available_cash.setStyleSheet("color: #27ae60; font-weight: bold;")
-        self.lbl_outstanding_loans = QLabel(f"Outstanding Loans: {format_currency(0.0, symbol='₦')}")
-        self.lbl_outstanding_loans.setStyleSheet("color: #ff6f61; font-weight: bold;")
-        liquidity_layout.addWidget(self.lbl_available_cash)
-        liquidity_layout.addWidget(self.lbl_outstanding_loans)
-        liquidity_layout.addStretch()
-        status_health_row.addWidget(liquidity_group)
-
+        # ── Financial Health chart ───────────────────────────────────
         health_group = QGroupBox("Financial Health")
         health_group.setFont(QFont("Arial", 12))
         self.chart_container = QWidget()
@@ -211,40 +273,10 @@ class DashboardPage(QWidget):
         self.chart_layout.addWidget(self.chart_placeholder)
         health_layout = QVBoxLayout(health_group)
         health_layout.addWidget(self.chart_container)
-        status_health_row.addWidget(health_group)
+        layout.addWidget(health_group)
 
-        main_layout.addLayout(status_health_row)
-
-        # ── Quick Start Guide ───────────────────────────────────────
-        help_group = QGroupBox("Quick Start Guide")
-        help_group.setFont(QFont("Arial", 12))
-        help_layout = QVBoxLayout(help_group)
-        help_layout.setSpacing(6)
-        help_items = [
-            "1. Register members on the Members page (Staff Number + Name).",
-            "2. Post savings via the Savings page (Lodgment / Deduction).",
-            "3. Apply for loans on the Loans page — eligibility is 2× savings.",
-            "4. Check overdue alerts above, or toggle them in Settings.",
-            "5. Export branded PDFs from the Reports page.",
-            "6. All actions are tracked — review them on the Audit Logs page.",
-        ]
-        for item in help_items:
-            lbl = QLabel(item)
-            lbl.setWordWrap(True)
-            lbl.setStyleSheet("font-size: 11px; padding: 2px 0;")
-            help_layout.addWidget(lbl)
-        main_layout.addWidget(help_group)
-
-        # ── Status bar ──────────────────────────────────────────────
-        self.lbl_status = QLabel("Last refreshed: —")
-        self.lbl_status.setStyleSheet("color: #7f8c8d; font-size: 11px;")
-        self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignRight)
-        main_layout.addWidget(self.lbl_status)
-
-        main_layout.addStretch()
-
-        scroll.setWidget(content)
-        outer.addWidget(scroll)
+        layout.addStretch()
+        self.stack.addWidget(tab)
 
     # ── Widget factories ────────────────────────────────────────────
 
@@ -741,14 +773,110 @@ class MembersPage(QWidget):
         main_layout = QVBoxLayout(content)
         main_layout.setContentsMargins(15, 15, 15, 24)
         main_layout.setSpacing(15)
-        
+
         # Title
         title = QLabel("Members Management")
         title_font = QFont("Arial", 18)
         title_font.setBold(True)
         title.setFont(title_font)
         main_layout.addWidget(title)
-        
+
+        # ── Horizontal nav bar ─────────────────────────────────────
+        self.nav_bar = HorizontalNavBar(["All Members", "Register"])
+        main_layout.addWidget(self.nav_bar)
+
+        # ── Stacked content for the two tabs ────────────────────────
+        self.stack = QStackedWidget()
+        main_layout.addWidget(self.stack)
+
+        self._build_all_members_tab()
+        self._build_register_tab()
+
+        self.nav_bar.currentChanged.connect(self.stack.setCurrentIndex)
+
+        scroll.setWidget(content)
+        outer_layout.addWidget(scroll)
+
+        # Load initial data
+        self.load_data()
+
+    # ── Tab: All Members ───────────────────────────────────────────
+
+    def _build_all_members_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(12)
+
+        # Members Table Box
+        table_group = QGroupBox("All Members")
+        table_group.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        table_layout = QVBoxLayout(table_group)
+        table_layout.setContentsMargins(10, 10, 10, 10)
+        table_layout.setSpacing(10)
+
+        search_row = QHBoxLayout()
+        self.input_member_search = QLineEdit()
+        self.input_member_search.setPlaceholderText("Search by name, staff ID, or phone")
+        self.input_member_search.textChanged.connect(self._filter_members_table)
+        search_row.addWidget(self.input_member_search)
+        table_layout.addLayout(search_row)
+
+        self.table_members = QTableWidget()
+        self.table_members.setColumnCount(6)
+        self.table_members.setHorizontalHeaderLabels([
+            "Staff Number", "Full Name", "Phone", "Current Savings", "Total Loans", "ID"
+        ])
+        self.table_members.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_members.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table_members.horizontalHeader().setStretchLastSection(True)
+        # Ensure headers fit and columns size proportionally
+        self.table_members.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_members.setColumnHidden(5, True)  # Hide member_id column
+        self.table_members.cellDoubleClicked.connect(self._open_member_profile)
+        self.table_members.setMinimumHeight(320)
+        table_layout.addWidget(self.table_members, 1)
+        layout.addWidget(table_group, 1)
+
+        # Delete button
+        del_row = QHBoxLayout()
+        del_row.addStretch()
+        self.btn_delete = QPushButton("Delete Selected Member")
+        self.btn_delete.setMinimumHeight(36)
+        self.btn_delete.setFont(QFont("Arial", 10))
+        self.btn_delete.setStyleSheet(
+            "QPushButton { background-color: #c0392b; color: white; "
+            "border-radius: 5px; padding: 8px 16px; font-weight: bold; } "
+            "QPushButton:hover { background-color: #e74c3c; }"
+        )
+        self.btn_delete.clicked.connect(self._delete_selected_member)
+        del_row.addWidget(self.btn_delete)
+
+        self.btn_delete_all = QPushButton("Delete All Members")
+        self.btn_delete_all.setMinimumHeight(36)
+        self.btn_delete_all.setFont(QFont("Arial", 10))
+        self.btn_delete_all.setStyleSheet(
+            "QPushButton { background-color: #922b21; color: white; "
+            "border-radius: 5px; padding: 8px 16px; font-weight: bold; } "
+            "QPushButton:hover { background-color: #c0392b; }"
+        )
+        self.btn_delete_all.clicked.connect(self._delete_all_members)
+        del_row.addWidget(self.btn_delete_all)
+
+        del_row.setContentsMargins(0, 6, 0, 0)
+        layout.addLayout(del_row)
+        layout.addSpacing(6)
+
+        self.stack.addWidget(tab)
+
+    # ── Tab: Register ──────────────────────────────────────────────
+
+    def _build_register_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(12)
+
         # Registration Form Group
         form_group = QGroupBox("Register New Member")
         form_font = QFont("Arial", 10)
@@ -760,12 +888,12 @@ class MembersPage(QWidget):
         form_layout.setVerticalSpacing(10)
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        
+
         # Staff Number input
         self.input_staff_number = QLineEdit()
         self.input_staff_number.setPlaceholderText("e.g., EMP001")
         form_layout.addRow("Staff Number:", self.input_staff_number)
-        
+
         # Full Name input
         self.input_full_name = QLineEdit()
         self.input_full_name.setPlaceholderText("e.g., John Doe")
@@ -806,8 +934,8 @@ class MembersPage(QWidget):
         form_layout.addRow("Date Joined:", self.input_date_joined)
 
         form_group.setLayout(form_layout)
-        main_layout.addWidget(form_group)
-        
+        layout.addWidget(form_group)
+
         # Register button
         button_layout = QHBoxLayout()
         btn_font = QFont("Arial", 10)
@@ -859,72 +987,10 @@ class MembersPage(QWidget):
         """)
         self.btn_register.clicked.connect(self.register_member)
         button_layout.addWidget(self.btn_register, 0, Qt.AlignmentFlag.AlignRight)
-        main_layout.addLayout(button_layout)
-        
-        # Members Table Box
-        table_group = QGroupBox("All Members")
-        table_group.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        table_layout = QVBoxLayout(table_group)
-        table_layout.setContentsMargins(10, 10, 10, 10)
-        table_layout.setSpacing(10)
+        layout.addLayout(button_layout)
+        layout.addStretch()
 
-        search_row = QHBoxLayout()
-        self.input_member_search = QLineEdit()
-        self.input_member_search.setPlaceholderText("Search by name, staff ID, or phone")
-        self.input_member_search.textChanged.connect(self._filter_members_table)
-        search_row.addWidget(self.input_member_search)
-        table_layout.addLayout(search_row)
-        
-        self.table_members = QTableWidget()
-        self.table_members.setColumnCount(6)
-        self.table_members.setHorizontalHeaderLabels([
-            "Staff Number", "Full Name", "Phone", "Current Savings", "Total Loans", "ID"
-        ])
-        self.table_members.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table_members.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table_members.horizontalHeader().setStretchLastSection(True)
-        # Ensure headers fit and columns size proportionally
-        self.table_members.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table_members.setColumnHidden(5, True)  # Hide member_id column
-        self.table_members.cellDoubleClicked.connect(self._open_member_profile)
-        self.table_members.setMinimumHeight(320)
-        table_layout.addWidget(self.table_members, 1)
-        main_layout.addWidget(table_group, 1)
-
-        # Delete button
-        del_row = QHBoxLayout()
-        del_row.addStretch()
-        self.btn_delete = QPushButton("Delete Selected Member")
-        self.btn_delete.setMinimumHeight(36)
-        self.btn_delete.setFont(QFont("Arial", 10))
-        self.btn_delete.setStyleSheet(
-            "QPushButton { background-color: #c0392b; color: white; "
-            "border-radius: 5px; padding: 8px 16px; font-weight: bold; } "
-            "QPushButton:hover { background-color: #e74c3c; }"
-        )
-        self.btn_delete.clicked.connect(self._delete_selected_member)
-        del_row.addWidget(self.btn_delete)
-
-        self.btn_delete_all = QPushButton("Delete All Members")
-        self.btn_delete_all.setMinimumHeight(36)
-        self.btn_delete_all.setFont(QFont("Arial", 10))
-        self.btn_delete_all.setStyleSheet(
-            "QPushButton { background-color: #922b21; color: white; "
-            "border-radius: 5px; padding: 8px 16px; font-weight: bold; } "
-            "QPushButton:hover { background-color: #c0392b; }"
-        )
-        self.btn_delete_all.clicked.connect(self._delete_all_members)
-        del_row.addWidget(self.btn_delete_all)
-
-        del_row.setContentsMargins(0, 6, 0, 0)
-        main_layout.addLayout(del_row)
-        main_layout.addSpacing(6)
-
-        scroll.setWidget(content)
-        outer_layout.addWidget(scroll)
-        
-        # Load initial data
-        self.load_data()
+        self.stack.addWidget(tab)
     
     def register_member(self) -> None:
         """Handle member registration."""
@@ -1154,7 +1220,7 @@ class MembersPage(QWidget):
             QMessageBox.critical(self, "Error", msg)
 
     def _delete_all_members(self) -> None:
-        """Delete all members and linked records after strict confirmation."""
+        """Delete all members and linked records after strict confirmation + credential gate."""
         reply = QMessageBox.warning(
             self,
             "Delete All Members",
@@ -1176,6 +1242,30 @@ class MembersPage(QWidget):
 
         if (confirm_text or "").strip().upper() != "DELETE ALL":
             QMessageBox.warning(self, "Cancelled", "Confirmation text did not match. No data was deleted.")
+            return
+
+        # ── Security gate: require PIN or password (per security mode) ──
+        ok, settings = get_system_settings(self.db_path)
+        if not ok or not settings:
+            QMessageBox.critical(self, "Security Error", "Unable to read security settings.")
+            return
+
+        auth_hash = str(settings.get("auth_hash") or "")
+        security_mode = str(settings.get("security_mode") or "Password")
+        prompt = "Enter your PIN to confirm deletion:" if security_mode.lower() == "pin" \
+            else "Enter your password to confirm deletion:"
+
+        credential, ok_cred = QInputDialog.getText(
+            self, "Security Confirmation", prompt, QLineEdit.EchoMode.Password
+        )
+        if not ok_cred or not credential:
+            return
+
+        if not auth_hash or not verify_credential(credential, auth_hash):
+            QMessageBox.warning(
+                self, "Access Denied",
+                "Incorrect credential. Deletion cancelled — no data was removed."
+            )
             return
 
         ok, message = delete_all_members(self.db_path)
@@ -1303,15 +1393,15 @@ class SavingsPage(QWidget):
         self.search_debounce_timer = QTimer()
         self.search_debounce_timer.setSingleShot(True)
         self.search_debounce_timer.timeout.connect(self.search_member)
-        
+
         # Create main layout
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
-        
+
         # Title row
         header_row = QHBoxLayout()
-        title = QLabel("Savings Management")
+        title = QLabel("Savings")
         title_font = QFont("Arial", 18)
         title_font.setBold(True)
         title.setFont(title_font)
@@ -1330,44 +1420,67 @@ class SavingsPage(QWidget):
         self.btn_refresh.clicked.connect(self.refresh_page)
         header_row.addWidget(self.btn_refresh)
         main_layout.addLayout(header_row)
-        
+
+        # ── Horizontal nav bar ─────────────────────────────────────
+        self.nav_bar = HorizontalNavBar(["Savings Management", "Transaction History"])
+        main_layout.addWidget(self.nav_bar)
+
+        # ── Stacked content for the two tabs ────────────────────────
+        self.stack = QStackedWidget()
+        main_layout.addWidget(self.stack)
+
+        self._build_management_tab()
+        self._build_history_tab()
+
+        self.nav_bar.currentChanged.connect(self.stack.setCurrentIndex)
+
+        self.setLayout(main_layout)
+
+    # ── Tab: Savings Management ────────────────────────────────────
+
+    def _build_management_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(15)
+
         # Search Section
         search_group = QGroupBox("Find Member")
         search_font = QFont("Arial", 10)
         search_font.setBold(True)
         search_group.setFont(search_font)
         search_layout = QHBoxLayout()
-        
+
         self.search_widget = SearchFilterWidget()
         self.search_widget.queryChanged.connect(self._on_search_query_changed)
-        
+
         search_layout.addWidget(self.search_widget)
         search_layout.addStretch()
         search_group.setLayout(search_layout)
-        main_layout.addWidget(search_group)
-        
+        layout.addWidget(search_group)
+
         # Member Info Section
         info_group = QGroupBox("Member Information")
         info_font = QFont("Arial", 10)
         info_font.setBold(True)
         info_group.setFont(info_font)
         info_layout = QHBoxLayout()
-        
+
         self.label_member_name = QLabel("Name: Not Selected")
         self.label_member_name.setFont(QFont("Arial", 11))
-        
+
         self.label_total_savings = QLabel("Total Savings: ₦0.00")
         self.label_total_savings.setFont(QFont("Arial", 11))
         savings_font = QFont("Arial", 11)
         savings_font.setBold(True)
         self.label_total_savings.setFont(savings_font)
-        
+
         info_layout.addWidget(self.label_member_name)
         info_layout.addStretch()
         info_layout.addWidget(self.label_total_savings)
         info_group.setLayout(info_layout)
-        main_layout.addWidget(info_group)
-        
+        layout.addWidget(info_group)
+
         # Transaction Form Section
         form_group = QGroupBox("Post New Transaction")
         form_font = QFont("Arial", 10)
@@ -1379,7 +1492,7 @@ class SavingsPage(QWidget):
         form_layout.setVerticalSpacing(10)
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        
+
         # Amount input with real-time conversion label
         self.input_amount = QDoubleSpinBox()
         self.input_amount.setRange(0, 1_000_000)
@@ -1388,11 +1501,11 @@ class SavingsPage(QWidget):
         self.input_amount.setSingleStep(100)
         self.input_amount.setPrefix("₦")
         self.input_amount.valueChanged.connect(self._update_amount_words_label)
-        
+
         # Label to show money-words conversion
         self.lbl_amount_words = QLabel()
         self.lbl_amount_words.setStyleSheet("color: #7f8c8d; font-size: 9pt; font-style: italic;")
-        
+
         amount_layout = QHBoxLayout()
         amount_layout.setContentsMargins(0, 0, 0, 0)
         amount_layout.setSpacing(8)
@@ -1402,7 +1515,7 @@ class SavingsPage(QWidget):
         amount_widget = QWidget()
         amount_widget.setLayout(amount_layout)
         form_layout.addRow("Amount:", amount_widget)
-        
+
         # Transaction type and payment mode
         self.combo_type = QComboBox()
         self.combo_type.addItem("Deposit (+)", "Lodgment")
@@ -1425,10 +1538,10 @@ class SavingsPage(QWidget):
         self.input_transfer_ref.setPlaceholderText("Optional transfer reference ID")
         self.input_transfer_ref.setVisible(False)
         form_layout.addRow("Transfer Ref:", self.input_transfer_ref)
-        
+
         form_group.setLayout(form_layout)
-        main_layout.addWidget(form_group)
-        
+        layout.addWidget(form_group)
+
         # Post button
         button_layout = QHBoxLayout()
         self.btn_post = QPushButton("Post Saving")
@@ -1458,14 +1571,25 @@ class SavingsPage(QWidget):
         self.btn_post.setEnabled(False)
         button_layout.addStretch()
         button_layout.addWidget(self.btn_post, 0, Qt.AlignmentFlag.AlignRight)
-        main_layout.addLayout(button_layout)
-        
+        layout.addLayout(button_layout)
+        layout.addStretch()
+
+        self.stack.addWidget(tab)
+
+    # ── Tab: Transaction History ───────────────────────────────────
+
+    def _build_history_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(10)
+
         # Savings History Table
         history_title = QLabel("Transaction History (Last 10)")
         history_font = QFont("Arial", 12)
         history_font.setBold(True)
         history_title.setFont(history_font)
-        main_layout.addWidget(history_title)
+        layout.addWidget(history_title)
 
         correction_row = QHBoxLayout()
         correction_row.addStretch()
@@ -1478,8 +1602,8 @@ class SavingsPage(QWidget):
         self.btn_reverse_saving.setMinimumWidth(130)
         self.btn_reverse_saving.clicked.connect(self.reverse_selected_saving)
         correction_row.addWidget(self.btn_reverse_saving)
-        main_layout.addLayout(correction_row)
-        
+        layout.addLayout(correction_row)
+
         self.table_savings = QTableWidget()
         self.table_savings.setColumnCount(7)
         self.table_savings.setHorizontalHeaderLabels([
@@ -1497,9 +1621,9 @@ class SavingsPage(QWidget):
         self.table_savings.setColumnWidth(4, 140)
         self.table_savings.setColumnWidth(5, 160)
         self.table_savings.setColumnHidden(6, True)  # Hide ID column
-        main_layout.addWidget(self.table_savings)
-        
-        self.setLayout(main_layout)
+        layout.addWidget(self.table_savings, 1)
+
+        self.stack.addWidget(tab)
     
     def _on_search_query_changed(self, filter_type: str, query: str) -> None:
         """Handle search query changes with debounce."""
@@ -1837,7 +1961,7 @@ class LoansPage(QWidget):
         self.search_debounce_timer = QTimer()
         self.search_debounce_timer.setSingleShot(True)
         self.search_debounce_timer.timeout.connect(self.search_member)
-        
+
         # Create scrollable container layout
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
@@ -1851,10 +1975,10 @@ class LoansPage(QWidget):
         main_layout = QVBoxLayout(content)
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
-        
+
         # Title row
         header_row = QHBoxLayout()
-        title = QLabel("Loan Management")
+        title = QLabel("Loans")
         title_font = QFont("Arial", 18)
         title_font.setBold(True)
         title.setFont(title_font)
@@ -1873,22 +1997,55 @@ class LoansPage(QWidget):
         self.btn_refresh.clicked.connect(self.refresh_page)
         header_row.addWidget(self.btn_refresh)
         main_layout.addLayout(header_row)
-        
+
+        # ── Horizontal nav bar ─────────────────────────────────────
+        self.nav_bar = HorizontalNavBar(["Loan Management", "Active Loans", "Repayment Status"])
+        main_layout.addWidget(self.nav_bar)
+
+        # ── Stacked content for the three tabs ─────────────────────
+        self.stack = QStackedWidget()
+        main_layout.addWidget(self.stack)
+
+        self._build_loan_management_tab()
+        self._build_active_loans_tab()
+        self._build_repayment_status_tab()
+
+        self.nav_bar.currentChanged.connect(self.stack.setCurrentIndex)
+
+        scroll.setWidget(content)
+        outer_layout.addWidget(scroll)
+
+        # Load system settings
+        self.load_system_settings()
+        self.load_loan_products()
+        self.load_repayment_dashboard()
+        self.combo_loan_product.currentIndexChanged.connect(self._on_product_changed)
+        self.combo_repay_scope.currentTextChanged.connect(self.load_repayment_dashboard)
+        self.combo_repay_status.currentTextChanged.connect(self.load_repayment_dashboard)
+
+    # ── Tab: Loan Management ───────────────────────────────────────
+
+    def _build_loan_management_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(15)
+
         # Search Section
         search_group = QGroupBox("Find Member")
         search_font = QFont("Arial", 10)
         search_font.setBold(True)
         search_group.setFont(search_font)
         search_layout = QHBoxLayout()
-        
+
         self.search_widget = SearchFilterWidget()
         self.search_widget.queryChanged.connect(self._on_search_query_changed)
-        
+
         search_layout.addWidget(self.search_widget)
         search_layout.addStretch()
         search_group.setLayout(search_layout)
-        main_layout.addWidget(search_group)
-        
+        layout.addWidget(search_group)
+
         # Eligibility Section
         eligibility_group = QGroupBox("Eligibility Information")
         eligibility_font = QFont("Arial", 10)
@@ -1898,13 +2055,13 @@ class LoansPage(QWidget):
         eligibility_layout.setContentsMargins(10, 8, 10, 8)
         eligibility_layout.setHorizontalSpacing(18)
         eligibility_layout.setVerticalSpacing(8)
-        
+
         self.label_member_name = QLabel("Member: Not Selected")
         self.label_member_name.setFont(QFont("Arial", 11))
-        
+
         self.label_total_savings = QLabel("Total Savings: ₦0.00")
         self.label_total_savings.setFont(QFont("Arial", 11))
-        
+
         self.label_max_eligible = QLabel("Max Eligible Loan: ₦0.00")
         max_eligible_font = QFont("Arial", 11)
         max_eligible_font.setBold(True)
@@ -1917,7 +2074,7 @@ class LoansPage(QWidget):
         self.label_total_loans_view.setTextFormat(Qt.TextFormat.RichText)
         self.label_total_loans_view.setWordWrap(True)
         self.label_total_loans_view.setMinimumHeight(34)
-        
+
         eligibility_layout.addWidget(self.label_member_name, 0, 0)
         eligibility_layout.addWidget(self.label_total_savings, 0, 1)
         eligibility_layout.addWidget(self.label_max_eligible, 0, 2)
@@ -1926,8 +2083,8 @@ class LoansPage(QWidget):
         eligibility_layout.setColumnStretch(1, 2)
         eligibility_layout.setColumnStretch(2, 3)
         eligibility_group.setLayout(eligibility_layout)
-        main_layout.addWidget(eligibility_group)
-        
+        layout.addWidget(eligibility_group)
+
         # Loan Application Form
         form_group = QGroupBox("Loan Application")
         form_font = QFont("Arial", 10)
@@ -1939,7 +2096,7 @@ class LoansPage(QWidget):
         form_layout.setVerticalSpacing(10)
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        
+
         # Principal input with real-time conversion label
         self.input_principal = QDoubleSpinBox()
         self.input_principal.setRange(0, 10_000_000)
@@ -1949,11 +2106,11 @@ class LoansPage(QWidget):
         self.input_principal.setPrefix("₦")
         self.input_principal.valueChanged.connect(self.validate_principal)
         self.input_principal.valueChanged.connect(self._update_principal_words_label)
-        
+
         # Label to show money-words conversion for principal
         self.lbl_principal_words = QLabel()
         self.lbl_principal_words.setStyleSheet("color: #7f8c8d; font-size: 9pt; font-style: italic;")
-        
+
         principal_layout = QHBoxLayout()
         principal_layout.setContentsMargins(0, 0, 0, 0)
         principal_layout.setSpacing(8)
@@ -1976,7 +2133,7 @@ class LoansPage(QWidget):
         product_btn_widget = QWidget()
         product_btn_widget.setLayout(product_btn_row)
         form_layout.addRow("Custom Product:", product_btn_widget)
-        
+
         # Interest rate input
         self.input_interest_rate = QDoubleSpinBox()
         self.input_interest_rate.setRange(0, 100)
@@ -1985,21 +2142,21 @@ class LoansPage(QWidget):
         self.input_interest_rate.setSingleStep(0.5)
         self.input_interest_rate.setSuffix("%")
         form_layout.addRow("Annual Interest Rate:", self.input_interest_rate)
-        
+
         # Duration input
         self.input_duration = QSpinBox()
         self.input_duration.setRange(1, 60)
         self.input_duration.setValue(self.default_duration)
         self.input_duration.setSuffix(" months")
         form_layout.addRow("Duration:", self.input_duration)
-        
+
         form_group.setLayout(form_layout)
-        main_layout.addWidget(form_group)
-        
+        layout.addWidget(form_group)
+
         # Validation and Preview Section
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
-        
+
         self.btn_validate = QPushButton("Validate Loan")
         self.btn_validate.setMinimumHeight(40)
         btn_font = QFont("Arial", 10)
@@ -2008,16 +2165,16 @@ class LoansPage(QWidget):
         self.btn_validate.clicked.connect(self.validate_loan)
         self.btn_validate.setEnabled(False)
         button_layout.addWidget(self.btn_validate)
-        
+
         self.btn_preview = QPushButton("Preview Schedule")
         self.btn_preview.setMinimumHeight(40)
         self.btn_preview.setFont(btn_font)
         self.btn_preview.clicked.connect(self.show_schedule_preview)
         self.btn_preview.setEnabled(False)
         button_layout.addWidget(self.btn_preview)
-        
+
         button_layout.addStretch()
-        
+
         self.btn_submit = QPushButton("Submit Loan")
         self.btn_submit.setMinimumHeight(40)
         self.btn_submit.setFont(btn_font)
@@ -2043,21 +2200,31 @@ class LoansPage(QWidget):
         self.btn_submit.clicked.connect(self.submit_loan)
         self.btn_submit.setEnabled(False)
         button_layout.addWidget(self.btn_submit)
-        
-        main_layout.addLayout(button_layout)
-        
+
+        layout.addLayout(button_layout)
+
         # Validation Status Label
         self.label_validation_status = QLabel("")
         self.label_validation_status.setFont(QFont("Arial", 9))
-        main_layout.addWidget(self.label_validation_status)
-        
-        # Active Loans Table
+        layout.addWidget(self.label_validation_status)
+        layout.addStretch()
+
+        self.stack.addWidget(tab)
+
+    # ── Tab: Active Loans ──────────────────────────────────────────
+
+    def _build_active_loans_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(10)
+
         loans_title = QLabel("Active Loans")
         loans_font = QFont("Arial", 12)
         loans_font.setBold(True)
         loans_title.setFont(loans_font)
-        main_layout.addWidget(loans_title)
-        
+        layout.addWidget(loans_title)
+
         self.table_loans = QTableWidget()
         self.table_loans.setColumnCount(7)
         self.table_loans.setHorizontalHeaderLabels([
@@ -2081,14 +2248,23 @@ class LoansPage(QWidget):
         self.table_loans.setColumnWidth(2, 105)
         self.table_loans.setColumnWidth(5, 95)
         self.table_loans.setColumnWidth(6, 130)
-        main_layout.addWidget(self.table_loans)
+        layout.addWidget(self.table_loans, 1)
 
-        # Repayment Status Dashboard
+        self.stack.addWidget(tab)
+
+    # ── Tab: Repayment Status ──────────────────────────────────────
+
+    def _build_repayment_status_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(10)
+
         repayments_title = QLabel("Repayment Status Dashboard")
         repayments_font = QFont("Arial", 12)
         repayments_font.setBold(True)
         repayments_title.setFont(repayments_font)
-        main_layout.addWidget(repayments_title)
+        layout.addWidget(repayments_title)
 
         repayments_filter_row = QGridLayout()
         repayments_filter_row.setContentsMargins(0, 0, 0, 0)
@@ -2127,7 +2303,7 @@ class LoansPage(QWidget):
         self.btn_export_repayments.clicked.connect(self.export_repayment_dashboard_csv)
         repayments_filter_row.addWidget(self.btn_export_repayments, 1, 5)
         repayments_filter_row.setColumnStretch(6, 1)
-        main_layout.addLayout(repayments_filter_row)
+        layout.addLayout(repayments_filter_row)
 
         kpi_row = QGridLayout()
         kpi_row.setHorizontalSpacing(20)
@@ -2145,7 +2321,7 @@ class LoansPage(QWidget):
         kpi_row.addWidget(self.label_repay_due_week, 0, 1)
         kpi_row.addWidget(self.label_repay_collection, 1, 0)
         kpi_row.addWidget(self.label_repay_outstanding, 1, 1)
-        main_layout.addLayout(kpi_row)
+        layout.addLayout(kpi_row)
 
         action_row = QGridLayout()
         action_row.setContentsMargins(0, 0, 0, 0)
@@ -2186,7 +2362,7 @@ class LoansPage(QWidget):
         action_row.addWidget(self.btn_reverse_selected_repayment, 1, 2)
 
         action_row.setColumnStretch(4, 1)
-        main_layout.addLayout(action_row)
+        layout.addLayout(action_row)
 
         self.table_repayments = QTableWidget()
         self.table_repayments.setColumnCount(9)
@@ -2215,18 +2391,9 @@ class LoansPage(QWidget):
         self.table_repayments.setColumnWidth(3, 105)
         self.table_repayments.setColumnWidth(4, 105)
         self.table_repayments.setColumnWidth(8, 92)
-        main_layout.addWidget(self.table_repayments)
-        
-        scroll.setWidget(content)
-        outer_layout.addWidget(scroll)
-        
-        # Load system settings
-        self.load_system_settings()
-        self.load_loan_products()
-        self.load_repayment_dashboard()
-        self.combo_loan_product.currentIndexChanged.connect(self._on_product_changed)
-        self.combo_repay_scope.currentTextChanged.connect(self.load_repayment_dashboard)
-        self.combo_repay_status.currentTextChanged.connect(self.load_repayment_dashboard)
+        layout.addWidget(self.table_repayments, 1)
+
+        self.stack.addWidget(tab)
     
     def load_system_settings(self) -> None:
         """Load system settings for loan defaults."""
