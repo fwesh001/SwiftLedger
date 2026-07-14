@@ -1,7 +1,105 @@
 # Custom PySide6 widgets
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QComboBox, QLineEdit
+from PySide6.QtWidgets import (
+    QWidget, QHBoxLayout, QComboBox, QLineEdit, QPushButton, QButtonGroup,
+)
 from PySide6.QtCore import Qt, Signal
+
+
+class HorizontalNavBar(QWidget):
+    """
+    Reusable horizontal navigation bar (segmented button bar).
+
+    Features:
+      - 10px+ corner padding on each button
+      - bottom outline (accent) on the active button
+      - hover effect
+    Emits ``currentChanged`` with the selected index when a tab is chosen.
+    """
+
+    currentChanged = Signal(int)
+
+    # Accent colour used for the active bottom outline / hover.
+    ACCENT = "#3498db"
+
+    def __init__(self, items: list[str], parent: QWidget | None = None):
+        super().__init__(parent)
+        self._buttons: list[QPushButton] = []
+        self._group = QButtonGroup(self)
+        self._group.setExclusive(True)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+
+        for index, label in enumerate(items):
+            btn = QPushButton(label)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setCheckable(True)
+            btn.setMinimumHeight(38)
+            # 10px+ corner padding (left/right) and vertical padding.
+            btn.setStyleSheet(self._button_stylesheet(False))
+            self._group.addButton(btn, index)
+            btn.clicked.connect(lambda _checked=False, idx=index: self._select(idx))
+            self._buttons.append(btn)
+            layout.addWidget(btn)
+
+        layout.addStretch()
+        self._current = -1
+        if self._buttons:
+            self._select(0)
+
+    # ── Styling ────────────────────────────────────────────────────
+
+    def _button_stylesheet(self, active: bool) -> str:
+        base = (
+            "QPushButton {"
+            "  background-color: transparent;"
+            "  color: #bdc3c7;"
+            "  border: none;"
+            "  border-bottom: 3px solid transparent;"
+            "  padding: 10px 16px;"  # ≥10px corner padding
+            "  font-size: 13px;"
+            "  font-weight: bold;"
+            "}"
+            "QPushButton:hover {"
+            f"  color: {self.ACCENT};"
+            f"  border-bottom: 3px solid {self.ACCENT};"
+            "}"
+        )
+        if active:
+            return (
+                "QPushButton {"
+                f"  background-color: transparent;"
+                f"  color: {self.ACCENT};"
+                f"  border: none;"
+                f"  border-bottom: 3px solid {self.ACCENT};"
+                "  padding: 10px 16px;"
+                "  font-size: 13px;"
+                "  font-weight: bold;"
+                "}"
+            )
+        return base
+
+    # ── Selection ──────────────────────────────────────────────────
+
+    def _select(self, index: int) -> None:
+        if index < 0 or index >= len(self._buttons):
+            return
+        if index == self._current:
+            return
+        for i, btn in enumerate(self._buttons):
+            btn.setChecked(i == index)
+            btn.setStyleSheet(self._button_stylesheet(i == index))
+        self._current = index
+        self.currentChanged.emit(index)
+
+    def current_index(self) -> int:
+        return self._current
+
+    def set_current_index(self, index: int) -> None:
+        self._select(index)
 
 
 class UppercaseLineEdit(QLineEdit):
