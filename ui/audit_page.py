@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QAbstractItemView,
     QLineEdit, QComboBox, QMessageBox, QFileDialog,
-    QDialog, QFormLayout, QTextEdit,
+    QDialog, QFormLayout, QTextEdit, QStackedWidget,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QHeaderView
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.queries import get_all_logs
+from ui.widgets import HorizontalNavBar
 
 
 class AuditLogPage(QWidget):
@@ -83,6 +84,11 @@ class AuditLogPage(QWidget):
         title.setFont(tf)
         main.addWidget(title)
 
+        # ── Horizontal nav bar (category tabs) ──────────────────────
+        self.nav_bar = HorizontalNavBar(["Financial", "Registration", "Security", "System"])
+        self.nav_bar.currentChanged.connect(self._on_category_tab_changed)
+        main.addWidget(self.nav_bar)
+
         # ── Search / Filter row ─────────────────────────────────────
         filter_row = QHBoxLayout()
 
@@ -90,11 +96,6 @@ class AuditLogPage(QWidget):
         self.input_search.setPlaceholderText("Search by user or description…")
         self.input_search.textChanged.connect(self._apply_filter)
         filter_row.addWidget(self.input_search)
-
-        self.combo_category = QComboBox()
-        self.combo_category.addItem("All Categories")
-        self.combo_category.currentTextChanged.connect(self._apply_filter)
-        filter_row.addWidget(self.combo_category)
 
         self.btn_refresh = QPushButton("⟳  Refresh")
         self.btn_refresh.setMinimumWidth(100)
@@ -139,6 +140,10 @@ class AuditLogPage(QWidget):
         self.table.setColumnWidth(3, 400)
         main.addWidget(self.table)
 
+    def _on_category_tab_changed(self, index: int) -> None:
+        """Filter the table by the active category tab."""
+        self._apply_filter()
+
     # ── Data ─────────────────────────────────────────────────────────
 
     def refresh_logs(self) -> None:
@@ -148,35 +153,24 @@ class AuditLogPage(QWidget):
             return
 
         self.all_logs = logs
-
-        # Rebuild category combo while preserving selection
-        prev = self.combo_category.currentText()
-        categories = sorted(
-            {
-                self._canonical_category(str(log.get('category', '')))
-                for log in logs
-                if str(log.get('category', '')).strip()
-            }
-        )
-        self.combo_category.blockSignals(True)
-        self.combo_category.clear()
-        self.combo_category.addItem("All Categories")
-        self.combo_category.addItems(categories)
-        idx = self.combo_category.findText(prev)
-        if idx >= 0:
-            self.combo_category.setCurrentIndex(idx)
-        self.combo_category.blockSignals(False)
-
         self._apply_filter()
+
+    def _active_category_filter(self) -> str:
+        """Return the canonical category for the active nav tab, or '' for all."""
+        labels = ["Financial", "Registration", "Security", "System"]
+        idx = self.nav_bar.current_index()
+        if idx < 0 or idx >= len(labels):
+            return ""
+        return labels[idx]
 
     def _apply_filter(self) -> None:
         search = self.input_search.text().strip().lower()
-        cat_filter = self.combo_category.currentText()
+        cat_filter = self._active_category_filter()
 
         filtered = []
         for log in self.all_logs:
             canonical_category = self._canonical_category(str(log.get('category', '')))
-            if cat_filter != "All Categories" and canonical_category != cat_filter:
+            if cat_filter and canonical_category != cat_filter:
                 continue
             if search:
                 haystack = f"{log.get('user', '')} {log.get('description', '')}".lower()
