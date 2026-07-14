@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QComboBox, QScrollArea, QFrame, QLineEdit, QDoubleSpinBox,
     QTableWidget, QTableWidgetItem, QAbstractItemView, QDialog,
     QDialogButtonBox, QApplication, QToolTip,
-    QTabWidget, QColorDialog
+    QTabWidget, QColorDialog, QStackedWidget,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QIcon
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import QHeaderView
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.db_init import save_settings, log_event
-from ui.widgets import UppercaseLineEdit
+from ui.widgets import UppercaseLineEdit, HorizontalNavBar
 from database.queries import (
     get_system_settings,
     get_loan_products,
@@ -71,11 +71,13 @@ class SettingsPage(QWidget):
         title.setFont(tf)
         outer.addWidget(title)
 
-        tabs = QTabWidget()
-        tabs.setDocumentMode(True)
-        tabs.setTabPosition(QTabWidget.TabPosition.North)
-        tabs.setMovable(False)
-        outer.addWidget(tabs)
+        # ── Horizontal nav bar ─────────────────────────────────────
+        self.nav_bar = HorizontalNavBar(["General", "Organization & Loans", "Security"])
+        outer.addWidget(self.nav_bar)
+
+        # ── Stacked content for the three tabs ─────────────────────
+        self.stack = QStackedWidget()
+        outer.addWidget(self.stack)
 
         def make_tab_container() -> tuple[QWidget, QVBoxLayout]:
             tab_scroll = QScrollArea()
@@ -92,9 +94,11 @@ class SettingsPage(QWidget):
         policy_tab, policy_layout = make_tab_container()
         security_tab, security_layout = make_tab_container()
 
-        tabs.addTab(general_tab, "General")
-        tabs.addTab(policy_tab, "Organization & Loans")
-        tabs.addTab(security_tab, "Security")
+        self.stack.addWidget(general_tab)
+        self.stack.addWidget(policy_tab)
+        self.stack.addWidget(security_tab)
+
+        self.nav_bar.currentChanged.connect(self.stack.setCurrentIndex)
 
         # ── Appearance group ────────────────────────────────────────
         appear_group = QGroupBox("Appearance")
@@ -102,23 +106,37 @@ class SettingsPage(QWidget):
         appear_form = QFormLayout(appear_group)
         self._apply_form_rhythm(appear_form)
 
-        # Theme
-        self.combo_theme = QComboBox()
-        self.combo_theme.addItems(["Dark", "Light", "Custom"])
-        self.combo_theme.setFont(QFont("Arial", 11))
-        
+        # Theme — laid out as Light / Dark / Custom buttons
+        self.theme_group = QButtonGroup(self)
+        self.theme_group.setExclusive(True)
+
+        self.btn_theme_light = QPushButton("Light")
+        self.btn_theme_dark = QPushButton("Dark")
+        self.btn_theme_custom = QPushButton("Custom")
+        for btn in (self.btn_theme_light, self.btn_theme_dark, self.btn_theme_custom):
+            btn.setCheckable(True)
+            btn.setMinimumHeight(34)
+            btn.setMinimumWidth(90)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(self._theme_button_stylesheet(False))
+
+        self.theme_group.addButton(self.btn_theme_light, 0)
+        self.theme_group.addButton(self.btn_theme_dark, 1)
+        self.theme_group.addButton(self.btn_theme_custom, 2)
+        self.theme_group.buttonClicked.connect(self._on_theme_button_clicked)
+
+        theme_layout = QHBoxLayout()
+        theme_layout.setSpacing(8)
+        theme_layout.addWidget(self.btn_theme_light)
+        theme_layout.addWidget(self.btn_theme_dark)
+        theme_layout.addWidget(self.btn_theme_custom)
+        theme_layout.addStretch()
+
         self.btn_edit_custom_theme = QPushButton("Edit Custom Colors...")
         self.btn_edit_custom_theme.setVisible(False)
         self.btn_edit_custom_theme.clicked.connect(self._open_custom_theme_dialog)
-        
-        theme_layout = QHBoxLayout()
-        theme_layout.addWidget(self.combo_theme)
         theme_layout.addWidget(self.btn_edit_custom_theme)
-        
-        self.combo_theme.currentTextChanged.connect(
-            lambda t: self.btn_edit_custom_theme.setVisible(t == "Custom")
-        )
-        
+
         appear_form.addRow("Theme:", theme_layout)
 
         # Text scale
@@ -419,11 +437,9 @@ class SettingsPage(QWidget):
         self.chk_charts.setChecked(bool(settings.get('show_charts', 0)))
         self.chk_alerts.setChecked(bool(settings.get('show_alerts', 1)))
 
-        theme = str(settings.get('theme', 'dark')).capitalize()
-        idx = self.combo_theme.findText(theme)
-        if idx >= 0:
-            self.combo_theme.setCurrentIndex(idx)
-            
+        theme = str(settings.get('theme', 'dark')).lower()
+        self._select_theme(theme)
+
         self.custom_colors["bg"] = settings.get("custom_theme_bg", "#121212")
         self.custom_colors["fg"] = settings.get("custom_theme_fg", "#ffffff")
         self.custom_colors["sidebar"] = settings.get("custom_theme_sidebar", "#1e1e1e")
@@ -628,6 +644,60 @@ class SettingsPage(QWidget):
         self.settings_changed.emit()
         QMessageBox.information(self, "Updated", message)
 
+    def _theme_button_stylesheet(self, active: bool) -> str:
+        if active:
+            return (
+                "QPushButton {"
+                "  background-color: #3498db;"
+                "  color: #ffffff;"
+                "  border: 1px solid #2980b9;"
+                "  border-radius: 6px;"
+                "  padding: 6px 12px;"
+                "  font-weight: bold;"
+                "}"
+                "QPushButton:hover { background-color: #2980b9; }"
+            )
+        return (
+            "QPushButton {"
+            "  background-color: #f0f0f0;"
+            "  color: #333333;"
+            "  border: 1px solid #cccccc;"
+            "  border-radius: 6px;"
+            "  padding: 6px 12px;"
+            "}"
+            "QPushButton:hover { background-color: #e0e0e0; }"
+        )
+
+    def _select_theme(self, name: str) -> None:
+        """Highlight the matching theme button and toggle the custom edit button."""
+        mapping = {
+            "light": self.btn_theme_light,
+            "dark": self.btn_theme_dark,
+            "custom": self.btn_theme_custom,
+        }
+        for key, btn in mapping.items():
+            is_active = key == name
+            btn.setChecked(is_active)
+            btn.setStyleSheet(self._theme_button_stylesheet(is_active))
+        self.btn_edit_custom_theme.setVisible(name == "custom")
+
+    def _on_theme_button_clicked(self, button: QPushButton) -> None:
+        name = {
+            self.btn_theme_light: "light",
+            self.btn_theme_dark: "dark",
+            self.btn_theme_custom: "custom",
+        }.get(button, "dark")
+        self._select_theme(name)
+
+    def _selected_theme(self) -> str:
+        checked = self.theme_group.checkedButton()
+        mapping = {
+            self.btn_theme_light: "light",
+            self.btn_theme_dark: "dark",
+            self.btn_theme_custom: "custom",
+        }
+        return mapping.get(checked, "dark")
+
     def _open_custom_theme_dialog(self) -> None:
         from PySide6.QtGui import QColor
         dialog = QDialog(self)
@@ -694,7 +764,7 @@ class SettingsPage(QWidget):
         data = {
             'show_charts': 1 if self.chk_charts.isChecked() else 0,
             'show_alerts': 1 if self.chk_alerts.isChecked() else 0,
-            'theme': self.combo_theme.currentText().lower(),
+            'theme': self._selected_theme(),
             'custom_theme_bg': self.custom_colors["bg"],
             'custom_theme_fg': self.custom_colors["fg"],
             'custom_theme_sidebar': self.custom_colors["sidebar"],
