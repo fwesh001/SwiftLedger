@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QGroupBox, QFormLayout, QLineEdit, QMessageBox,
     QFileDialog, QDateEdit, QCheckBox, QComboBox,
     QDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem,
-    QAbstractItemView, QListWidget, QScrollArea,
+    QAbstractItemView, QListWidget, QScrollArea, QStackedWidget,
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont
@@ -40,7 +40,7 @@ from database.queries import (
     get_report_pack_savings, get_report_pack_loans, get_report_pack_repayments, get_report_pack_audit_logs,
 )
 from database.db_init import log_event
-from ui.widgets import SearchFilterWidget
+from ui.widgets import SearchFilterWidget, HorizontalNavBar
 from utils import format_currency, format_currency_with_words
 
 
@@ -86,16 +86,37 @@ class ReportsPage(QWidget):
         header_row.addWidget(self.btn_refresh)
         main.addLayout(header_row)
 
-        # ── Dynamic Filters ─────────────────────────────────────────
-        filter_group = QGroupBox("Report Filters")
-        filter_group.setFont(QFont("Arial", 12))
-        filter_form = QFormLayout(filter_group)
+        # ── Horizontal nav bar ─────────────────────────────────────
+        self.nav_bar = HorizontalNavBar(["Members", "Society", "Chairman"])
+        main.addWidget(self.nav_bar)
+
+        # ── Stacked content for the three tabs ─────────────────────
+        self.stack = QStackedWidget()
+        main.addWidget(self.stack)
+
+        # Shared Report Filters (minus Scope) — reparented between tabs
+        self._build_filter_widgets()
+
+        self._build_members_report_tab()
+        self._build_society_report_tab()
+        self._build_chairman_report_tab()
+
+        self.nav_bar.currentChanged.connect(self._on_report_tab_changed)
+        main.addStretch()
+
+    # ── Shared Report Filters (no Scope) ───────────────────────────
+
+    def _build_filter_widgets(self) -> None:
+        """Create the shared Report Filters group (minus Scope).
+
+        The group is reparented between the Members and Society tabs on
+        tab switch, since a widget can only have one parent at a time.
+        """
+        self.filter_group = QGroupBox("Report Filters")
+        self.filter_group.setFont(QFont("Arial", 12))
+        filter_form = QFormLayout(self.filter_group)
         filter_form.setContentsMargins(14, 20, 14, 14)
         filter_form.setSpacing(12)
-
-        self.combo_scope = QComboBox()
-        self.combo_scope.addItems(["Member", "Society", "Both"])
-        filter_form.addRow("Scope:", self.combo_scope)
 
         self.date_from = QDateEdit()
         self.date_from.setCalendarPopup(True)
@@ -125,9 +146,24 @@ class ReportsPage(QWidget):
         toggle_wrap.setLayout(toggle_row)
         filter_form.addRow("Include:", toggle_wrap)
 
-        main.addWidget(filter_group)
+    def _on_report_tab_changed(self, index: int) -> None:
+        """Reparent the shared filter group to the active tab's layout."""
+        self.stack.setCurrentIndex(index)
+        if index == 0:  # Members
+            self._members_tab_layout.addWidget(self.filter_group)
+        elif index == 1:  # Society
+            self._society_tab_layout.addWidget(self.filter_group)
 
-        # ── Member Ledger ────────────────────────────────────────────
+    # ── Tab: Members ───────────────────────────────────────────────
+
+    def _build_members_report_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(20)
+        self._members_tab_layout = layout
+
+        # ── Member Ledger (shown first) ─────────────────────────────
         ledger_group = QGroupBox("Member Statement")
         ledger_group.setFont(QFont("Arial", 12))
         ledger_form = QFormLayout(ledger_group)
@@ -136,11 +172,11 @@ class ReportsPage(QWidget):
 
         self.search_member_widget = SearchFilterWidget()
         self.search_member_widget.queryChanged.connect(self._on_member_search_changed)
-        
+
         self.label_selected_member = QLabel("Member: Not selected")
         self.label_selected_member.setFont(QFont("Arial", 10))
         self.label_selected_member.setMinimumWidth(200)
-        
+
         search_layout = QHBoxLayout()
         search_layout.addWidget(self.search_member_widget)
         search_layout.addWidget(self.label_selected_member)
@@ -180,9 +216,24 @@ class ReportsPage(QWidget):
         member_actions.addWidget(self.btn_member_pdf)
         ledger_form.addRow(member_actions)
 
-        main.addWidget(ledger_group)
+        layout.addWidget(ledger_group)
 
-        # ── Society Summary ──────────────────────────────────────────
+        # ── Report Filters (shared, minus Scope) ────────────────────
+        layout.addWidget(self.filter_group)
+        layout.addStretch()
+
+        self.stack.addWidget(tab)
+
+    # ── Tab: Society ───────────────────────────────────────────────
+
+    def _build_society_report_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(20)
+        self._society_tab_layout = layout
+
+        # ── Society Financial Summary ────────────────────────────────
         summary_group = QGroupBox("Society Financial Summary")
         summary_group.setFont(QFont("Arial", 12))
         summary_layout = QVBoxLayout(summary_group)
@@ -213,6 +264,38 @@ class ReportsPage(QWidget):
         )
         self.btn_society_pdf.clicked.connect(self._generate_society_pdf)
 
+        summary_actions = QHBoxLayout()
+        summary_actions.setSpacing(12)
+        summary_actions.addWidget(self.btn_society_preview)
+        summary_actions.addWidget(self.btn_society_pdf)
+        summary_layout.addLayout(summary_actions)
+
+        layout.addWidget(summary_group)
+        layout.addStretch()
+
+        self.stack.addWidget(tab)
+
+    # ── Tab: Chairman ──────────────────────────────────────────────
+
+    def _build_chairman_report_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(20)
+
+        chairman_group = QGroupBox("Chairman Review Pack")
+        chairman_group.setFont(QFont("Arial", 12))
+        chairman_layout = QVBoxLayout(chairman_group)
+        chairman_layout.setContentsMargins(14, 20, 14, 14)
+
+        chairman_note = QLabel(
+            "Export a comprehensive Excel review pack for the Chairman, "
+            "covering savings, loans, repayments, and audit logs."
+        )
+        chairman_note.setWordWrap(True)
+        chairman_note.setStyleSheet("font-size: 11px; color: #7f8c8d;")
+        chairman_layout.addWidget(chairman_note)
+
         self.btn_chairman_pack = QPushButton()
         try:
             from utils import set_button_icon
@@ -228,15 +311,16 @@ class ReportsPage(QWidget):
         )
         self.btn_chairman_pack.clicked.connect(self._generate_chairman_review_pack)
 
-        summary_actions = QHBoxLayout()
-        summary_actions.setSpacing(12)
-        summary_actions.addWidget(self.btn_society_preview)
-        summary_actions.addWidget(self.btn_society_pdf)
-        summary_actions.addWidget(self.btn_chairman_pack)
-        summary_layout.addLayout(summary_actions)
+        chairman_actions = QHBoxLayout()
+        chairman_actions.setSpacing(12)
+        chairman_actions.addWidget(self.btn_chairman_pack)
+        chairman_actions.addStretch()
+        chairman_layout.addLayout(chairman_actions)
 
-        main.addWidget(summary_group)
-        main.addStretch()
+        layout.addWidget(chairman_group)
+        layout.addStretch()
+
+        self.stack.addWidget(tab)
 
     # ── Helpers ──────────────────────────────────────────────────────
 
@@ -272,7 +356,6 @@ class ReportsPage(QWidget):
         start_date = self.date_from.date().toString("yyyy-MM-dd")
         end_date = self.date_to.date().toString("yyyy-MM-dd")
         return {
-            "scope": self.combo_scope.currentText(),
             "start_date": start_date,
             "end_date": end_date,
             "include_savings": self.chk_include_savings.isChecked(),
@@ -296,7 +379,6 @@ class ReportsPage(QWidget):
 
     def refresh_page(self) -> None:
         """Refresh report dates while keeping current filters and member search state."""
-        scope_index = self.combo_scope.currentIndex()
         include_savings = self.chk_include_savings.isChecked()
         include_loans = self.chk_include_loans.isChecked()
         include_repayments = self.chk_include_repayments.isChecked()
@@ -307,7 +389,6 @@ class ReportsPage(QWidget):
 
         self._initialize_date_filters()
 
-        self.combo_scope.setCurrentIndex(scope_index)
         self.chk_include_savings.setChecked(include_savings)
         self.chk_include_loans.setChecked(include_loans)
         self.chk_include_repayments.setChecked(include_repayments)
@@ -433,22 +514,8 @@ class ReportsPage(QWidget):
             self.label_selected_member.setText("Member: Not found")
 
     def _validate_scope(self, target: str, for_export: bool = False) -> bool:
-        scope = self.combo_scope.currentText()
-        action = "export" if for_export else "preview"
-        if target == "member" and scope == "Society":
-            QMessageBox.information(
-                self,
-                "Scope Filter",
-                f"Current scope is Society. Switch scope to Member or Both to {action} member reports.",
-            )
-            return False
-        if target == "society" and scope == "Member":
-            QMessageBox.information(
-                self,
-                "Scope Filter",
-                f"Current scope is Member. Switch scope to Society or Both to {action} society reports.",
-            )
-            return False
+        # Scope is now implicit per tab (Members tab -> member, Society tab -> society),
+        # so no cross-tab scope validation is required.
         return True
 
     def _validate_date_range(self) -> bool:
