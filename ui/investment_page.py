@@ -18,7 +18,7 @@ from database.queries import (
     add_investment, get_investments, get_investment_summary, delete_investment,
 )
 from database.db_init import log_event
-from utils import format_currency
+from utils import format_currency, get_icon
 
 INVESTMENT_TYPES = [
     "Bond",
@@ -262,14 +262,14 @@ class InvestmentPage(QWidget):
                 widget.setParent(None)
 
         cards = [
-            ("📊  Investments", str(summary.get("investment_count", 0)), "#3498db"),
-            ("💼  Total Invested", format_currency(summary.get("total_invested", 0.0), symbol="₦"), "#27ae60"),
-            ("📈  Expected Interest", format_currency(summary.get("total_expected_interest", 0.0), symbol="₦"), "#e67e22"),
+            ("Investments", str(summary.get("investment_count", 0)), "#3498db", "fa5s.chart-pie"),
+            ("Total Invested", format_currency(summary.get("total_invested", 0.0), symbol="₦"), "#27ae60", "fa5s.briefcase"),
+            ("Expected Interest", format_currency(summary.get("total_expected_interest", 0.0), symbol="₦"), "#e67e22", "fa5s.chart-line"),
         ]
-        for title, value, accent in cards:
-            self.summary_layout.addWidget(self._make_card(title, value, accent))
+        for title, value, accent, icon_name in cards:
+            self.summary_layout.addWidget(self._make_card(title, value, accent, icon_name))
 
-    def _make_card(self, title: str, value: str, accent: str) -> QFrame:
+    def _make_card(self, title: str, value: str, accent: str, icon_name: str = None) -> QFrame:
         card = QFrame()
         card.setMinimumHeight(90)
         card.setStyleSheet(
@@ -279,11 +279,21 @@ class InvestmentPage(QWidget):
         layout = QVBoxLayout(card)
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(6)
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(6)
+        if icon_name:
+            icon_label = QLabel()
+            icon_label.setPixmap(get_icon(icon_name, color=accent).pixmap(18, 18))
+            icon_label.setStyleSheet("border: none;")
+            title_row.addWidget(icon_label)
         lbl_title = QLabel(title)
         lbl_title.setStyleSheet("color: #bdc3c7; font-size: 12px; border: none;")
+        title_row.addWidget(lbl_title)
+        title_row.addStretch()
         lbl_value = QLabel(value)
         lbl_value.setStyleSheet(f"color: {accent}; font-size: 18px; font-weight: bold; border: none;")
-        layout.addWidget(lbl_title)
+        layout.addLayout(title_row)
         layout.addWidget(lbl_value)
         layout.addStretch()
         return card
