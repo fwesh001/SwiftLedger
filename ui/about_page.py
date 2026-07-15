@@ -116,9 +116,9 @@ class AboutPage(QWidget):
             "management. Every feature — from credential hashing to automatic "
             "dividend calculations — was designed with your organisation's trust in mind.\n\n"
             "For support or custom features, contact me at:\n"
-            "Email:  zabdielfwesh001@gmail.com\n"
-            "GitHub:  github.com/fwesh001\n"
-            "Web:  www.zabdiel.tech"
+            "Email: zabdielfwesh001@gmail.com\n"
+            "GitHub: github.com/fwesh001\n"
+            "Website: www.zabdiel.tech"
         )
         dev_text.setWordWrap(True)
         dev_text.setStyleSheet("font-size: 13px; line-height: 1.6; padding: 10px;")
