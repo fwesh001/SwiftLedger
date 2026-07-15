@@ -15,6 +15,42 @@ APP_NAME = "SwiftLedger"
 APP_VERSION = "1.0.1"
 
 
+def get_icon(name: str, color: str = None):
+    """Return a QIcon from the bundled FontAwesome icon set (via qtawesome).
+
+    Args:
+        name:  qtawesome icon name, e.g. "fa5s.chart-line".
+        color: Optional hex colour (e.g. "#3498db") to tint the icon.
+
+    Returns a QIcon (null-safe; falls back to an empty QIcon on failure).
+    """
+    from PySide6.QtGui import QIcon
+    try:
+        import qtawesome as qta
+        if color:
+            return qta.icon(name, color=color)
+        return qta.icon(name)
+    except Exception:
+        return QIcon()
+
+
+def set_button_icon(btn, theme_name: str, fallback_text: str) -> None:
+    """Set a FontAwesome icon on a button, falling back to text if unavailable.
+
+    Args:
+        btn:            QPushButton to decorate.
+        theme_name:     qtawesome icon name, e.g. "fa5s.file-export".
+        fallback_text:  Text shown when no icon is available (arrow glyphs
+                        like ⇱/⇲ are stripped so they never appear as text).
+    """
+    icon = get_icon(theme_name)
+    if not icon.isNull():
+        btn.setIcon(icon)
+        btn.setText(fallback_text.replace("⇱", "").replace("⇲", "").strip())
+    else:
+        btn.setText(fallback_text)
+
+
 def get_asset_path(relative_path: str) -> str:
     """Return the absolute path to a bundled asset.
 
@@ -140,15 +176,6 @@ def amount_to_words(value: float | int | str | None) -> str:
         words = f"minus {words}"
     return words.title()
 
-
-def set_button_icon(btn, theme_name: str, fallback_text: str) -> None:
-    from PySide6.QtGui import QIcon
-    icon = QIcon.fromTheme(theme_name)
-    if not icon.isNull():
-        btn.setIcon(icon)
-        btn.setText(fallback_text.replace("⇱", "").replace("⇲", "").strip())
-    else:
-        btn.setText(fallback_text)
 
 def get_export_path(page: str, export_type: str, member_name: str = None, staff_id: str = None) -> Path:
     """
