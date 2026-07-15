@@ -1775,11 +1775,15 @@ class SavingsPage(QWidget):
             name = str(m.get("full_name") or "").strip()
             staff = str(m.get("staff_number") or "").strip()
             phone = str(m.get("phone") or "").strip()
-            label = name or staff or "Unknown"
-            if staff:
-                label = f"{label} ({staff})"
-            elif phone:
-                label = f"{label} ({phone})"
+            # For name-based searches (All Fields / Full Name) show the
+            # member's display name only (no appended staff id). For
+            # staff-number or phone filters, prefer showing those values.
+            if filter_type in ("staff_number",):
+                label = staff or name or phone or "Unknown"
+            elif filter_type in ("phone",):
+                label = phone or name or staff or "Unknown"
+            else:  # 'all' or 'full_name'
+                label = name or staff or phone or "Unknown"
             suggestions.append(label)
         # De-duplicate while preserving order
         seen = set()
@@ -2673,11 +2677,15 @@ class LoansPage(QWidget):
             name = str(m.get("full_name") or "").strip()
             staff = str(m.get("staff_number") or "").strip()
             phone = str(m.get("phone") or "").strip()
-            label = name or staff or "Unknown"
-            if staff:
-                label = f"{label} ({staff})"
-            elif phone:
-                label = f"{label} ({phone})"
+            # For name-based searches (All Fields / Full Name) show the
+            # member's display name only (no appended staff id). For
+            # staff-number or phone filters, prefer showing those values.
+            if filter_type in ("staff_number",):
+                label = staff or name or phone or "Unknown"
+            elif filter_type in ("phone",):
+                label = phone or name or staff or "Unknown"
+            else:  # 'all' or 'full_name'
+                label = name or staff or phone or "Unknown"
             suggestions.append(label)
         seen = set()
         unique = []
