@@ -534,11 +534,15 @@ class ReportsPage(QWidget):
             name = str(m.get("full_name") or "").strip()
             staff = str(m.get("staff_number") or "").strip()
             phone = str(m.get("phone") or "").strip()
-            label = name or staff or "Unknown"
-            if staff:
-                label = f"{label} ({staff})"
-            elif phone:
-                label = f"{label} ({phone})"
+            # For name-based searches (All Fields / Full Name) show the
+            # member's display name only (no appended staff id). For
+            # staff-number or phone filters, prefer showing those values.
+            if filter_type in ("staff_number",):
+                label = staff or name or phone or "Unknown"
+            elif filter_type in ("phone",):
+                label = phone or name or staff or "Unknown"
+            else:  # 'all' or 'full_name'
+                label = name or staff or phone or "Unknown"
             suggestions.append(label)
         seen = set()
         unique = []
@@ -1086,6 +1090,9 @@ class ReportsPage(QWidget):
             f"Projected Interest: NGN {stats.get('total_projected_interest', 0):,.2f}",
             f"Members' Dividend (60%): NGN {stats.get('members_dividend_share', 0):,.2f}",
             f"Society Reserve (40%): NGN {stats.get('society_dividend_share', 0):,.2f}",
+            f"Total Investments: NGN {stats.get('total_investments', 0):,.2f}",
+            f"Expected Investment Interest: NGN {stats.get('total_expected_investment_interest', 0):,.2f}",
+            f"Available Cash (Savings - Loans - Investments): NGN {stats.get('available_cash', 0):,.2f}",
         ]
         for line in lines:
             pdf.cell(0, 7, line, new_x="LMARGIN", new_y="NEXT")
@@ -1118,7 +1125,8 @@ class ReportsPage(QWidget):
                 
                 analysis_lines = [
                     f"Loan-to-Savings Ratio: {lts_ratio:.1f}% ({lts_status})",
-                    f"Available Cash: NGN {liq_data.get('available_cash', 0):,.2f}",
+                    f"Total Investments: NGN {stats.get('total_investments', 0):,.2f}",
+                    f"Available Cash: NGN {stats.get('available_cash', 0):,.2f}",
                     f"Outstanding Loans: NGN {liq_data.get('outstanding_loans', 0):,.2f}",
                     f"Liquidity Ratio: {liq_ratio:.1f}%",
                 ]
