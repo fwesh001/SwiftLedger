@@ -74,7 +74,8 @@ class ReportsPage(QWidget):
         header_row.addWidget(title)
         header_row.addStretch()
 
-        self.btn_refresh = QPushButton("⟳  Refresh")
+        self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh.setIcon(get_icon("fa5s.sync", color="#ffffff"))
         self.btn_refresh.setMinimumHeight(36)
         self.btn_refresh.setMinimumWidth(110)
         self.btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -204,9 +205,9 @@ class ReportsPage(QWidget):
         self.btn_member_pdf = QPushButton()
         try:
             from utils import set_button_icon
-            set_button_icon(self.btn_member_pdf, "document-export", "⇱ Save PDF")
+            set_button_icon(self.btn_member_pdf, "fa5s.file-export", "Save PDF")
         except Exception:
-            self.btn_member_pdf.setText("⇱ Save Member Statement PDF")
+            self.btn_member_pdf.setText("Save Member Statement PDF")
         self.btn_member_pdf.setMinimumHeight(38)
         self.btn_member_pdf.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_member_pdf.setStyleSheet(
@@ -258,9 +259,9 @@ class ReportsPage(QWidget):
         self.btn_society_pdf = QPushButton()
         try:
             from utils import set_button_icon
-            set_button_icon(self.btn_society_pdf, "document-export", "⇱ Save PDF")
+            set_button_icon(self.btn_society_pdf, "fa5s.file-export", "Save PDF")
         except Exception:
-            self.btn_society_pdf.setText("⇱ Save Society Summary PDF")
+            self.btn_society_pdf.setText("Save Society Summary PDF")
         self.btn_society_pdf.setMinimumHeight(38)
         self.btn_society_pdf.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_society_pdf.setStyleSheet(
@@ -305,9 +306,9 @@ class ReportsPage(QWidget):
         self.btn_chairman_pack = QPushButton()
         try:
             from utils import set_button_icon
-            set_button_icon(self.btn_chairman_pack, "document-export", "⇱ Export Chairman Review Pack (Excel)")
+            set_button_icon(self.btn_chairman_pack, "fa5s.file-export", "Export Chairman Review Pack (Excel)")
         except Exception:
-            self.btn_chairman_pack.setText("⇱ Export Chairman Review Pack (Excel)")
+            self.btn_chairman_pack.setText("Export Chairman Review Pack (Excel)")
         self.btn_chairman_pack.setMinimumHeight(38)
         self.btn_chairman_pack.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_chairman_pack.setStyleSheet(
