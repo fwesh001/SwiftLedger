@@ -2516,6 +2516,23 @@ def get_society_stats(db_path: str) -> Tuple[bool, Dict]:
             conn.close()
 
 
+def count_active_loaners(db_path: str) -> Tuple[bool, int]:
+    """Return the number of distinct members who currently have an active loan."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(DISTINCT member_id) FROM loans WHERE status = 'Active'"
+        )
+        return True, int(cursor.fetchone()[0] or 0)
+    except Exception:
+        return False, 0
+    finally:
+        if conn:
+            conn.close()
+
+
 def get_member_statement_data(
     db_path: str,
     member_id: int,
