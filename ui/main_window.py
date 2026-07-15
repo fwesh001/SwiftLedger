@@ -35,7 +35,7 @@ from database.queries import (
     delete_all_members,
     update_savings_transaction, add_savings_correction_entry, update_loan_repayment_entry,
     has_active_loans, search_members, get_repayment_dashboard_rows, get_repayment_dashboard_summary,
-    get_investment_summary, get_investments,
+    get_investment_summary, get_investments, count_active_loaners,
 )
 from logic.analytics import (
     get_monthly_snapshot, get_monthly_trend, calculate_lts_ratio, get_liquidity_status
@@ -54,6 +54,34 @@ from security import verify_credential
 from utils import format_currency, format_currency_with_words, amount_to_words, set_button_icon
 
 QLineEdit = UppercaseLineEdit
+
+
+def create_stat_card(title_text: str, value_text: str, accent: str) -> tuple:
+    """Build a stat card frame. Returns (QFrame card, QLabel title, QLabel value)."""
+    card = QFrame()
+    card.setMinimumHeight(90)
+    card.setStyleSheet(
+        f"QFrame {{ background-color: #2b2b2b; border-left: 4px solid {accent}; "
+        f"border-radius: 8px; padding: 12px; }}"
+    )
+
+    layout = QVBoxLayout(card)
+    layout.setContentsMargins(12, 8, 12, 8)
+    layout.setSpacing(6)
+
+    lbl_title = QLabel(title_text)
+    lbl_title.setStyleSheet("color: #bdc3c7; font-size: 12px; border: none;")
+
+    lbl_value = QLabel(value_text)
+    lbl_value.setStyleSheet(
+        f"color: {accent}; font-size: 22px; font-weight: bold; border: none;"
+    )
+
+    layout.addWidget(lbl_title)
+    layout.addWidget(lbl_value)
+    layout.addStretch()
+
+    return card, lbl_title, lbl_value
 
 
 class DashboardPage(QWidget):
@@ -304,30 +332,7 @@ class DashboardPage(QWidget):
         self, title_text: str, value_text: str, accent: str
     ) -> tuple:
         """Return (QFrame card, QLabel title, QLabel value)."""
-        card = QFrame()
-        card.setMinimumHeight(110)
-        card.setStyleSheet(
-            f"QFrame {{ background-color: #2b2b2b; border-left: 4px solid {accent}; "
-            f"border-radius: 8px; padding: 14px; }}"
-        )
-
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(8)
-
-        lbl_title = QLabel(title_text)
-        lbl_title.setStyleSheet("color: #bdc3c7; font-size: 12px; border: none;")
-
-        lbl_value = QLabel(value_text)
-        lbl_value.setStyleSheet(
-            f"color: {accent}; font-size: 22px; font-weight: bold; border: none;"
-        )
-
-        layout.addWidget(lbl_title)
-        layout.addWidget(lbl_value)
-        layout.addStretch()
-
-        return card, lbl_title, lbl_value
+        return create_stat_card(title_text, value_text, accent)
 
     def _create_dividend_card(
         self, title_text: str, value_text: str, accent: str
@@ -849,6 +854,20 @@ class MembersPage(QWidget):
         layout.setContentsMargins(0, 14, 0, 0)
         layout.setSpacing(12)
 
+        # ── Stat cards ─────────────────────────────────────────────
+        cards_layout = QHBoxLayout()
+        cards_layout.setSpacing(16)
+        self.card_total_members = create_stat_card(
+            "👥  Total Members", "0", "#3498db"
+        )
+        self.card_active_loaners = create_stat_card(
+            "🏦  Active Loaners", "0", "#e67e22"
+        )
+        cards_layout.addWidget(self.card_total_members[0])
+        cards_layout.addWidget(self.card_active_loaners[0])
+        cards_layout.addStretch()
+        layout.addLayout(cards_layout)
+
         # Members Table Box
         table_group = QGroupBox("All Members")
         table_group.setFont(QFont("Arial", 12, QFont.Weight.Bold))
@@ -1174,7 +1193,20 @@ class MembersPage(QWidget):
     
     def load_data(self) -> None:
         """Load and display all members in the table."""
-        
+        # Update summary cards
+        try:
+            ok_members, members = get_all_members(self.db_path)
+            total = len(members) if (ok_members and members) else 0
+            self.card_total_members[2].setText(str(total))
+        except Exception:
+            self.card_total_members[2].setText("0")
+
+        try:
+            ok_loaners, loaners = count_active_loaners(self.db_path)
+            self.card_active_loaners[2].setText(str(loaners if ok_loaners else 0))
+        except Exception:
+            self.card_active_loaners[2].setText("0")
+
         try:
             success, members = get_all_members(self.db_path)
             
@@ -1463,14 +1495,15 @@ class SavingsPage(QWidget):
         main_layout.addLayout(header_row)
 
         # ── Horizontal nav bar ─────────────────────────────────────
-        self.nav_bar = HorizontalNavBar(["Savings Management", "Transaction History"])
+        self.nav_bar = HorizontalNavBar(["Savings Management", "New Transaction", "Transaction History"])
         main_layout.addWidget(self.nav_bar)
 
-        # ── Stacked content for the two tabs ────────────────────────
+        # ── Stacked content for the tabs ────────────────────────────
         self.stack = QStackedWidget()
         main_layout.addWidget(self.stack)
 
         self._build_management_tab()
+        self._build_new_transaction_tab()
         self._build_history_tab()
 
         self.nav_bar.currentChanged.connect(self.stack.setCurrentIndex)
@@ -1502,27 +1535,37 @@ class SavingsPage(QWidget):
         search_group.setLayout(search_layout)
         layout.addWidget(search_group)
 
-        # Member Info Section
+        # Member Info Section (stat cards)
         info_group = QGroupBox("Member Information")
         info_font = QFont("Arial", 10)
         info_font.setBold(True)
         info_group.setFont(info_font)
         info_layout = QHBoxLayout()
+        info_layout.setSpacing(16)
 
-        self.label_member_name = QLabel("Name: Not Selected")
-        self.label_member_name.setFont(QFont("Arial", 11))
-
-        self.label_total_savings = QLabel("Total Savings: ₦0.00")
-        self.label_total_savings.setFont(QFont("Arial", 11))
-        savings_font = QFont("Arial", 11)
-        savings_font.setBold(True)
-        self.label_total_savings.setFont(savings_font)
-
-        info_layout.addWidget(self.label_member_name)
+        self.card_member_name = create_stat_card(
+            "👤  Member", "Not Selected", "#3498db"
+        )
+        self.card_member_savings = create_stat_card(
+            "💰  Total Savings", "₦0.00", "#27ae60"
+        )
+        info_layout.addWidget(self.card_member_name[0])
+        info_layout.addWidget(self.card_member_savings[0])
         info_layout.addStretch()
-        info_layout.addWidget(self.label_total_savings)
         info_group.setLayout(info_layout)
         layout.addWidget(info_group)
+
+        layout.addStretch()
+
+        self.stack.addWidget(tab)
+
+    # ── Tab: New Transaction ──────────────────────────────────────
+
+    def _build_new_transaction_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(15)
 
         # Transaction Form Section
         form_group = QGroupBox("Post New Transaction")
@@ -1683,8 +1726,8 @@ class SavingsPage(QWidget):
         if not query:
             self.current_member_id = None
             self.current_member_name = None
-            self.label_member_name.setText("Name: Not Selected")
-            self.label_total_savings.setText("Total Savings: ₦0.00")
+            self.card_member_name[2].setText("Not Selected")
+            self.card_member_savings[2].setText("₦0.00")
             self.table_savings.setRowCount(0)
             self.btn_post.setEnabled(False)
             self._update_transaction_types_for_member(False)
@@ -1696,8 +1739,8 @@ class SavingsPage(QWidget):
         if not success or not members:
             self.current_member_id = None
             self.current_member_name = None
-            self.label_member_name.setText("Name: Not Selected")
-            self.label_total_savings.setText("Total Savings: ₦0.00")
+            self.card_member_name[2].setText("Not Selected")
+            self.card_member_savings[2].setText("₦0.00")
             self.table_savings.setRowCount(0)
             self.btn_post.setEnabled(False)
             self._update_transaction_types_for_member(False)
@@ -1711,7 +1754,7 @@ class SavingsPage(QWidget):
         self.current_member_name = member['full_name']
         
         # Update member info display
-        self.label_member_name.setText(f"Name: {member['full_name']}")
+        self.card_member_name[2].setText(member['full_name'])
         
         # Load and display savings
         self.load_savings_data()
@@ -1813,7 +1856,7 @@ class SavingsPage(QWidget):
                 self.table_savings.setItem(row_idx, 5, balance_item)
                 self.table_savings.setItem(row_idx, 6, id_item)
 
-            self.label_total_savings.setText(f"Total Savings: {format_currency(total_savings, symbol='₦')}")
+            self.card_member_savings[2].setText(format_currency(total_savings, symbol='₦'))
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load savings: {str(e)}")
@@ -1881,8 +1924,8 @@ class SavingsPage(QWidget):
         self.input_transfer_ref.setVisible(False)
         self.combo_type.setEnabled(True)
         self._update_transaction_types_for_member(False)
-        self.label_member_name.setText("Name: Not Selected")
-        self.label_total_savings.setText(f"Total Savings: {format_currency(0.0, symbol='₦')}")
+        self.card_member_name[2].setText("Not Selected")
+        self.card_member_savings[2].setText(format_currency(0.0, symbol='₦'))
         self.table_savings.setRowCount(0)
         self.btn_post.setEnabled(False)
 
@@ -2074,14 +2117,15 @@ class LoansPage(QWidget):
         main_layout.addLayout(header_row)
 
         # ── Horizontal nav bar ─────────────────────────────────────
-        self.nav_bar = HorizontalNavBar(["Loan Management", "Active Loans", "Repayment Status"])
+        self.nav_bar = HorizontalNavBar(["Loan Management", "Loan Application", "Active Loans", "Repayment Status"])
         main_layout.addWidget(self.nav_bar)
 
-        # ── Stacked content for the three tabs ─────────────────────
+        # ── Stacked content for the tabs ───────────────────────────
         self.stack = QStackedWidget()
         main_layout.addWidget(self.stack)
 
         self._build_loan_management_tab()
+        self._build_loan_application_tab()
         self._build_active_loans_tab()
         self._build_repayment_status_tab()
 
@@ -2128,39 +2172,118 @@ class LoansPage(QWidget):
         eligibility_font = QFont("Arial", 10)
         eligibility_font.setBold(True)
         eligibility_group.setFont(eligibility_font)
-        eligibility_layout = QGridLayout()
+        eligibility_layout = QHBoxLayout()
         eligibility_layout.setContentsMargins(10, 8, 10, 8)
-        eligibility_layout.setHorizontalSpacing(18)
-        eligibility_layout.setVerticalSpacing(8)
+        eligibility_layout.setSpacing(16)
 
-        self.label_member_name = QLabel("Member: Not Selected")
-        self.label_member_name.setFont(QFont("Arial", 11))
-
-        self.label_total_savings = QLabel("Total Savings: ₦0.00")
-        self.label_total_savings.setFont(QFont("Arial", 11))
-
-        self.label_max_eligible = QLabel("Max Eligible Loan: ₦0.00")
-        max_eligible_font = QFont("Arial", 11)
-        max_eligible_font.setBold(True)
-        self.label_max_eligible.setFont(max_eligible_font)
-
-        self.label_total_loans_view = QLabel("Loan Summary: Issued ₦0.00 | Repaid ₦0.00 | Outstanding ₦0.00")
-        summary_font = QFont("Arial", 10)
-        summary_font.setWeight(QFont.Weight.DemiBold)
-        self.label_total_loans_view.setFont(summary_font)
-        self.label_total_loans_view.setTextFormat(Qt.TextFormat.RichText)
-        self.label_total_loans_view.setWordWrap(True)
-        self.label_total_loans_view.setMinimumHeight(34)
-
-        eligibility_layout.addWidget(self.label_member_name, 0, 0)
-        eligibility_layout.addWidget(self.label_total_savings, 0, 1)
-        eligibility_layout.addWidget(self.label_max_eligible, 0, 2)
-        eligibility_layout.addWidget(self.label_total_loans_view, 1, 0, 1, 3)
-        eligibility_layout.setColumnStretch(0, 2)
-        eligibility_layout.setColumnStretch(1, 2)
-        eligibility_layout.setColumnStretch(2, 3)
+        self.card_member_name = create_stat_card("👤  Member", "Not Selected", "#3498db")
+        self.card_total_savings = create_stat_card("💰  Total Savings", "₦0.00", "#27ae60")
+        self.card_max_eligible = create_stat_card("🏦  Max Eligible Loan", "₦0.00", "#e67e22")
+        eligibility_layout.addWidget(self.card_member_name[0])
+        eligibility_layout.addWidget(self.card_total_savings[0])
+        eligibility_layout.addWidget(self.card_max_eligible[0])
+        eligibility_layout.addStretch()
         eligibility_group.setLayout(eligibility_layout)
         layout.addWidget(eligibility_group)
+
+        # Loan Summary Section
+        summary_group = QGroupBox("Loan Summary")
+        summary_font = QFont("Arial", 10)
+        summary_font.setBold(True)
+        summary_group.setFont(summary_font)
+        summary_layout = QHBoxLayout()
+        summary_layout.setContentsMargins(10, 8, 10, 8)
+        summary_layout.setSpacing(16)
+
+        self.card_issued_loan = create_stat_card("📤  Issued Loan", "₦0.00", "#3498db")
+        self.card_repaid_loan = create_stat_card("✅  Repaid Loan", "₦0.00", "#27ae60")
+        self.card_outstanding_loan = create_stat_card("⚠️  Outstanding Loan", "₦0.00", "#e74c3c")
+        summary_layout.addWidget(self.card_issued_loan[0])
+        summary_layout.addWidget(self.card_repaid_loan[0])
+        summary_layout.addWidget(self.card_outstanding_loan[0])
+        summary_layout.addStretch()
+        summary_group.setLayout(summary_layout)
+        layout.addWidget(summary_group)
+
+        # Loan Application Form
+        form_group = QGroupBox("Loan Application")
+        form_font = QFont("Arial", 10)
+        form_font.setBold(True)
+        form_group.setFont(form_font)
+        form_layout = QFormLayout()
+        form_layout.setContentsMargins(12, 8, 12, 8)
+        form_layout.setHorizontalSpacing(16)
+        form_layout.setVerticalSpacing(10)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+
+        # Principal input with real-time conversion label
+        self.input_principal = QDoubleSpinBox()
+        self.input_principal.setRange(0, 10_000_000)
+        self.input_principal.setValue(0)
+        self.input_principal.setDecimals(2)
+        self.input_principal.setSingleStep(1000)
+        self.input_principal.setPrefix("₦")
+        self.input_principal.valueChanged.connect(self.validate_principal)
+        self.input_principal.valueChanged.connect(self._update_principal_words_label)
+
+        # Label to show money-words conversion for principal
+        self.lbl_principal_words = QLabel()
+        self.lbl_principal_words.setStyleSheet("color: #7f8c8d; font-size: 9pt; font-style: italic;")
+
+        principal_layout = QHBoxLayout()
+        principal_layout.setContentsMargins(0, 0, 0, 0)
+        principal_layout.setSpacing(8)
+        principal_layout.addWidget(self.input_principal)
+        principal_layout.addWidget(self.lbl_principal_words)
+        principal_layout.addStretch()
+        principal_widget = QWidget()
+        principal_widget.setLayout(principal_layout)
+        form_layout.addRow("Requested Principal:", principal_widget)
+
+        self.combo_loan_product = QComboBox()
+        form_layout.addRow("Loan Plan:", self.combo_loan_product)
+
+        product_btn_row = QHBoxLayout()
+        product_btn_row.setSpacing(10)
+        self.btn_add_custom_loan = QPushButton("Add Custom Loan")
+        self.btn_add_custom_loan.clicked.connect(self.add_custom_loan_product)
+        product_btn_row.addWidget(self.btn_add_custom_loan)
+        product_btn_row.addStretch()
+        product_btn_widget = QWidget()
+        product_btn_widget.setLayout(product_btn_row)
+        form_layout.addRow("Custom Product:", product_btn_widget)
+
+        # Interest rate input
+        self.input_interest_rate = QDoubleSpinBox()
+        self.input_interest_rate.setRange(0, 100)
+        self.input_interest_rate.setValue(self.default_interest_rate)
+        self.input_interest_rate.setDecimals(2)
+        self.input_interest_rate.setSingleStep(0.5)
+        self.input_interest_rate.setSuffix("%")
+        form_layout.addRow("Annual Interest Rate:", self.input_interest_rate)
+
+        # Duration input
+        self.input_duration = QSpinBox()
+        self.input_duration.setRange(1, 60)
+        self.input_duration.setValue(self.default_duration)
+        self.input_duration.setSuffix(" months")
+        form_layout.addRow("Duration:", self.input_duration)
+
+        form_group.setLayout(form_layout)
+        layout.addWidget(form_group)
+
+        layout.addStretch()
+
+        self.stack.addWidget(tab)
+
+    # ── Tab: Loan Application ──────────────────────────────────────
+
+    def _build_loan_application_tab(self) -> None:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 14, 0, 0)
+        layout.setSpacing(15)
 
         # Loan Application Form
         form_group = QGroupBox("Loan Application")
@@ -2582,12 +2705,9 @@ class LoansPage(QWidget):
         QMessageBox.information(self, "Saved", "Custom loan product added.")
 
     def _set_loan_summary_label(self, issued: float, repaid: float, outstanding: float) -> None:
-        self.label_total_loans_view.setText(
-            "<b>Loan Summary:</b> "
-            f"Issued ₦{issued:,.2f} | "
-            f"<span style='color:#27ae60;'>Repaid ₦{repaid:,.2f}</span> | "
-            f"<span style='color:#e74c3c;'>Outstanding ₦{outstanding:,.2f}</span>"
-        )
+        self.card_issued_loan[2].setText(format_currency(issued, symbol='₦'))
+        self.card_repaid_loan[2].setText(format_currency(repaid, symbol='₦'))
+        self.card_outstanding_loan[2].setText(format_currency(outstanding, symbol='₦'))
 
     def _refresh_member_loan_totals(self) -> None:
         if self.current_member_id is None:
@@ -2648,9 +2768,9 @@ class LoansPage(QWidget):
         if not query:
             self.current_member_id = None
             self.current_member_name = None
-            self.label_member_name.setText("Member: Not Selected")
-            self.label_total_savings.setText("Total Savings: ₦0.00")
-            self.label_max_eligible.setText("Max Eligible Loan: ₦0.00")
+            self.card_member_name[2].setText("Not Selected")
+            self.card_total_savings[2].setText("₦0.00")
+            self.card_max_eligible[2].setText("₦0.00")
             self.table_loans.setRowCount(0)
             self.btn_validate.setEnabled(False)
             self.btn_preview.setEnabled(False)
@@ -2662,15 +2782,15 @@ class LoansPage(QWidget):
         if not success or not members:
             self.current_member_id = None
             self.current_member_name = None
-            self.label_member_name.setText("Member: Not Selected")
-            self.label_total_savings.setText("Total Savings: ₦0.00")
-            self.label_max_eligible.setText("Max Eligible Loan: ₦0.00")
+            self.card_member_name[2].setText("Not Selected")
+            self.card_total_savings[2].setText("₦0.00")
+            self.card_max_eligible[2].setText("₦0.00")
             self.table_loans.setRowCount(0)
             self.btn_validate.setEnabled(False)
             self.btn_preview.setEnabled(False)
             self.btn_submit.setEnabled(False)
             return
-        
+
         # If multiple results, use the first one
         member = members[0]
         
@@ -2686,11 +2806,9 @@ class LoansPage(QWidget):
         
         # Update display
         self.max_eligible_amount = self._effective_member_limit(self.total_savings)
-        self.label_member_name.setText(f"Member: {self.current_member_name}")
-        self.label_total_savings.setText(f"Total Savings: ₦{self.total_savings:,.2f}")
-        self.label_max_eligible.setText(f"Max Eligible Loan: ₦{self.max_eligible_amount:,.2f}")
-        
-        # Load active loans
+        self.card_member_name[2].setText(self.current_member_name)
+        self.card_total_savings[2].setText(f"₦{self.total_savings:,.2f}")
+        self.card_max_eligible[2].setText(f"₦{self.max_eligible_amount:,.2f}")
         self.load_active_loans()
         self.load_repayment_dashboard()
         self._refresh_member_loan_totals()
@@ -3216,9 +3334,9 @@ class LoansPage(QWidget):
         self.input_principal.setValue(0)
         self.input_interest_rate.setValue(self.default_interest_rate)
         self.input_duration.setValue(self.default_duration)
-        self.label_member_name.setText("Member: Not Selected")
-        self.label_total_savings.setText("Total Savings: ₦0.00")
-        self.label_max_eligible.setText("Max Eligible Loan: ₦0.00")
+        self.card_member_name[2].setText("Not Selected")
+        self.card_total_savings[2].setText("₦0.00")
+        self.card_max_eligible[2].setText("₦0.00")
         self._set_loan_summary_label(0.0, 0.0, 0.0)
         self.label_validation_status.setText("")
         self.table_loans.setRowCount(0)
@@ -3241,8 +3359,8 @@ class LoansPage(QWidget):
         ok, total_savings = get_total_savings(self.db_path, self.current_member_id)
         self.total_savings = total_savings if ok else 0.0
         self.max_eligible_amount = self._effective_member_limit(self.total_savings)
-        self.label_total_savings.setText(f"Total Savings: ₦{self.total_savings:,.2f}")
-        self.label_max_eligible.setText(f"Max Eligible Loan: ₦{self.max_eligible_amount:,.2f}")
+        self.card_total_savings[2].setText(f"₦{self.total_savings:,.2f}")
+        self.card_max_eligible[2].setText(f"₦{self.max_eligible_amount:,.2f}")
 
         self.load_active_loans()
         self.load_repayment_dashboard()
