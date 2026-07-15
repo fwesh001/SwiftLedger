@@ -42,7 +42,7 @@ from database.queries import (
 )
 from database.db_init import log_event
 from ui.widgets import SearchFilterWidget, HorizontalNavBar
-from utils import format_currency, format_currency_with_words
+from utils import format_currency, format_currency_with_words, get_icon
 
 
 class ReportsPage(QWidget):
