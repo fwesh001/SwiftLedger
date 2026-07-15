@@ -97,7 +97,8 @@ class AuditLogPage(QWidget):
         self.input_search.textChanged.connect(self._apply_filter)
         filter_row.addWidget(self.input_search)
 
-        self.btn_refresh = QPushButton("⟳  Refresh")
+        self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh.setIcon(get_icon("fa5s.sync", color="#ffffff"))
         self.btn_refresh.setMinimumWidth(100)
         self.btn_refresh.setMinimumHeight(34)
         self.btn_refresh.clicked.connect(self.refresh_logs)
@@ -106,9 +107,9 @@ class AuditLogPage(QWidget):
         self.btn_export = QPushButton()
         try:
             from utils import set_button_icon
-            set_button_icon(self.btn_export, "document-export", "⇱ Export Log to PDF")
+            set_button_icon(self.btn_export, "fa5s.file-export", "Export Log to PDF")
         except Exception:
-            self.btn_export.setText("⇱ Export Log to PDF")
+            self.btn_export.setText("Export Log to PDF")
         self.btn_export.setMinimumWidth(140)
         self.btn_export.setMinimumHeight(34)
         self.btn_export.clicked.connect(self.export_to_pdf)
