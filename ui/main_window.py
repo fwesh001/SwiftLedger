@@ -51,12 +51,12 @@ from ui.login_screen import LoginScreen
 from ui.theme_manager import build_theme_stylesheet, create_custom_cursor
 from logic.data_manager import BulkDataManager
 from security import verify_credential
-from utils import format_currency, format_currency_with_words, amount_to_words, set_button_icon
+from utils import format_currency, format_currency_with_words, amount_to_words, set_button_icon, get_icon
 
 QLineEdit = UppercaseLineEdit
 
 
-def create_stat_card(title_text: str, value_text: str, accent: str) -> tuple:
+def create_stat_card(title_text: str, value_text: str, accent: str, icon_name: str = None) -> tuple:
     """Build a stat card frame. Returns (QFrame card, QLabel title, QLabel value)."""
     card = QFrame()
     card.setMinimumHeight(90)
@@ -69,15 +69,28 @@ def create_stat_card(title_text: str, value_text: str, accent: str) -> tuple:
     layout.setContentsMargins(12, 8, 12, 8)
     layout.setSpacing(6)
 
+    title_row = QHBoxLayout()
+    title_row.setContentsMargins(0, 0, 0, 0)
+    title_row.setSpacing(6)
+
+    if icon_name:
+        from utils import get_icon
+        icon_label = QLabel()
+        icon_label.setPixmap(get_icon(icon_name, color=accent).pixmap(18, 18))
+        icon_label.setStyleSheet("border: none;")
+        title_row.addWidget(icon_label)
+
     lbl_title = QLabel(title_text)
     lbl_title.setStyleSheet("color: #bdc3c7; font-size: 12px; border: none;")
+    title_row.addWidget(lbl_title)
+    title_row.addStretch()
 
     lbl_value = QLabel(value_text)
     lbl_value.setStyleSheet(
         f"color: {accent}; font-size: 22px; font-weight: bold; border: none;"
     )
 
-    layout.addWidget(lbl_title)
+    layout.addLayout(title_row)
     layout.addWidget(lbl_value)
     layout.addStretch()
 
@@ -126,7 +139,8 @@ class DashboardPage(QWidget):
         header_row.addWidget(title)
         header_row.addStretch()
 
-        self.btn_refresh = QPushButton("⟳  Refresh")
+        self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh.setIcon(get_icon("fa5s.sync", color="#ffffff"))
         self.btn_refresh.setMinimumHeight(36)
         self.btn_refresh.setMinimumWidth(110)
         self.btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -177,19 +191,19 @@ class DashboardPage(QWidget):
         cards_layout.setVerticalSpacing(16)
 
         self.card_members = self._create_stat_card(
-            "👥  Total Members", "0", self.CARD_COLOURS['members']
+            "Total Members", "0", self.CARD_COLOURS['members'], icon_name="fa5s.users"
         )
         self.card_savings = self._create_stat_card(
-            "💰  Total Savings", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['savings']
+            "Total Savings", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['savings'], icon_name="fa5s.piggy-bank"
         )
         self.card_loans = self._create_stat_card(
-            "🏦  Loans Disbursed", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['loans']
+            "Loans Disbursed", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['loans'], icon_name="fa5s.university"
         )
         self.card_interest = self._create_stat_card(
-            "📈  Projected Interest", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['interest']
+            "Projected Interest", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['interest'], icon_name="fa5s.chart-line"
         )
         self.card_investments = self._create_stat_card(
-            "📊  Investments", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['investments']
+            "Investments", format_currency(0.0, symbol="₦"), self.CARD_COLOURS['investments'], icon_name="fa5s.chart-pie"
         )
 
         cards_layout.addWidget(self.card_members[0], 0, 0)
@@ -370,7 +384,7 @@ class DashboardPage(QWidget):
         """Fetch society stats from the database and update every label."""
         success, stats = get_society_stats(self.db_path)
         if not success:
-            self.lbl_status.setText("⚠  Failed to load statistics")
+            self.lbl_status.setText("Failed to load statistics")
             return
 
         settings_ok, settings = get_system_settings(self.db_path)
@@ -453,7 +467,7 @@ class DashboardPage(QWidget):
             return
         for item in overdue:
             label = (
-                f"⚠ Loan #{item['loan_id']} - {item['full_name']} "
+                f"Loan #{item['loan_id']} - {item['full_name']} "
                 f"({item['staff_number']}) due {item['due_date']}"
             )
             self.list_overdue.addItem(label)
@@ -662,7 +676,7 @@ class MemberProfileDialog(QDialog):
         self.btn_edit.clicked.connect(self._toggle_edit)
 
         self.btn_export = QPushButton()
-        set_button_icon(self.btn_export, "document-export", "⇱ Export PDF")
+        set_button_icon(self.btn_export, "fa5s.file-export", "Export PDF")
         self.btn_export.setMinimumHeight(36)
         self.btn_export.setStyleSheet(
             "QPushButton { background-color: #2c3e50; color: white; border-radius: 6px; "
@@ -867,10 +881,10 @@ class MembersPage(QWidget):
         cards_layout = QHBoxLayout()
         cards_layout.setSpacing(16)
         self.card_total_members = create_stat_card(
-            "👥  Total Members", "0", "#3498db"
+            "Total Members", "0", "#3498db", icon_name="fa5s.users"
         )
         self.card_active_loaners = create_stat_card(
-            "🏦  Active Loaners", "0", "#e67e22"
+            "Active Loaners", "0", "#e67e22", icon_name="fa5s.university"
         )
         cards_layout.addWidget(self.card_total_members[0])
         cards_layout.addWidget(self.card_active_loaners[0])
@@ -1018,7 +1032,7 @@ class MembersPage(QWidget):
         btn_font.setBold(True)
 
         self.btn_download_template = QPushButton()
-        set_button_icon(self.btn_download_template, "document-save", "⇲ Download Template")
+        set_button_icon(self.btn_download_template, "fa5s.file-download", "Download Template")
         self.btn_download_template.setMinimumHeight(40)
         self.btn_download_template.setFont(btn_font)
         self.btn_download_template.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1029,7 +1043,7 @@ class MembersPage(QWidget):
         self.btn_download_template.clicked.connect(self._download_import_template)
 
         self.btn_import_members = QPushButton()
-        set_button_icon(self.btn_import_members, "document-import", "⇲ Import Members")
+        set_button_icon(self.btn_import_members, "fa5s.file-import", "Import Members")
         self.btn_import_members.setMinimumHeight(40)
         self.btn_import_members.setFont(btn_font)
         self.btn_import_members.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1528,7 +1542,8 @@ class SavingsPage(QWidget):
         header_row.addWidget(title)
         header_row.addStretch()
 
-        self.btn_refresh = QPushButton("⟳  Refresh")
+        self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh.setIcon(get_icon("fa5s.sync", color="#ffffff"))
         self.btn_refresh.setMinimumHeight(36)
         self.btn_refresh.setMinimumWidth(110)
         self.btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1591,10 +1606,10 @@ class SavingsPage(QWidget):
         info_layout.setSpacing(16)
 
         self.card_member_name = create_stat_card(
-            "👤  Member", "Not Selected", "#3498db"
+            "Member", "Not Selected", "#3498db", icon_name="fa5s.user"
         )
         self.card_member_savings = create_stat_card(
-            "💰  Total Savings", "₦0.00", "#27ae60"
+            "Total Savings", "₦0.00", "#27ae60", icon_name="fa5s.piggy-bank"
         )
         info_layout.addWidget(self.card_member_name[0])
         info_layout.addWidget(self.card_member_savings[0])
@@ -2154,7 +2169,8 @@ class LoansPage(QWidget):
         header_row.addWidget(title)
         header_row.addStretch()
 
-        self.btn_refresh = QPushButton("⟳  Refresh")
+        self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh.setIcon(get_icon("fa5s.sync", color="#ffffff"))
         self.btn_refresh.setMinimumHeight(36)
         self.btn_refresh.setMinimumWidth(110)
         self.btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -2227,9 +2243,9 @@ class LoansPage(QWidget):
         eligibility_layout.setContentsMargins(10, 8, 10, 8)
         eligibility_layout.setSpacing(16)
 
-        self.card_member_name = create_stat_card("👤  Member", "Not Selected", "#3498db")
-        self.card_total_savings = create_stat_card("💰  Total Savings", "₦0.00", "#27ae60")
-        self.card_max_eligible = create_stat_card("🏦  Max Eligible Loan", "₦0.00", "#e67e22")
+        self.card_member_name = create_stat_card("Member", "Not Selected", "#3498db", icon_name="fa5s.user")
+        self.card_total_savings = create_stat_card("Total Savings", "₦0.00", "#27ae60", icon_name="fa5s.piggy-bank")
+        self.card_max_eligible = create_stat_card("Max Eligible Loan", "₦0.00", "#e67e22", icon_name="fa5s.university")
         eligibility_layout.addWidget(self.card_member_name[0])
         eligibility_layout.addWidget(self.card_total_savings[0])
         eligibility_layout.addWidget(self.card_max_eligible[0])
@@ -2246,9 +2262,9 @@ class LoansPage(QWidget):
         summary_layout.setContentsMargins(10, 8, 10, 8)
         summary_layout.setSpacing(16)
 
-        self.card_issued_loan = create_stat_card("📤  Issued Loan", "₦0.00", "#3498db")
-        self.card_repaid_loan = create_stat_card("✅  Repaid Loan", "₦0.00", "#27ae60")
-        self.card_outstanding_loan = create_stat_card("⚠️  Outstanding Loan", "₦0.00", "#e74c3c")
+        self.card_issued_loan = create_stat_card("Issued Loan", "₦0.00", "#3498db", icon_name="fa5s.file-invoice-dollar")
+        self.card_repaid_loan = create_stat_card("Repaid Loan", "₦0.00", "#27ae60", icon_name="fa5s.check-circle")
+        self.card_outstanding_loan = create_stat_card("Outstanding Loan", "₦0.00", "#e74c3c", icon_name="fa5s.exclamation-triangle")
         summary_layout.addWidget(self.card_issued_loan[0])
         summary_layout.addWidget(self.card_repaid_loan[0])
         summary_layout.addWidget(self.card_outstanding_loan[0])
@@ -2481,7 +2497,7 @@ class LoansPage(QWidget):
         repayments_filter_row.addWidget(self.btn_refresh_repayments, 1, 4)
 
         self.btn_export_repayments = QPushButton()
-        set_button_icon(self.btn_export_repayments, "document-export", "⇱ Export CSV")
+        set_button_icon(self.btn_export_repayments, "fa5s.file-csv", "Export CSV")
         self.btn_export_repayments.setMinimumWidth(120)
         self.btn_export_repayments.clicked.connect(self.export_repayment_dashboard_csv)
         repayments_filter_row.addWidget(self.btn_export_repayments, 1, 5)
@@ -2825,11 +2841,11 @@ class LoansPage(QWidget):
         if principal > self.max_eligible_amount:
             self.btn_submit.setEnabled(False)
             self.label_validation_status.setText(
-                f"❌ Principal exceeds limit (Max: ₦{self.max_eligible_amount:,.2f})"
+                f"Principal exceeds limit (Max: ₦{self.max_eligible_amount:,.2f})"
             )
         elif principal <= 0:
             self.btn_submit.setEnabled(False)
-            self.label_validation_status.setText("❌ Principal must be greater than 0")
+            self.label_validation_status.setText("Principal must be greater than 0")
         else:
             self.btn_submit.setEnabled(True)
             self.label_validation_status.setText(f"✓ Principal is within eligibility limit")
