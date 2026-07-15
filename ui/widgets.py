@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QComboBox, QLineEdit, QPushButton, QButtonGroup,
     QCompleter, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal, QStringListModel
+from PySide6.QtCore import Qt, Signal, QStringListModel, QTimer, QModelIndex
 
 
 class HorizontalNavBar(QWidget):
@@ -235,7 +235,10 @@ class SearchFilterWidget(QWidget):
         self.completer.setFilterMode(Qt.MatchFlag.MatchContains)
         self.completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
         self.completer.setMaxVisibleItems(12)
-        self.completer.activated.connect(self._on_suggestion_activated)
+        # Connect both the string and model-index overloads so mouse clicks
+        # and keyboard selections are handled consistently across platforms.
+        self.completer.activated[str].connect(self._on_suggestion_activated)
+        self.completer.activated.connect(lambda idx: self._on_suggestion_activated(idx))
         self.input_search.setCompleter(self.completer)
         
         layout.addWidget(self.combo_filter)
@@ -275,10 +278,36 @@ class SearchFilterWidget(QWidget):
         """Set a callable ``provider(query, filter_type) -> list[str]``."""
         self.suggestion_provider = provider
     
-    def _on_suggestion_activated(self, text: str) -> None:
-        """When a dropdown item is chosen, emit suggestionSelected."""
+    def _on_suggestion_activated(self, text_or_index) -> None:
+        """When a dropdown item is chosen, normalize the selected value and emit it.
+
+        The completer commits its own text after ``activated`` fires, so we apply
+        the normalized value on the next event-loop tick to ensure it wins.
+        """
         filter_type = self.get_filter_type()
-        self.suggestionSelected.emit(filter_type, text)
+
+        # If we received a QModelIndex (mouse click), resolve the display text.
+        if isinstance(text_or_index, QModelIndex):
+            model = text_or_index.model()
+            text = str(model.data(text_or_index, Qt.DisplayRole) or "")
+        else:
+            text = str(text_or_index or "")
+
+        selected_value = text
+        if " (" in text and text.endswith(")"):
+            display_text, suffix = text.rsplit(" (", 1)
+            suffix = suffix[:-1]
+            if filter_type in ("all", "full_name"):
+                selected_value = display_text
+            elif filter_type in ("staff_number", "phone"):
+                selected_value = suffix
+
+        QTimer.singleShot(0, lambda: self._apply_selected(filter_type, selected_value))
+
+    def _apply_selected(self, filter_type: str, selected_value: str) -> None:
+        """Set the normalized query and notify listeners."""
+        self.set_query(selected_value)
+        self.suggestionSelected.emit(filter_type, selected_value)
     
     def get_filter_type(self) -> str:
         """Get current filter type (e.g., 'all', 'staff_number', 'full_name', 'phone')."""
