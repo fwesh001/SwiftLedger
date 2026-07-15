@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QPushButton, QStackedWidget, QLabel, QGroupBox, QFormLayout, QGridLayout,
     QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox,
     QAbstractItemView, QDoubleSpinBox, QSpinBox, QDialog, QListWidget, QScrollArea,
-    QFileDialog, QProgressDialog, QTextEdit, QInputDialog
+    QFileDialog, QProgressDialog, QTextEdit, QInputDialog, QMenu, QStyle
 )
 from PySide6.QtCore import Qt, QSize, QEvent, QTimer
 from PySide6.QtGui import QFont, QColor, QBrush, QPixmap, QShortcut, QKeySequence
@@ -472,14 +472,23 @@ class DashboardPage(QWidget):
 
         total_savings = float(stats.get('total_savings', 0.0))
         total_loans = float(stats.get('total_loans_disbursed', 0.0))
-        available_cash = max(total_savings - total_loans, 0.0)
+        # Investments are funded from society savings, so they reduce the
+        # cash that is freely available. Show them as a distinct slice.
+        inv_ok, inv_summary = get_investment_summary(self.db_path)
+        total_investments = float(inv_summary.get('total_invested', 0.0)) if inv_ok else 0.0
+        available_cash = max(total_savings - total_loans - total_investments, 0.0)
 
         self._clear_chart_layout()
         fig = Figure(figsize=(4, 3))
         ax = fig.add_subplot(111)
+        slices = [available_cash, total_loans, total_investments]
+        labels = ["Available Cash", "Outstanding Loans", "Investments"]
+        # Drop zero slices so the pie stays readable when nothing is invested.
+        plot_slices = [s for s in slices if s > 0]
+        plot_labels = [l for s, l in zip(slices, labels) if s > 0]
         ax.pie(
-            [available_cash, total_loans],
-            labels=["Available Cash", "Outstanding Loans"],
+            plot_slices,
+            labels=plot_labels,
             autopct='%1.1f%%',
             startangle=90
         )
@@ -876,10 +885,17 @@ class MembersPage(QWidget):
         table_layout.setSpacing(10)
 
         search_row = QHBoxLayout()
-        self.input_member_search = QLineEdit()
-        self.input_member_search.setPlaceholderText("Search by name, staff ID, or phone")
-        self.input_member_search.textChanged.connect(self._filter_members_table)
-        search_row.addWidget(self.input_member_search)
+        self.search_member_widget = SearchFilterWidget()
+        # Keep table filtering behavior compatible with the existing method
+        self.search_member_widget.queryChanged.connect(
+            lambda f, q: self._filter_members_table(q)
+        )
+        self.search_member_widget.set_suggestion_provider(self._member_suggestions)
+        self.search_member_widget.suggestionSelected.connect(
+            lambda f, q: (self.search_member_widget.set_query(q), self._filter_members_table(q))
+        )
+        self.search_member_widget.setToolTip("Search by Staff ID, Name, or Phone")
+        search_row.addWidget(self.search_member_widget)
         table_layout.addLayout(search_row)
 
         self.table_members = QTableWidget()
@@ -1255,7 +1271,7 @@ class MembersPage(QWidget):
                 if loans > savings or member.get('default_loan_count', 0) > 0:
                     self._tint_member_row(row_idx, QColor("#f8d7da"))
 
-            self._filter_members_table(self.input_member_search.text())
+            self._filter_members_table(self.search_member_widget.get_query())
         
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load members: {str(e)}")
@@ -1376,6 +1392,37 @@ class MembersPage(QWidget):
 
             match = query in staff_text or query in name_text or query in phone_text
             self.table_members.setRowHidden(row, not match)
+
+    def _member_suggestions(self, query: str, filter_type: str) -> list[str]:
+        """Build dropdown suggestion strings from matching members."""
+        if not query:
+            return []
+        success, members = search_members(self.db_path, query, filter_field=filter_type)
+        if not success or not members:
+            return []
+        suggestions = []
+        for m in members[:12]:
+            name = str(m.get("full_name") or "").strip()
+            staff = str(m.get("staff_number") or "").strip()
+            phone = str(m.get("phone") or "").strip()
+            # For name-based searches (All Fields / Full Name) show the
+            # member's display name only (no appended staff id). For
+            # staff-number or phone filters, prefer showing those values.
+            if filter_type in ("staff_number",):
+                label = staff or name or phone or "Unknown"
+            elif filter_type in ("phone",):
+                label = phone or name or staff or "Unknown"
+            else:  # 'all' or 'full_name'
+                label = name or staff or phone or "Unknown"
+            suggestions.append(label)
+        # De-duplicate while preserving order
+        seen = set()
+        unique = []
+        for s in suggestions:
+            if s not in seen:
+                seen.add(s)
+                unique.append(s)
+        return unique
 
     def _open_member_profile(self, row: int, column: int) -> None:
         id_item = self.table_members.item(row, 5)
@@ -3528,6 +3575,45 @@ class MainWindow(QMainWindow):
         elif page_index == 6:
             self.audit_page.refresh_logs()
     
+    def contextMenuEvent(self, event) -> None:
+        """Show a right-click context menu with Refresh and Exit options."""
+        menu = QMenu(self)
+        refresh_action = menu.addAction("Refresh")
+        refresh_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
+        exit_action = menu.addAction("Exit App")
+        exit_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCloseButton))
+
+        action = menu.exec(event.globalPos())
+        if action == refresh_action:
+            self._refresh_current_page()
+        elif action == exit_action:
+            QApplication.instance().quit()
+
+    def _refresh_current_page(self) -> None:
+        """Refresh the currently visible page (plus dashboard stats)."""
+        self.dashboard_page.refresh_dashboard()
+        current = self.stacked_widget.currentIndex()
+        if current == 0:
+            self.dashboard_page.refresh_dashboard()
+        elif current == 1:
+            self.members_page.load_data()
+        elif current == 2:
+            self.savings_page.refresh_page()
+        elif current == 3:
+            self.loans_page.refresh_page()
+        elif current == 4:
+            self.investments_page.refresh_page()
+        elif current == 5:
+            self.reports_page.refresh_page()
+        elif current == 6:
+            self.audit_page.refresh_logs()
+        elif current == 7:
+            if hasattr(self.settings_page, "refresh_page"):
+                self.settings_page.refresh_page()
+        elif current == 8:
+            if hasattr(self.about_page, "refresh_page"):
+                self.about_page.refresh_page()
+
     def _setup_shortcuts(self) -> None:
         """Register global keyboard shortcuts for navigation and scrolling."""
         # Page navigation
