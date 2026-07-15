@@ -343,10 +343,10 @@ class DashboardPage(QWidget):
     # ── Widget factories ────────────────────────────────────────────
 
     def _create_stat_card(
-        self, title_text: str, value_text: str, accent: str
+        self, title_text: str, value_text: str, accent: str, icon_name: str = None
     ) -> tuple:
         """Return (QFrame card, QLabel title, QLabel value)."""
-        return create_stat_card(title_text, value_text, accent)
+        return create_stat_card(title_text, value_text, accent, icon_name=icon_name)
 
     def _create_dividend_card(
         self, title_text: str, value_text: str, accent: str
