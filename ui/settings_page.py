@@ -535,11 +535,10 @@ class SettingsPage(QWidget):
         button_row.addStretch()
 
         btn_copy = QPushButton("Copy Key")
-        copy_icon = QIcon.fromTheme("edit-copy")
+        from utils import get_icon
+        copy_icon = get_icon("fa5s.copy", color="#ffffff")
         if not copy_icon.isNull():
             btn_copy.setIcon(copy_icon)
-        else:
-            btn_copy.setText("📋 Copy Key")
         btn_copy.setMinimumHeight(34)
 
         def copy_key() -> None:
