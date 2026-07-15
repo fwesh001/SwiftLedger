@@ -1,12 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_data_files
+
+datas = [('C:\\Users\\zabdiel\\Desktop\\PROJECTS\\SwiftLedger\\assets', 'assets'), ('C:\\Users\\zabdiel\\Desktop\\PROJECTS\\SwiftLedger\\database', 'database')]
+datas += collect_data_files('qtawesome')
 
 
 a = Analysis(
-    ['c:\\Users\\zabdiel\\Desktop\\SwiftLedger\\main.py'],
+    ['C:\\Users\\zabdiel\\Desktop\\PROJECTS\\SwiftLedger\\main.py'],
     pathex=[],
     binaries=[],
-    datas=[('c:\\Users\\zabdiel\\Desktop\\SwiftLedger\\assets', 'assets'), ('c:\\Users\\zabdiel\\Desktop\\SwiftLedger\\database', 'database')],
-    hiddenimports=['PySide6', 'matplotlib', 'pandas', 'openpyxl', 'fpdf'],
+    datas=datas,
+    hiddenimports=['PySide6', 'matplotlib', 'pandas', 'openpyxl', 'fpdf', 'qtpy', 'qtawesome'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -35,5 +39,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['c:\\Users\\zabdiel\\Desktop\\SwiftLedger\\assets\\app_icon.ico'],
+    icon=['C:\\Users\\zabdiel\\Desktop\\PROJECTS\\SwiftLedger\\assets\\app_icon.ico'],
 )
