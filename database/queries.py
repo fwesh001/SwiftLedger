@@ -2689,6 +2689,24 @@ def get_society_report_stats(
             total_repayments = float(cursor.fetchone()[0] or 0.0)
 
         projected_interest = round(total_loans_disbursed * 0.12, 2)
+
+        # Investments are funded from society savings, so they reduce the
+        # cash that is freely available to members.
+        total_investments = 0.0
+        total_expected_interest = 0.0
+        try:
+            cursor.execute(
+                "SELECT COALESCE(SUM(invested_amount), 0.0), "
+                "COALESCE(SUM(expected_interest), 0.0) FROM investments"
+            )
+            inv_row = cursor.fetchone() or (0.0, 0.0)
+            total_investments = float(inv_row[0] or 0.0)
+            total_expected_interest = float(inv_row[1] or 0.0)
+        except Exception:
+            pass
+
+        available_cash = max(total_savings - total_loans_disbursed - total_investments, 0.0)
+
         return True, {
             "total_members": total_members,
             "total_savings": round(total_savings, 2),
@@ -2698,6 +2716,9 @@ def get_society_report_stats(
             "total_projected_interest": projected_interest,
             "members_dividend_share": round(projected_interest * 0.60, 2),
             "society_dividend_share": round(projected_interest * 0.40, 2),
+            "total_investments": round(total_investments, 2),
+            "total_expected_investment_interest": round(total_expected_interest, 2),
+            "available_cash": round(available_cash, 2),
         }
     except Exception:
         return False, {}
