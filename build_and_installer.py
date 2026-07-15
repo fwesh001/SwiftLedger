@@ -73,6 +73,11 @@ def build_executable() -> bool:
         "--hidden-import=pandas",
         "--hidden-import=openpyxl",
         "--hidden-import=fpdf",
+        "--hidden-import=qtpy",
+        "--hidden-import=qtawesome",
+        # qtawesome ships .ttf fonts + .json charmaps that must be bundled
+        # so FontAwesome icons render in the frozen executable.
+        "--collect-data", "qtawesome",
         "--distpath", str(DIST_DIR),
         "--workpath", str(BUILD_DIR),
         str(MAIN_SCRIPT),
