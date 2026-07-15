@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-from utils import get_export_path
+from utils import get_export_path, get_icon
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QAbstractItemView,
